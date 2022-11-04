@@ -1,0 +1,5 @@
+[tool.black]
+target-version = ['py37', 'py38']
+line-length = 120
+include = '(\.pyi?)$'
+exclude = 'third_party|venv|wvenv'

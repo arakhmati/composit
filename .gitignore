@@ -1,0 +1,12 @@
+# IDE
+.idea
+
+# Python
+**/*.egg-info
+
+# C++
+build/
+**/*.so
+
+venv/
+wvenv/
