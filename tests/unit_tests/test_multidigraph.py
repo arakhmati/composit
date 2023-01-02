@@ -20,7 +20,7 @@ def test_add_node_method():
 
 def test_adj_method():
     graph = MultiDiGraph()
-    nodes = graph.adj()
+    nodes = graph.adj
 
 
 def test_nodes_method():

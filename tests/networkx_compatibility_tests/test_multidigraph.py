@@ -1,5 +1,6 @@
 from collections import UserDict
 
+import networkx
 import pytest
 
 import networkx as nx
@@ -9,27 +10,39 @@ from .test_multigraph import BaseMultiGraphTester
 from .test_multigraph import TestEdgeSubgraph as _TestMultiGraphEdgeSubgraph
 from .test_multigraph import TestMultiGraph as _TestMultiGraph
 
+from persistent_numpy import multidigraph
+
+
+def networkx_graph(graph):
+    return graph
+
 
 class BaseMultiDiGraphTester(BaseMultiGraphTester):
-    def test_edges(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_edges(self, graph_function):
+        G = graph_function(self.K3)
         edges = [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.edges()) == edges
         assert sorted(G.edges(0)) == [(0, 1), (0, 2)]
         pytest.raises((KeyError, nx.NetworkXError), G.edges, -1)
 
-    def test_edges_data(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_edges_data(self, graph_function):
+        G = graph_function(self.K3)
         edges = [(0, 1, {}), (0, 2, {}), (1, 0, {}), (1, 2, {}), (2, 0, {}), (2, 1, {})]
         assert sorted(G.edges(data=True)) == edges
         assert sorted(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
         pytest.raises((KeyError, nx.NetworkXError), G.neighbors, -1)
 
-    def test_edges_multi(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_edges_multi(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.edges()) == [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.edges(0)) == [(0, 1), (0, 2)]
-        G.add_edge(0, 1)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1)
+        else:
+            G = G.add_edge(0, 1)
         assert sorted(G.edges()) == [
             (0, 1),
             (0, 1),
@@ -40,18 +53,23 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
             (2, 1),
         ]
 
-    def test_out_edges(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_out_edges(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.out_edges()) == [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.out_edges(0)) == [(0, 1), (0, 2)]
         pytest.raises((KeyError, nx.NetworkXError), G.out_edges, -1)
         assert sorted(G.out_edges(0, keys=True)) == [(0, 1, 0), (0, 2, 0)]
 
-    def test_out_edges_multi(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_out_edges_multi(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.out_edges()) == [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.out_edges(0)) == [(0, 1), (0, 2)]
-        G.add_edge(0, 1, 2)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1, 2)
+        else:
+            G = G.add_edge(0, 1, 2)
         assert sorted(G.out_edges()) == [
             (0, 1),
             (0, 1),
@@ -62,21 +80,30 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
             (2, 1),
         ]
 
-    def test_out_edges_data(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_out_edges_data(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
-        G.remove_edge(0, 1)
-        G.add_edge(0, 1, data=1)
+        if isinstance(G, nx.MultiDiGraph):
+            G.remove_edge(0, 1)
+            G.add_edge(0, 1, data=1)
+        else:
+            G = G.remove_edge(0, 1)
+            G = G.add_edge(0, 1, data=1)
         assert sorted(G.edges(0, data=True)) == [(0, 1, {"data": 1}), (0, 2, {})]
         assert sorted(G.edges(0, data="data")) == [(0, 1, 1), (0, 2, None)]
         assert sorted(G.edges(0, data="data", default=-1)) == [(0, 1, 1), (0, 2, -1)]
 
-    def test_in_edges(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_in_edges(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.in_edges()) == [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.in_edges(0)) == [(1, 0), (2, 0)]
         pytest.raises((KeyError, nx.NetworkXError), G.in_edges, -1)
-        G.add_edge(0, 1, 2)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1, 2)
+        else:
+            G = G.add_edge(0, 1, 2)
         assert sorted(G.in_edges()) == [
             (0, 1),
             (0, 1),
@@ -88,11 +115,15 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
         ]
         assert sorted(G.in_edges(0, keys=True)) == [(1, 0, 0), (2, 0, 0)]
 
-    def test_in_edges_no_keys(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_in_edges_no_keys(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.in_edges()) == [(0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)]
         assert sorted(G.in_edges(0)) == [(1, 0), (2, 0)]
-        G.add_edge(0, 1, 2)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1, 2)
+        else:
+            G = G.add_edge(0, 1, 2)
         assert sorted(G.in_edges()) == [
             (0, 1),
             (0, 1),
@@ -113,11 +144,16 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
             (2, 1, {}),
         ]
 
-    def test_in_edges_data(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_in_edges_data(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.in_edges(0, data=True)) == [(1, 0, {}), (2, 0, {})]
-        G.remove_edge(1, 0)
-        G.add_edge(1, 0, data=1)
+        if isinstance(G, nx.MultiDiGraph):
+            G.remove_edge(1, 0)
+            G.add_edge(1, 0, data=1)
+        else:
+            G = G.remove_edge(1, 0)
+            G = G.add_edge(1, 0, data=1)
         assert sorted(G.in_edges(0, data=True)) == [(1, 0, {"data": 1}), (2, 0, {})]
         assert sorted(G.in_edges(0, data="data")) == [(1, 0, 1), (2, 0, None)]
         assert sorted(G.in_edges(0, data="data", default=-1)) == [(1, 0, 1), (2, 0, -1)]
@@ -150,11 +186,12 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
         G[1][2][0]["foo"].append(1)
         assert G[1][2][0]["foo"] != H[1][2][0]["foo"]
 
-    def test_to_undirected(self):
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_to_undirected(self, graph_function):
         # MultiDiGraph -> MultiGraph changes number of edges so it is
         # not a copy operation... use is_shallow, not is_shallow_copy
-        G = self.K3
-        self.add_attributes(G)
+        G = graph_function(self.K3)
+        G = self.add_attributes(G)
         H = nx.MultiGraph(G)
         # self.is_shallow(H,G)
         # the result is traversal order dependent so we
@@ -166,84 +203,116 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
         H = G.to_undirected()
         self.is_deep(H, G)
 
-    def test_has_successor(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_has_successor(self, graph_function):
+        G = graph_function(self.K3)
         assert G.has_successor(0, 1)
         assert not G.has_successor(0, -1)
 
-    def test_successors(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_successors(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.successors(0)) == [1, 2]
         pytest.raises((KeyError, nx.NetworkXError), G.successors, -1)
 
-    def test_has_predecessor(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_has_predecessor(self, graph_function):
+        G = graph_function(self.K3)
         assert G.has_predecessor(0, 1)
         assert not G.has_predecessor(0, -1)
 
-    def test_predecessors(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_predecessors(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.predecessors(0)) == [1, 2]
         pytest.raises((KeyError, nx.NetworkXError), G.predecessors, -1)
 
-    def test_degree(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_degree(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.degree()) == [(0, 4), (1, 4), (2, 4)]
         assert dict(G.degree()) == {0: 4, 1: 4, 2: 4}
         assert G.degree(0) == 4
         assert list(G.degree(iter([0]))) == [(0, 4)]
-        G.add_edge(0, 1, weight=0.3, other=1.2)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1, weight=0.3, other=1.2)
+        else:
+            G = G.add_edge(0, 1, weight=0.3, other=1.2)
         assert sorted(G.degree(weight="weight")) == [(0, 4.3), (1, 4.3), (2, 4)]
         assert sorted(G.degree(weight="other")) == [(0, 5.2), (1, 5.2), (2, 4)]
 
-    def test_in_degree(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_in_degree(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.in_degree()) == [(0, 2), (1, 2), (2, 2)]
         assert dict(G.in_degree()) == {0: 2, 1: 2, 2: 2}
         assert G.in_degree(0) == 2
         assert list(G.in_degree(iter([0]))) == [(0, 2)]
         assert G.in_degree(0, weight="weight") == 2
 
-    def test_out_degree(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_out_degree(self, graph_function):
+        G = graph_function(self.K3)
         assert sorted(G.out_degree()) == [(0, 2), (1, 2), (2, 2)]
         assert dict(G.out_degree()) == {0: 2, 1: 2, 2: 2}
         assert G.out_degree(0) == 2
         assert list(G.out_degree(iter([0]))) == [(0, 2)]
         assert G.out_degree(0, weight="weight") == 2
 
-    def test_size(self):
-        G = self.K3
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_size(self, graph_function):
+        G = graph_function(self.K3)
         assert G.size() == 6
         assert G.number_of_edges() == 6
-        G.add_edge(0, 1, weight=0.3, other=1.2)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(0, 1, weight=0.3, other=1.2)
+        else:
+            G = G.add_edge(0, 1, weight=0.3, other=1.2)
         assert round(G.size(weight="weight"), 2) == 6.3
         assert round(G.size(weight="other"), 2) == 7.2
 
-    def test_to_undirected_reciprocal(self):
-        G = self.Graph()
-        G.add_edge(1, 2)
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_to_undirected_reciprocal(self, graph_function):
+        G = graph_function(self.Graph())
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(1, 2)
+        else:
+            G = G.add_edge(1, 2)
         assert G.to_undirected().has_edge(1, 2)
         assert not G.to_undirected(reciprocal=True).has_edge(1, 2)
-        G.add_edge(2, 1)
+        if isinstance(G, nx.MultiDiGraph):
+            G.add_edge(2, 1)
+        else:
+            G = G.add_edge(2, 1)
         assert G.to_undirected(reciprocal=True).has_edge(1, 2)
 
-    def test_reverse_copy(self):
-        G = nx.MultiDiGraph([(0, 1), (0, 1)])
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_reverse_copy(self, graph_function):
+        G = graph_function(nx.MultiDiGraph([(0, 1), (0, 1)]))
         R = G.reverse()
         assert sorted(R.edges()) == [(1, 0), (1, 0)]
-        R.remove_edge(1, 0)
+        if isinstance(G, nx.MultiDiGraph):
+            R.remove_edge(1, 0)
+        else:
+            R = R.remove_edge(1, 0)
         assert sorted(R.edges()) == [(1, 0)]
         assert sorted(G.edges()) == [(0, 1), (0, 1)]
 
-    def test_reverse_nocopy(self):
-        G = nx.MultiDiGraph([(0, 1), (0, 1)])
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_reverse_nocopy(self, graph_function):
+        G = graph_function(nx.MultiDiGraph([(0, 1), (0, 1)]))
         R = G.reverse(copy=False)
         assert sorted(R.edges()) == [(1, 0), (1, 0)]
-        pytest.raises(nx.NetworkXError, R.remove_edge, 1, 0)
+        if isinstance(G, nx.MultiDiGraph):
+            pytest.raises(nx.NetworkXError, R.remove_edge, 1, 0)
+        else:
+            pytest.skip("Persistent graph does not support copy=False")
 
-    def test_di_attributes_cached(self):
-        G = self.K3.copy()
+    @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
+    def test_di_attributes_cached(self, graph_function):
+        G = graph_function(self.K3.copy())
+        if not isinstance(G, networkx.MultiDiGraph):
+            pytest.skip("Persistent graph does not caches attributes")
         assert id(G.in_edges) == id(G.in_edges)
         assert id(G.out_edges) == id(G.out_edges)
         assert id(G.in_degree) == id(G.in_degree)
@@ -252,6 +321,7 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
         assert id(G.pred) == id(G.pred)
 
 
+# TODO: modify tests below to check persistent graph
 class TestMultiDiGraph(BaseMultiDiGraphTester, _TestMultiGraph):
     def setup_method(self):
         self.Graph = nx.MultiDiGraph

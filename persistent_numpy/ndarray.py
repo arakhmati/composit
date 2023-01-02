@@ -106,8 +106,5 @@ def create_binary_instruction(operand_a, operand_b, op_name, instruction) -> "Pe
 
 
 def operands(graph, node):
-    operands = []
-    for predecessor in graph.predecessors(node):
-        for edge in graph._pred[node][predecessor]:
-            operands.append((edge["sink_input_port"], predecessor))
-    return [element[1] for element in sorted(operands, key=lambda element: element[0])]
+    result = ((data["sink_input_port"], predecessor) for predecessor, _, data in graph.in_edges(node, data=True))
+    return [element[1] for element in sorted(result, key=lambda element: element[0])]

@@ -2,6 +2,7 @@ import gc
 import pickle
 import platform
 
+import networkx
 import pytest
 
 import networkx as nx
@@ -203,12 +204,22 @@ class BaseAttrGraphTester(BaseGraphTester):
         assert edges_equal((G.degree([1], weight="other")), [(1, 3)])
 
     def add_attributes(self, G):
-        G.graph["foo"] = []
-        G.nodes[0]["foo"] = []
-        G.remove_edge(1, 2)
-        ll = []
-        G.add_edge(1, 2, foo=ll)
-        G.add_edge(2, 1, foo=ll)
+        if isinstance(G, networkx.Graph):
+            G.graph["foo"] = []
+            G.nodes[0]["foo"] = []
+            G.remove_edge(1, 2)
+            ll = []
+            G.add_edge(1, 2, foo=ll)
+            G.add_edge(2, 1, foo=ll)
+        else:
+            G = G.add_attributes(foo=[])
+            G = G.add_node(0, foo=[])
+            G = G.remove_edge(1, 2)
+            ll = []
+            G = G.add_edge(1, 2, foo=ll)
+            G = G.add_edge(2, 1, foo=ll)
+
+        return G
 
     def test_name(self):
         G = self.Graph(name="")
