@@ -1,5 +1,0 @@
-# import pyrsistent
-
-
-class MultiDiGraph:
-    ...

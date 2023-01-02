@@ -3,11 +3,11 @@
 set -e
 
 # Formatters
-black --check networkx_persistent tests/unit_tests
+black --check persistent_numpy tests/unit_tests
 
 # Type Checkers
-mypy --config-file mypy.ini networkx_persistent
+mypy --config-file mypy.ini persistent_numpy
 
 # Linters
-MYPYPATH=/dev/null flake8 --config .flake8 --mypy-config mypy.ini networkx_persistent tests/unit_tests
-pylint --rcfile .pylintrc networkx_persistent tests/unit_tests
+MYPYPATH=/dev/null flake8 --config .flake8 --mypy-config mypy.ini persistent_numpy tests/unit_tests
+pylint --rcfile .pylintrc persistent_numpy tests/unit_tests
