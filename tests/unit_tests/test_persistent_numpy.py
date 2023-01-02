@@ -84,3 +84,17 @@ def test_transpose(np):
     array = np.ones((5, 25, 15))
     result = np.transpose(array, axes=(2, 0, 1))
     assert result.shape == (15, 5, 25)
+
+
+@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+def test_exp(np):
+    array = np.ones((5, 25, 15))
+    result = np.exp(array)
+    assert result.shape == (5, 25, 15)
+
+
+@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+def test_sum(np):
+    array = np.ones((5, 25, 15))
+    result = np.sum(array, axis=-1)
+    assert result.shape == (5, 25)

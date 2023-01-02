@@ -110,19 +110,18 @@ def functional_multi_head_attention(
 
     query = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.query.weight"]
     query = query + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.query.bias"]
-    query = query.view(batch_size, sequence_size, num_heads, head_size)
-    query = query.transpose(2, 1)
+    query = pnp.reshape(query, (batch_size, sequence_size, num_heads, head_size))
+    query = pnp.transpose(query, (0, 2, 1, 3))
 
     key = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.key.weight"]
     key = key + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.key.bias"]
-    key = key.view(batch_size, sequence_size, num_heads, head_size)
-    key = key.transpose(2, 1)
-    key = key.transpose(3, 2)
+    key = pnp.reshape(key, (batch_size, sequence_size, num_heads, head_size))
+    key = pnp.transpose(key, (0, 2, 3, 1))
 
     value = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.value.weight"]
     value = value + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.value.bias"]
-    value = value.view(batch_size, sequence_size, num_heads, head_size)
-    value = value.transpose(2, 1)
+    value = pnp.reshape(value, (batch_size, sequence_size, num_heads, head_size))
+    value = pnp.transpose(value, (0, 2, 1, 3))
 
     attention_scores = query @ key
 
@@ -130,12 +129,14 @@ def functional_multi_head_attention(
     if attention_mask is not None:
         attention_scores = attention_scores + attention_mask
 
+    attention_scores = torch.from_numpy(attention_scores.to_numpy())
     attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
+    attention_probs = pnp.asarray(attention_probs.numpy())
 
     context_layer = attention_probs @ value
 
-    context_layer = context_layer.transpose(2, 1).contiguous()
-    context_layer = context_layer.view(batch_size, sequence_size, num_heads * head_size)
+    context_layer = pnp.transpose(context_layer, (0, 2, 1, 3))
+    context_layer = pnp.reshape(context_layer, (batch_size, sequence_size, num_heads * head_size))
 
     self_output = context_layer @ parameters[f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight"]
     self_output = self_output + parameters[f"bert.encoder.layer.{encoder_index}.attention.output.dense.bias"]
@@ -162,6 +163,29 @@ def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
     return output
 
 
+def _functional_layer_norm(input_tensor, weight, bias, epsilon=0):
+    """
+    mean = torch.mean(input_tensor, dim=-1, keepdim=True)
+    var = torch.square(input_tensor - mean).mean(dim=-1, keepdim=True)
+    output = (input_tensor - mean) / torch.sqrt(var + epsilon)
+    output *= weight
+    output += bias
+    """
+
+    input_tensor = torch.from_numpy(input_tensor.to_numpy()).double()
+    weight = torch.from_numpy(weight.to_numpy()).double()
+    bias = torch.from_numpy(bias.to_numpy()).double()
+    output = torch.nn.functional.layer_norm(
+        input_tensor,
+        (input_tensor.shape[-1],),
+        weight,
+        bias,
+        eps=epsilon,
+    )
+    output = pnp.asarray(output.numpy())
+    return output
+
+
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
@@ -178,6 +202,11 @@ def functional_bert_encoder(
     multi_head_attention_output = functional_multi_head_attention(
         hidden_states, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size
     )
+
+    hidden_states = torch.from_numpy(hidden_states.to_numpy()).double()
+    multi_head_attention_output = torch.from_numpy(multi_head_attention_output.to_numpy()).double()
+    parameters = {key: torch.from_numpy(value.to_numpy()).double() for key, value in parameters.items()}
+
     multi_head_attention_add_and_layer_norm_output = functional_layer_norm(
         hidden_states + multi_head_attention_output,
         parameters[f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.weight"],
@@ -204,21 +233,25 @@ def functional_bert(
     word_embeddings = functional_embedding(
         input_ids, parameters["bert.embeddings.word_embeddings.weight"], "word_embeddings"
     )
-    return word_embeddings
-    # token_type_embeddings = torch.nn.functional.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
-    # embeddings = word_embeddings + token_type_embeddings
-    #
-    # encoder_input = functional_layer_norm(
-    #     embeddings,
-    #     parameters["bert.embeddings.LayerNorm.weight"],
-    #     parameters["bert.embeddings.LayerNorm.bias"],
-    # )
-    #
-    # encoder_output = None
-    # for encoder_index in range(num_encoders):
-    #     encoder_output = functional_bert_encoder(encoder_input, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size)
-    #     encoder_input = encoder_output
-    # return encoder_output
+    token_type_embeddings = functional_embedding(
+        token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"], "token_type_embeddings"
+    )
+    embeddings = word_embeddings + token_type_embeddings
+
+    encoder_input = _functional_layer_norm(
+        embeddings,
+        parameters["bert.embeddings.LayerNorm.weight"],
+        parameters["bert.embeddings.LayerNorm.bias"],
+    )
+
+    encoder_output = None
+    for encoder_index in range(num_encoders):
+        encoder_output = functional_bert_encoder(
+            encoder_input, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size
+        )
+        encoder_output = pnp.asarray(encoder_output.numpy())
+        encoder_input = encoder_output
+    return encoder_output
 
 
 def functional_bert_for_question_answering(
@@ -280,16 +313,13 @@ def test_functional_bert_vs_transformers_bert(
         pnp.asarray(input_ids.numpy(), name="input_ids"),
         pnp.asarray(token_type_ids.numpy(), name="token_type_ids"),
         None,
-        {
-            key: pnp.asarray(value.numpy(), name=key)
-            for key, value in parameters.items()
-            if key == "bert.embeddings.word_embeddings.weight"
-        },
+        {key: pnp.asarray(value.numpy(), name=key) for key, value in parameters.items()},
         num_encoders,
         sequence_size,
         num_heads,
         head_size,
     )
-    # output = torch.from_numpy(output.numpy())
+    # visualize_graph(output.graph, visualize_node)
+    output = torch.from_numpy(output.to_numpy())
 
-    # assert torch.allclose(output, transformers_output)
+    assert torch.allclose(output, transformers_output.double(), atol=1e-5)
