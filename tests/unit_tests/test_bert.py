@@ -87,25 +87,18 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
 
 
 def visualize_node(graph, node):
-    instruction = graph.get_node_attribute(node, "instruction")
-    return f"{type(instruction)}: {node.name}"
+    shape = graph.get_node_attribute(node, "shape")
+    return f"{node}:{shape}"
 
 
-def functional_embedding(input_tensor, weights, name):
-    batch_size, sequence_size = input_tensor.shape
-    result = pnp.named_ndarray((batch_size, sequence_size, weights.shape[1]), name=name)
-    for batch_index in range(batch_size):
-        for sequence_index in range(sequence_size):
-            result = result.set_at_indices(
-                (batch_index, sequence_index), weights[input_tensor[batch_index, sequence_index]]
-            )
-    return result
+def functional_softmax(input_tensor, axis):
+    exp_input_tensor = pnp.exp(input_tensor - pnp.max(input_tensor, axis=axis, keepdims=True))
+    return exp_input_tensor / pnp.sum(exp_input_tensor, axis=axis, keepdims=True)
 
 
 def functional_multi_head_attention(
     hidden_states, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size
 ):
-
     batch_size = hidden_states.shape[0]
 
     query = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.query.weight"]
@@ -129,9 +122,7 @@ def functional_multi_head_attention(
     if attention_mask is not None:
         attention_scores = attention_scores + attention_mask
 
-    attention_scores = torch.from_numpy(attention_scores.to_numpy())
-    attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
-    attention_probs = pnp.asarray(attention_probs.numpy())
+    attention_probs = functional_softmax(attention_scores, axis=-1)
 
     context_layer = attention_probs @ value
 
@@ -146,50 +137,24 @@ def functional_multi_head_attention(
 
 def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
     """
-    mean = torch.mean(input_tensor, dim=-1, keepdim=True)
-    var = torch.square(input_tensor - mean).mean(dim=-1, keepdim=True)
-    output = (input_tensor - mean) / torch.sqrt(var + epsilon)
+    mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
+    input_tensor_minus_mean = input_tensor - mean
+    var = pnp.mean(pnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
+    output = input_tensor_minus_mean / pnp.sqrt(var + epsilon)
     output *= weight
     output += bias
-    """
-
-    output = torch.nn.functional.layer_norm(
-        input_tensor,
-        (input_tensor.shape[-1],),
-        weight,
-        bias,
-        eps=epsilon,
-    )
     return output
-
-
-def _functional_layer_norm(input_tensor, weight, bias, epsilon=0):
     """
-    mean = torch.mean(input_tensor, dim=-1, keepdim=True)
-    var = torch.square(input_tensor - mean).mean(dim=-1, keepdim=True)
-    output = (input_tensor - mean) / torch.sqrt(var + epsilon)
-    output *= weight
-    output += bias
-    """
-
-    input_tensor = torch.from_numpy(input_tensor.to_numpy()).double()
-    weight = torch.from_numpy(weight.to_numpy()).double()
-    bias = torch.from_numpy(bias.to_numpy()).double()
-    output = torch.nn.functional.layer_norm(
-        input_tensor,
-        (input_tensor.shape[-1],),
-        weight,
-        bias,
-        eps=epsilon,
-    )
-    output = pnp.asarray(output.numpy())
-    return output
+    mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
+    var = pnp.sqrt(pnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
+    output = (input_tensor - mean) / var
+    return output * weight + bias
 
 
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
-    hidden_states = torch.nn.functional.gelu(hidden_states)
+    hidden_states = pnp.gelu(hidden_states)
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.output.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.output.dense.bias"]
     return hidden_states
@@ -202,10 +167,6 @@ def functional_bert_encoder(
     multi_head_attention_output = functional_multi_head_attention(
         hidden_states, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size
     )
-
-    hidden_states = torch.from_numpy(hidden_states.to_numpy()).double()
-    multi_head_attention_output = torch.from_numpy(multi_head_attention_output.to_numpy()).double()
-    parameters = {key: torch.from_numpy(value.to_numpy()).double() for key, value in parameters.items()}
 
     multi_head_attention_add_and_layer_norm_output = functional_layer_norm(
         hidden_states + multi_head_attention_output,
@@ -230,15 +191,11 @@ def functional_bert(
     input_ids, token_type_ids, attention_mask, parameters, num_encoders, sequence_size, num_heads, head_size
 ):
 
-    word_embeddings = functional_embedding(
-        input_ids, parameters["bert.embeddings.word_embeddings.weight"], "word_embeddings"
-    )
-    token_type_embeddings = functional_embedding(
-        token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"], "token_type_embeddings"
-    )
+    word_embeddings = pnp.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
+    token_type_embeddings = pnp.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings
 
-    encoder_input = _functional_layer_norm(
+    encoder_input = functional_layer_norm(
         embeddings,
         parameters["bert.embeddings.LayerNorm.weight"],
         parameters["bert.embeddings.LayerNorm.bias"],
@@ -249,7 +206,6 @@ def functional_bert(
         encoder_output = functional_bert_encoder(
             encoder_input, attention_mask, parameters, encoder_index, sequence_size, num_heads, head_size
         )
-        encoder_output = pnp.asarray(encoder_output.numpy())
         encoder_input = encoder_output
     return encoder_output
 
@@ -319,7 +275,7 @@ def test_functional_bert_vs_transformers_bert(
         num_heads,
         head_size,
     )
-    # visualize_graph(output.graph, visualize_node)
+    # visualize_graph(output.graph, visualize_node=visualize_node)
     output = torch.from_numpy(output.to_numpy())
 
     assert torch.allclose(output, transformers_output.double(), atol=1e-5)

@@ -1,7 +1,17 @@
 import pytest
 
 import numpy
+import torch.nn.functional
+
 import persistent_numpy
+
+
+def check_results(function):
+    np_result = function(numpy)
+    pnp_result = function(persistent_numpy)
+
+    assert np_result.shape == pnp_result.shape
+    assert numpy.allclose(np_result, pnp_result.to_numpy())
 
 
 @pytest.mark.parametrize("np", [numpy, persistent_numpy])
@@ -31,70 +41,118 @@ def test_ones(np):
     assert array.shape == (5, 10)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_matmul(np):
-    array_a = np.ones((5, 10))
-    array_b = np.ones((10, 3))
-    result = np.matmul(array_a, array_b)
-    assert result.shape == (5, 3)
+def test_matmul():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((10, 3))
+        result = np.matmul(array_a, array_b)
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_add(np):
-    array_a = np.ones((5, 10))
-    array_b = np.ones((10,))
-    result = array_a + array_b
-    assert result.shape == (5, 10)
+def test_add():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((10,))
+        result = array_a + array_b
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_add_scalar(np):
-    array_a = np.ones((5, 10))
-    array_b = 1
-    result = array_a + array_b
-    assert result.shape == (5, 10)
+def test_add_scalar():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = 1
+        result = array_a + array_b
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_subtract(np):
-    array_a = np.ones((5, 10))
-    array_b = np.ones((10,))
-    result = array_a - array_b
-    assert result.shape == (5, 10)
+def test_subtract():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((10,))
+        result = array_a - array_b
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_multiply(np):
-    array_a = np.ones((5, 10))
-    array_b = np.ones((10,))
-    result = array_a * array_b
-    assert result.shape == (5, 10)
+def test_multiply():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((10,))
+        result = array_a * array_b
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_divide(np):
-    array_a = np.ones((5, 10))
-    array_b = np.ones((10,))
-    result = array_a / array_b
-    assert result.shape == (5, 10)
+def test_divide():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((10,))
+        result = array_a / array_b
+        return result
+
+    check_results(function)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_transpose(np):
+def test_reshape():
+    def function(np):
+        array = np.ones((5, 25, 15), dtype="int32")
+        result = np.reshape(array, (125, 15))
+        return result
+
+    check_results(function)
+
+
+def test_transpose_with_axes_as_kwarg():
+    def function(np):
+        array = np.ones((5, 25, 15), dtype="int32")
+        result = np.transpose(array, axes=(2, 0, 1))
+        return result
+
+    check_results(function)
+
+
+def test_transpose_with_axes_as_arg():
+    def function(np):
+        array = np.ones((5, 25, 15), dtype="int32")
+        result = np.transpose(array, (2, 0, 1))
+        return result
+
+    check_results(function)
+
+
+def test_exp():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.exp(array)
+        return result
+
+    check_results(function)
+
+
+def test_sum():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.sum(array, axis=-1)
+        return result
+
+    check_results(function)
+
+
+def test_gelu():
+    np = persistent_numpy
     array = np.ones((5, 25, 15))
-    result = np.transpose(array, axes=(2, 0, 1))
-    assert result.shape == (15, 5, 25)
+    result = np.gelu(array)
 
+    torch_array = torch.from_numpy(array.to_numpy()).float()
+    torch_result = torch.nn.functional.gelu(torch_array).numpy()
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_exp(np):
-    array = np.ones((5, 25, 15))
-    result = np.exp(array)
-    assert result.shape == (5, 25, 15)
-
-
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
-def test_sum(np):
-    array = np.ones((5, 25, 15))
-    result = np.sum(array, axis=-1)
-    assert result.shape == (5, 25)
+    assert result.shape == torch_result.shape
+    assert numpy.allclose(result.to_numpy(), torch_result)
