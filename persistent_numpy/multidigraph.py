@@ -1,6 +1,4 @@
 from collections.abc import Iterable
-import pickle
-import zlib
 
 
 import graphviz
@@ -81,20 +79,6 @@ from networkx.classes.reportviews import (
     "to_undirected_class",
     "update",
 ]
-
-Hash = int
-
-
-def deterministic_hash(obj):
-    bytes = pickle.dumps(obj)
-    return zlib.adler32(bytes)
-
-
-class Node(PClass):
-    name = field(type=str, mandatory=True)
-
-    def __hash__(self):
-        return deterministic_hash(self)
 
 
 class MultiDiGraph(PClass):

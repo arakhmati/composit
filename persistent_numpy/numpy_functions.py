@@ -1,15 +1,13 @@
 import inspect
-import math
 import random
 import sys
 
 import numpy as np
-from pyrsistent import immutable
+from pyrsistent import immutable, PClass, field
 from toolz import functoolz
 
-from persistent_numpy.multidigraph import MultiDiGraph, Node
-from persistent_numpy.ndarray import PersistentArray
-from persistent_numpy import instructions
+from persistent_numpy.multidigraph import MultiDiGraph
+from persistent_numpy.ndarray import PersistentArray, Node
 
 THIS_MODULE = sys.modules[__name__]
 
@@ -19,10 +17,37 @@ def _random_string(num_characters=10):
     return result
 
 
-def _create_from_array(name: str, array: np.ndarray):
+class _ndarray(PClass):
+    array = field()
+
+    def __call__(self, *input_arrays: list[np.ndarray]):
+        return self.array
+
+
+class get_item(PClass):
+    def __call__(self, *input_arrays: list[np.ndarray]):
+        array, indices = input_arrays
+        if isinstance(indices, np.ndarray):
+            if indices.shape == ():
+                indices = indices.reshape((1,))
+            indices = tuple(indices)
+        return array[indices]
+
+
+class set_item(PClass):
+    indices = field(type=tuple)
+
+    def __call__(self, *input_arrays: list[np.ndarray]):
+        old_array, new_slice = input_arrays
+        new_array = old_array.copy()
+        new_array[self.indices] = new_slice
+        return new_array
+
+
+def _create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=instructions.ndarray(array=array), shape=array.shape)
-    return PersistentArray(graph, node)
+    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shape=array.shape)
+    return PersistentArray(graph=graph, node=node)
 
 
 @functoolz.memoize
@@ -36,7 +61,7 @@ def _create_from_numpy_compute_instruction(*operands, instruction) -> "Persisten
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
-            operands[index] = _create_from_array(f"Scalar({operands[index]})", np.asarray(operands[index]))
+            operands[index] = _create_ndarray(f"Scalar({operands[index]})", np.asarray(operands[index]))
 
     graph = operands[0].graph
     for operand in operands[1:]:
@@ -52,21 +77,21 @@ def _create_from_numpy_compute_instruction(*operands, instruction) -> "Persisten
     for index, operand in enumerate(operands):
         graph = graph.add_edge(operand.node, new_node, source_output_port=0, sink_input_port=index)
 
-    return PersistentArray(graph, new_node)
+    return PersistentArray(graph=graph, node=new_node)
 
 
 def get_item(self, indices) -> "PersistentArray":
     if not isinstance(indices, PersistentArray):
         name = f"{indices}"
-        indices = _create_from_array(name, np.asarray(indices, dtype=int))
-    return _create_from_numpy_compute_instruction(self, indices, instruction=instructions.get_item())
+        indices = _create_ndarray(name, np.asarray(indices, dtype=int))
+    return _create_from_numpy_compute_instruction(self, indices, instruction=get_item())
 
 
 PersistentArray.__getitem__ = get_item
 
 
 def set_item(self, indices, values) -> "PersistentArray":
-    return _create_from_numpy_compute_instruction(self, values, instruction=instructions.set_item(indices=indices))
+    return _create_from_numpy_compute_instruction(self, values, instruction=set_item(indices=indices))
 
 
 PersistentArray.set_item = set_item
@@ -78,7 +103,7 @@ def asarray(array, name=None):
     if name is None:
         name = _random_string()
 
-    return _create_from_array(name, array)
+    return _create_ndarray(name, array)
 
 
 def _get_name_from_args_and_kwargs(function_name, *args, **kwargs):
@@ -94,7 +119,8 @@ def _get_name_from_args_and_kwargs(function_name, *args, **kwargs):
 
 def named_ndarray(*args, name, **kwargs):
     array = np.ndarray(*args, **kwargs)
-    return _create_from_array(name, array)
+    array[:] = 0
+    return _create_ndarray(name, array)
 
 
 def ndarray(*args, **kwargs):
@@ -107,13 +133,13 @@ def ndarray(*args, **kwargs):
 def zeros(*args, **kwargs):
     array = np.zeros(*args, **kwargs)
     name = _get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return _create_from_array(name, array)
+    return _create_ndarray(name, array)
 
 
 def ones(*args, **kwargs):
     array = np.ones(*args, **kwargs)
     name = _get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return _create_from_array(name, array)
+    return _create_ndarray(name, array)
 
 
 def _create_numpy_compute_instruction(function_name, *args, **kwargs):
@@ -188,7 +214,7 @@ def _create_numpy_binary_compute_function(function_name):
     def function(*args, **kwargs):
         operand_a, operand_b, *args = args
         if not isinstance(operand_b, PersistentArray):
-            operand_b = _create_from_array(f"Scalar({operand_b})", np.asarray(operand_b))
+            operand_b = _create_ndarray(f"Scalar({operand_b})", np.asarray(operand_b))
         return _create_from_numpy_compute_instruction(
             operand_a, operand_b, instruction=_create_numpy_compute_instruction(function_name, *args, **kwargs)
         )
@@ -212,30 +238,3 @@ for function_name in BINARY_COMPUTE_FUNCTIONS:
     setattr(THIS_MODULE, function_name, _create_numpy_binary_compute_function(function_name))
     function = getattr(THIS_MODULE, function_name)
     setattr(PersistentArray, dunder_method_name, function)
-
-
-def embedding(*operands):
-    def compute(self, input_tensor, weights):
-        batch_size, sequence_size = input_tensor.shape
-        result = np.zeros((batch_size, sequence_size, weights.shape[1]))
-        for batch_index in range(batch_size):
-            for sequence_index in range(sequence_size):
-                result[batch_index, sequence_index] = weights[input_tensor[batch_index, sequence_index]]
-        return result
-
-    function_name = inspect.currentframe().f_code.co_name
-    klass = immutable(name=function_name)
-    klass.__call__ = compute
-    instruction = klass()
-    return _create_from_numpy_compute_instruction(*operands, instruction=instruction)
-
-
-def gelu(operand):
-    def compute(self, input_tensor):
-        return 0.5 * input_tensor * (1 + np.vectorize(math.erf)(input_tensor / np.sqrt(2)))
-
-    function_name = inspect.currentframe().f_code.co_name
-    klass = immutable(name=function_name)
-    klass.__call__ = compute
-    instruction = klass()
-    return _create_from_numpy_compute_instruction(operand, instruction=instruction)

@@ -1,7 +1,6 @@
 import pytest
 
 import numpy
-import torch.nn.functional
 
 import persistent_numpy
 
@@ -144,15 +143,3 @@ def test_sum():
         return result
 
     check_results(function)
-
-
-def test_gelu():
-    np = persistent_numpy
-    array = np.ones((5, 25, 15))
-    result = np.gelu(array)
-
-    torch_array = torch.from_numpy(array.to_numpy()).float()
-    torch_result = torch.nn.functional.gelu(torch_array).numpy()
-
-    assert result.shape == torch_result.shape
-    assert numpy.allclose(result.to_numpy(), torch_result)

@@ -1,7 +1,16 @@
 import networkx
+from pyrsistent import PClass, field
 
-from persistent_numpy import MultiDiGraph, Node
+from persistent_numpy.multidigraph import MultiDiGraph
 from persistent_numpy.multidigraph import topological_traversal
+from persistent_numpy.hash import deterministic_hash
+
+
+class Node(PClass):
+    name = field(type=str, mandatory=True)
+
+    def __hash__(self):
+        return deterministic_hash(self)
 
 
 def test_init():

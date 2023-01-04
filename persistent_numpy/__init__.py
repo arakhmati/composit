@@ -1,3 +1,1 @@
-from .multidigraph import MultiDiGraph, Node
-
-from .functions import *
+from .numpy_functions import *

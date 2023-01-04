@@ -1,11 +1,11 @@
 import pytest
 
-import persistent_numpy as pnp
+import numpy as np
 import torch
-
 import transformers
 
-from persistent_numpy.multidigraph import visualize_graph
+import persistent_numpy as pnp
+import persistent_numpy.nn_functions as pnn
 
 
 def create_random_torch_float_tensor(*shape, minimum=-0.1, maximum=0.1):
@@ -154,7 +154,7 @@ def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
-    hidden_states = pnp.gelu(hidden_states)
+    hidden_states = pnn.gelu(hidden_states)
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.output.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.output.dense.bias"]
     return hidden_states
@@ -191,8 +191,8 @@ def functional_bert(
     input_ids, token_type_ids, attention_mask, parameters, num_encoders, sequence_size, num_heads, head_size
 ):
 
-    word_embeddings = pnp.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
-    token_type_embeddings = pnp.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
+    word_embeddings = pnn.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
+    token_type_embeddings = pnn.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings
 
     encoder_input = functional_layer_norm(
@@ -265,7 +265,7 @@ def test_functional_bert_vs_transformers_bert(
         # Update parameter names to include "bert." prefix to match the names of parameters in the models with heads
         parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
-    output = functional_bert_function(
+    output: pnp.PersistentArray = functional_bert_function(
         pnp.asarray(input_ids.numpy(), name="input_ids"),
         pnp.asarray(token_type_ids.numpy(), name="token_type_ids"),
         None,
