@@ -1,5 +1,5 @@
 import inspect
-import random
+import random as std_random
 import sys
 
 import numpy as np
@@ -13,7 +13,7 @@ THIS_MODULE = sys.modules[__name__]
 
 
 def _random_string(num_characters=10):
-    result = "".join(random.choice("abcdef0123456789") for i in range(num_characters))
+    result = "".join(std_random.choice("abcdef0123456789") for i in range(num_characters))
     return result
 
 
@@ -24,7 +24,7 @@ class _ndarray(PClass):
         return self.array
 
 
-class get_item(PClass):
+class _get_item(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
         array, indices = input_arrays
         if isinstance(indices, np.ndarray):
@@ -34,8 +34,8 @@ class get_item(PClass):
         return array[indices]
 
 
-class set_item(PClass):
-    indices = field(type=tuple)
+class _set_item(PClass):
+    indices = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
         old_array, new_slice = input_arrays
@@ -84,14 +84,14 @@ def get_item(self, indices) -> "PersistentArray":
     if not isinstance(indices, PersistentArray):
         name = f"{indices}"
         indices = _create_ndarray(name, np.asarray(indices, dtype=int))
-    return _create_from_numpy_compute_instruction(self, indices, instruction=get_item())
+    return _create_from_numpy_compute_instruction(self, indices, instruction=_get_item())
 
 
 PersistentArray.__getitem__ = get_item
 
 
 def set_item(self, indices, values) -> "PersistentArray":
-    return _create_from_numpy_compute_instruction(self, values, instruction=set_item(indices=indices))
+    return _create_from_numpy_compute_instruction(self, values, instruction=_set_item(indices=indices))
 
 
 PersistentArray.set_item = set_item

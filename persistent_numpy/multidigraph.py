@@ -347,7 +347,9 @@ def default_visualize_edge(graph, source, sink, edge):
 
 
 def visualize_graph(
-    graph: MultiDiGraph, visualize_node=default_visualize_node, visualize_edge=default_visualize_edge
+    graph: MultiDiGraph,
+    visualize_node=default_visualize_node,
+    visualize_edge=default_visualize_edge,
 ) -> None:
     dot = graphviz.Digraph()
 
@@ -356,7 +358,11 @@ def visualize_graph(
 
         for predecessor in graph.predecessors(node):
             for edge in graph._pred[node][predecessor]:
-                dot.edge(predecessor.name, node.name, label=visualize_edge(graph, node, predecessor, edge))
+                dot.edge(
+                    predecessor.name,
+                    node.name,
+                    label=visualize_edge(graph, node, predecessor, edge),
+                )
 
     dot.render("graph.gv", view=True, format="svg")
 

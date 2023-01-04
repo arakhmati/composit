@@ -1,7 +1,7 @@
 import numpy as np
 from pyrsistent import PClass, field
 
-from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal
+from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, visualize_graph
 from persistent_numpy.hash import deterministic_hash
 
 
@@ -28,6 +28,13 @@ class PersistentArray(PClass):
     def to_numpy(self) -> np.ndarray:
         return _compute(self.graph, self.node)
 
+    def visualize(self):
+        def visualize_node(graph, node):
+            shape = graph.get_node_attribute(node, "shape")
+            return f"{node}:{shape}"
+
+        visualize_graph(self.graph, visualize_node=visualize_node)
+
 
 def _operands(graph, node):
     result = ((data["sink_input_port"], predecessor) for predecessor, _, data in graph.in_edges(node, data=True))
@@ -36,7 +43,7 @@ def _operands(graph, node):
 
 def _compute(graph, result_node):
 
-    sorted_nodes = list(topological_traversal(graph))
+    sorted_nodes = topological_traversal(graph)
     cache = {}
     for node in sorted_nodes:
         instruction = graph.get_node_attribute(node, "instruction")

@@ -143,3 +143,27 @@ def test_sum():
         return result
 
     check_results(function)
+
+
+def test_get_item():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = array[3, 10]
+        return result
+
+    check_results(function)
+
+
+def test_set_item():
+    def function(np):
+        numpy.random.seed(0)
+        array = np.random.random((5, 25, 15))
+        smaller_array = np.random.random((25, 15))
+        if np == numpy:
+            array[0] = smaller_array
+        else:
+            # Make a new language that support persistent __setitem__? ;)
+            array = np.set_item(array, 0, smaller_array)
+        return array
+
+    check_results(function)
