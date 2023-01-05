@@ -267,71 +267,13 @@ class MultiDiGraph(PClass):
         return iter(self.pred[node].keys())
 
     def to_undirected(self, **kwargs) -> "networkx.MultiGraph":
-        return self.to_networkx().to_undirected(**kwargs)
+        return to_networkx(self).to_undirected(**kwargs)
 
     def reverse(self, **kwargs) -> "networkx.MultiDiGraph":
-        graph = self.to_networkx()
+        graph = to_networkx(self)
         graph = graph.reverse(**kwargs)
         graph = from_networkx(graph)
         return graph
-
-    # Non-networkx methods
-
-    def to_networkx(self) -> "networkx.MultiDiGraph":
-        graph = networkx.MultiDiGraph()
-
-        for node, data in self.nodes(data=True):
-            graph.add_node(node, **data)
-
-        for source, sink, key, data in self.edges(keys=True, data=True):
-            graph.add_edge(source, sink, key, **data)
-
-        graph.graph.update(**self.graph)
-        return graph
-
-    def get_node_attribute(self, node, name):
-        return self._node[node][name]
-
-    def merge(self, other: "MultiDiGraph", other_node) -> "MultiDiGraph":
-        other_operands = list(other.predecessors(other_node))
-        if other_operands and all(operand in self for operand in other_operands):
-            _node = self._node.set(other_node, other._node[other_node])
-            new_graph = self.set(_node=_node)
-            for source, sink, key, data in other.in_edges(other_node, keys=True, data=True):
-                new_graph = new_graph.add_edge(source, sink, key, **data)
-            return new_graph
-
-        elif len(other) == 1:
-            attributes = other._node[other_node]
-            new_graph = self.add_node(other_node, **attributes)
-            return new_graph
-
-        else:
-            _node = self._node.update(other._node)
-
-            def merge_edges(node_to_neighbors, other_node_to_neighbors):
-                for other_node, other_neighbors in other_node_to_neighbors.items():
-                    if other_node not in node_to_neighbors:
-                        node_to_neighbors = node_to_neighbors.set(other_node, other_neighbors)
-                        continue
-
-                    neighbors = node_to_neighbors[other_node]
-                    for other_neighbor, other_edges in other_neighbors.items():
-                        if other_neighbor not in neighbors:
-                            neighbors = neighbors.set(other_neighbor, other_edges)
-                            continue
-
-                        edges = neighbors[other_neighbor].update(other_neighbors[other_neighbor])
-                        neighbors = neighbors.set(other_neighbor, edges)
-
-                    node_to_neighbors = node_to_neighbors.set(other_node, neighbors)
-                return node_to_neighbors
-
-            _pred = merge_edges(self._pred, other._pred)
-            _succ = merge_edges(self._succ, other._succ)
-
-            new_graph = self.set(_node=_node, _pred=_pred, _succ=_succ)
-            return new_graph
 
 
 def topological_traversal(graph):
@@ -381,6 +323,19 @@ def from_networkx(nx_graph: networkx.MultiDiGraph) -> MultiDiGraph:
     return graph
 
 
+def to_networkx(graph) -> "networkx.MultiDiGraph":
+    nx_graph = networkx.MultiDiGraph()
+
+    for node, data in graph.nodes(data=True):
+        nx_graph.add_node(node, **data)
+
+    for source, sink, key, data in graph.edges(keys=True, data=True):
+        nx_graph.add_edge(source, sink, key, **data)
+
+    nx_graph.graph.update(**graph.graph)
+    return nx_graph
+
+
 def compose_all(*graphs) -> "MultiDiGraph":
     new_graph, *_ = tuple(graphs)
 
@@ -391,3 +346,51 @@ def compose_all(*graphs) -> "MultiDiGraph":
         new_graph = new_graph.add_edges_from(graph.edges(keys=True, data=True))
 
     return new_graph
+
+
+def merge_graphs(*graph_node_pairs) -> "MultiDiGraph":
+    def merge_binary(graph_a, graph_b: "MultiDiGraph", graph_b_node):
+        graph_b_operands = list(graph_b.predecessors(graph_b_node))
+        if graph_b_operands and all(operand in graph_a for operand in graph_b_operands):
+            _node = graph_a._node.set(graph_b_node, graph_b._node[graph_b_node])
+            new_graph = graph_a.set(_node=_node)
+            for source, sink, key, data in graph_b.in_edges(graph_b_node, keys=True, data=True):
+                new_graph = new_graph.add_edge(source, sink, key, **data)
+            return new_graph
+
+        elif len(graph_b) == 1:
+            attributes = graph_b._node[graph_b_node]
+            new_graph = graph_a.add_node(graph_b_node, **attributes)
+            return new_graph
+
+        else:
+            _node = graph_a._node.update(graph_b._node)
+
+            def merge_edges(node_to_neighbors, graph_b_node_to_neighbors):
+                for graph_b_node, graph_b_neighbors in graph_b_node_to_neighbors.items():
+                    if graph_b_node not in node_to_neighbors:
+                        node_to_neighbors = node_to_neighbors.set(graph_b_node, graph_b_neighbors)
+                        continue
+
+                    neighbors = node_to_neighbors[graph_b_node]
+                    for graph_b_neighbor, graph_b_edges in graph_b_neighbors.items():
+                        if graph_b_neighbor not in neighbors:
+                            neighbors = neighbors.set(graph_b_neighbor, graph_b_edges)
+                            continue
+
+                        edges = neighbors[graph_b_neighbor].update(graph_b_neighbors[graph_b_neighbor])
+                        neighbors = neighbors.set(graph_b_neighbor, edges)
+
+                    node_to_neighbors = node_to_neighbors.set(graph_b_node, neighbors)
+                return node_to_neighbors
+
+            _pred = merge_edges(graph_a._pred, graph_b._pred)
+            _succ = merge_edges(graph_a._succ, graph_b._succ)
+
+            new_graph = graph_a.set(_node=_node, _pred=_pred, _succ=_succ)
+            return new_graph
+
+    (graph, node), *graph_node_pairs = graph_node_pairs
+    for other_graph, other_node in graph_node_pairs:
+        graph = merge_binary(graph, other_graph, other_node)
+    return graph

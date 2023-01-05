@@ -4,7 +4,7 @@ import math
 import numpy as np
 from pyrsistent import immutable, PClass, field
 
-from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal
+from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, compose_all
 from persistent_numpy.persistent_array import PersistentArray, Node
 
 from persistent_numpy.numpy_functions import create_from_numpy_compute_instruction, node_operands
@@ -16,7 +16,7 @@ class _variable(PClass):
 
 def variable(*, name: str, shape: tuple, requires_gradient: bool = False):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=_variable(requires_gradient=requires_gradient), shape=shape)
+    graph = MultiDiGraph().add_node(node, instruction=_variable(requires_gradient=requires_gradient), shapes=[shape])
     return PersistentArray(graph=graph, node=node)
 
 
@@ -47,28 +47,35 @@ def gelu(operand):
     return create_from_numpy_compute_instruction(operand, instruction=instruction)
 
 
-def model_variables(model):
-    graph = model.graph
-    variables = set()
+def initial_cache(graph, **variable_to_array):
+    cache = {}
     for node in graph:
-        instruction = graph.get_node_attribute(node, "instruction")
+        instruction = graph.nodes[node]["instruction"]
         if isinstance(instruction, _variable):
-            variables.add(node.name)
-    return variables
+            cache[(node, 0)] = variable_to_array[node.name]
+    return cache
 
 
-def forward(model, **variable_to_array):
+def evaluate(*models, **variable_to_array):
 
-    variables = model_variables(model)
-    for variable in variables:
-        assert variable in variable_to_array
+    graph = compose_all(*tuple(model.graph for model in models))
 
-    graph = model.graph
-    cache = variable_to_array.copy()
+    cache = initial_cache(graph, **variable_to_array)
     for node in topological_traversal(graph):
-        if node.name in cache:
+        if (node, 0) in cache:
             continue
-        instruction = graph.get_node_attribute(node, "instruction")
-        input_arrays = [cache[operand.name] for operand in node_operands(graph, node)]
-        cache[node.name] = instruction(*input_arrays)
-    return cache[model.node.name]
+        instruction = graph.nodes[node]["instruction"]
+        input_arrays = [cache[operand] for operand in node_operands(graph, node)]
+        instruction_output = instruction(*input_arrays)
+        if isinstance(instruction_output, np.ndarray):
+            cache[(node, 0)] = instruction_output
+        elif isinstance(instruction_output, list):
+            for output_index, instruction_output in enumerate(instruction_output):
+                cache[(node, output_index)] = instruction_output
+        else:
+            raise RuntimeError("Unsupported type")
+
+    result = [cache[(model.node, model.output_index)] for model in models]
+    if len(result) == 1:
+        return result[0]
+    return result

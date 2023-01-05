@@ -343,7 +343,7 @@ def test_functional_bert_vs_transformers_bert(
     pnn_outputs = []
     for model_input in model_inputs:
         input_ids, token_type_ids = model_input
-        output = pnn.forward(
+        output = pnn.evaluate(
             model,
             input_ids=input_ids.numpy(),
             token_type_ids=token_type_ids.numpy(),
@@ -400,7 +400,7 @@ def test_functional_bert_autograd(
 
     input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
     token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-    output = pnn.forward(
+    output = pnn.evaluate(
         model,
         input_ids=input_ids.numpy(),
         token_type_ids=token_type_ids.numpy(),

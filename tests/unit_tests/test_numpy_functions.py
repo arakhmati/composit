@@ -6,11 +6,11 @@ import persistent_numpy
 
 
 def check_results(function):
-    np_result = function(numpy)
-    pnp_result = function(persistent_numpy)
+    np_array = function(numpy)
+    pnp_array = function(persistent_numpy)
 
-    assert np_result.shape == pnp_result.shape
-    assert numpy.allclose(np_result, persistent_numpy.to_numpy(pnp_result))
+    assert np_array.shape == pnp_array.shape
+    assert numpy.allclose(np_array, persistent_numpy.to_numpy(pnp_array))
 
 
 @pytest.mark.parametrize("np", [numpy, persistent_numpy])
@@ -167,3 +167,23 @@ def test_set_item():
         return array
 
     check_results(function)
+
+
+def test_split():
+    def function(np):
+        numpy.random.seed(0)
+        array = np.random.random((4, 8))
+        result = np.split(array, 2, axis=0)
+        result = [np.exp(element) for element in result]
+        return result
+
+    np_list = function(numpy)
+    pnp_list = function(persistent_numpy)
+
+    for np_array, pnp_array in zip(np_list, pnp_list):
+        assert np_array.shape == pnp_array.shape
+        assert numpy.allclose(np_array, persistent_numpy.to_numpy(pnp_array))
+
+    for np_array, pnp_array in zip(np_list, persistent_numpy.to_numpy(*pnp_list)):
+        assert np_array.shape == pnp_array.shape
+        assert numpy.allclose(np_array, pnp_array)

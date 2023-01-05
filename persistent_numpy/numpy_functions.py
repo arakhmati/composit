@@ -1,12 +1,13 @@
 import inspect
 import sys
+from typing import Union
 
 import numpy as np
 from pyrsistent import immutable, PClass, field
 from toolz import functoolz
 
 from persistent_numpy.introspection import get_name_from_args_and_kwargs
-from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal
+from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, merge_graphs, compose_all
 from persistent_numpy.persistent_array import PersistentArray, Node
 from persistent_numpy.string import random_string
 
@@ -14,20 +15,42 @@ THIS_MODULE = sys.modules[__name__]
 
 
 def node_operands(graph, node):
-    result = ((data["sink_input_port"], predecessor) for predecessor, _, data in graph.in_edges(node, data=True))
-    return [element[1] for element in sorted(result, key=lambda element: element[0])]
+    def sort_key(in_edge):
+        _, _, data = in_edge
+        return data["sink_input_index"]
+
+    def node_operand(in_edge):
+        predecessor, _, data = in_edge
+        return predecessor, data["source_output_index"]
+
+    return functoolz.pipe(
+        graph.in_edges(node, data=True),
+        list,
+        functoolz.partial(sorted, key=sort_key),
+        functoolz.partial(map, node_operand),
+    )
 
 
-def to_numpy(array: PersistentArray):
-    graph = array.graph
+def to_numpy(*arrays: tuple[PersistentArray]):
+    graph = compose_all(*tuple(array.graph for array in arrays))
 
-    sorted_nodes = topological_traversal(graph)
     cache = {}
-    for node in sorted_nodes:
-        instruction = graph.get_node_attribute(node, "instruction")
+    for node in topological_traversal(graph):
+        instruction = graph.nodes[node]["instruction"]
         input_arrays = [cache[operand] for operand in node_operands(graph, node)]
-        cache[node] = instruction(*input_arrays)
-    return cache[array.node]
+        instruction_output = instruction(*input_arrays)
+        if isinstance(instruction_output, np.ndarray):
+            cache[(node, 0)] = instruction_output
+        elif isinstance(instruction_output, list):
+            for output_index, instruction_output in enumerate(instruction_output):
+                cache[(node, output_index)] = instruction_output
+        else:
+            raise RuntimeError("Unsupported type")
+
+    result = [cache[(array.node, array.output_index)] for array in arrays]
+    if len(result) == 1:
+        return result[0]
+    return result
 
 
 class _ndarray(PClass):
@@ -59,39 +82,48 @@ class _set_item(PClass):
 
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shape=array.shape)
+    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shapes=[array.shape])
     return PersistentArray(graph=graph, node=node)
 
 
 @functoolz.memoize
 def instruction_shape(instruction, input_shapes):
     dummy_input_arrays = [np.zeros(input_shape, dtype=np.int32) for input_shape in input_shapes]
-    return instruction(*dummy_input_arrays).shape
+    result = instruction(*dummy_input_arrays)
+    if isinstance(result, np.ndarray):
+        return [result.shape]
+    elif isinstance(result, list):
+        return [array.shape for array in result]
+    else:
+        raise RuntimeError("Unsupported type")
 
 
-def create_from_numpy_compute_instruction(*operands, instruction) -> "PersistentArray":
+def create_from_numpy_compute_instruction(*operands, instruction) -> Union[PersistentArray, tuple[PersistentArray]]:
 
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
             operands[index] = create_ndarray(f"Scalar({operands[index]})", np.asarray(operands[index]))
 
-    graph = operands[0].graph
-    for operand in operands[1:]:
-        graph = graph.merge(operand.graph, operand.node)
+    graph = merge_graphs(*tuple((operand.graph, operand.node) for operand in operands))
 
-    shape = instruction_shape(
+    shapes = instruction_shape(
         instruction,
-        tuple(graph.get_node_attribute(operand.node, "shape") for operand in operands),
+        tuple(operand.shape for operand in operands),
     )
 
     name = f"{type(instruction).__name__}-{random_string()}"
     new_node = Node(name=name)
-    graph = graph.add_node(new_node, instruction=instruction, shape=shape)
+    graph = graph.add_node(new_node, instruction=instruction, shapes=shapes)
     for index, operand in enumerate(operands):
-        graph = graph.add_edge(operand.node, new_node, source_output_port=0, sink_input_port=index)
+        graph = graph.add_edge(operand.node, new_node, source_output_index=operand.output_index, sink_input_index=index)
 
-    return PersistentArray(graph=graph, node=new_node)
+    result = tuple(
+        PersistentArray(graph=graph, node=new_node, output_index=output_index) for output_index, _ in enumerate(shapes)
+    )
+    if len(result) == 1:
+        return result[0]
+    return result
 
 
 def get_item(self, indices) -> "PersistentArray":
@@ -201,6 +233,7 @@ COMPUTE_FUNCTIONS = [
     # Data Movement
     "transpose",
     "reshape",
+    "split",
     # Reduce
     "sum",
     "max",

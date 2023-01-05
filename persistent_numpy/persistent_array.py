@@ -14,6 +14,7 @@ class Node(PClass):
 class PersistentArray(PClass):
     graph = field(type=MultiDiGraph)
     node = field(type=Node)
+    output_index = field(type=int, initial=0)
 
     @property
     def name(self) -> str:
@@ -21,12 +22,11 @@ class PersistentArray(PClass):
 
     @property
     def shape(self) -> tuple:
-        shape = self.graph.get_node_attribute(self.node, "shape")
-        return shape
+        return self.graph.nodes[self.node]["shapes"][self.output_index]
 
     def visualize(self):
         def visualize_node(graph, node):
-            shape = graph.get_node_attribute(node, "shape")
-            return f"{node}:{shape}"
+            shapes = graph.nodes[node]["shapes"]
+            return f"{node}:{shapes}"
 
         visualize_graph(self.graph, visualize_node=visualize_node)
