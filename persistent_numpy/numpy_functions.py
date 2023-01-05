@@ -1,20 +1,33 @@
 import inspect
-import random as std_random
 import sys
 
 import numpy as np
 from pyrsistent import immutable, PClass, field
 from toolz import functoolz
 
-from persistent_numpy.multidigraph import MultiDiGraph
-from persistent_numpy.ndarray import PersistentArray, Node
+from persistent_numpy.introspection import get_name_from_args_and_kwargs
+from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal
+from persistent_numpy.persistent_array import PersistentArray, Node
+from persistent_numpy.string import random_string
 
 THIS_MODULE = sys.modules[__name__]
 
 
-def _random_string(num_characters=10):
-    result = "".join(std_random.choice("abcdef0123456789") for i in range(num_characters))
-    return result
+def node_operands(graph, node):
+    result = ((data["sink_input_port"], predecessor) for predecessor, _, data in graph.in_edges(node, data=True))
+    return [element[1] for element in sorted(result, key=lambda element: element[0])]
+
+
+def to_numpy(array: PersistentArray):
+    graph = array.graph
+
+    sorted_nodes = topological_traversal(graph)
+    cache = {}
+    for node in sorted_nodes:
+        instruction = graph.get_node_attribute(node, "instruction")
+        input_arrays = [cache[operand] for operand in node_operands(graph, node)]
+        cache[node] = instruction(*input_arrays)
+    return cache[array.node]
 
 
 class _ndarray(PClass):
@@ -44,7 +57,7 @@ class _set_item(PClass):
         return new_array
 
 
-def _create_ndarray(name: str, array: np.ndarray):
+def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
     graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shape=array.shape)
     return PersistentArray(graph=graph, node=node)
@@ -56,22 +69,23 @@ def instruction_shape(instruction, input_shapes):
     return instruction(*dummy_input_arrays).shape
 
 
-def _create_from_numpy_compute_instruction(*operands, instruction) -> "PersistentArray":
+def create_from_numpy_compute_instruction(*operands, instruction) -> "PersistentArray":
 
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
-            operands[index] = _create_ndarray(f"Scalar({operands[index]})", np.asarray(operands[index]))
+            operands[index] = create_ndarray(f"Scalar({operands[index]})", np.asarray(operands[index]))
 
     graph = operands[0].graph
     for operand in operands[1:]:
         graph = graph.merge(operand.graph, operand.node)
 
     shape = instruction_shape(
-        instruction, tuple(graph.get_node_attribute(operand.node, "shape") for operand in operands)
+        instruction,
+        tuple(graph.get_node_attribute(operand.node, "shape") for operand in operands),
     )
 
-    name = f"{type(instruction).__name__}-{_random_string()}"
+    name = f"{type(instruction).__name__}-{random_string()}"
     new_node = Node(name=name)
     graph = graph.add_node(new_node, instruction=instruction, shape=shape)
     for index, operand in enumerate(operands):
@@ -83,15 +97,15 @@ def _create_from_numpy_compute_instruction(*operands, instruction) -> "Persisten
 def get_item(self, indices) -> "PersistentArray":
     if not isinstance(indices, PersistentArray):
         name = f"{indices}"
-        indices = _create_ndarray(name, np.asarray(indices, dtype=int))
-    return _create_from_numpy_compute_instruction(self, indices, instruction=_get_item())
+        indices = create_ndarray(name, np.asarray(indices, dtype=int))
+    return create_from_numpy_compute_instruction(self, indices, instruction=_get_item())
 
 
 PersistentArray.__getitem__ = get_item
 
 
 def set_item(self, indices, values) -> "PersistentArray":
-    return _create_from_numpy_compute_instruction(self, values, instruction=_set_item(indices=indices))
+    return create_from_numpy_compute_instruction(self, values, instruction=_set_item(indices=indices))
 
 
 PersistentArray.set_item = set_item
@@ -101,45 +115,32 @@ def asarray(array, name=None):
     if not isinstance(array, np.ndarray):
         array = np.asarray(array)
     if name is None:
-        name = _random_string()
+        name = random_string()
 
-    return _create_ndarray(name, array)
-
-
-def _get_name_from_args_and_kwargs(function_name, *args, **kwargs):
-    args_string = ", ".join(f"{arg}" for arg in args)
-    kwargs_string = ", ".join(f"{key}={value}" for key, value in kwargs.items())
-    result = f"{function_name}({args_string}"
-    if kwargs_string:
-        result = f"{result}, {kwargs_string})"
-    else:
-        result = f"{result})"
-    return result
+    return create_ndarray(name, array)
 
 
 def named_ndarray(*args, name, **kwargs):
     array = np.ndarray(*args, **kwargs)
     array[:] = 0
-    return _create_ndarray(name, array)
+    return create_ndarray(name, array)
 
 
 def ndarray(*args, **kwargs):
-    name = (
-        _get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs) + "-" + _random_string()
-    )
+    name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs) + "-" + random_string()
     return named_ndarray(*args, name=name, **kwargs)
 
 
 def zeros(*args, **kwargs):
     array = np.zeros(*args, **kwargs)
-    name = _get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return _create_ndarray(name, array)
+    name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
+    return create_ndarray(name, array)
 
 
 def ones(*args, **kwargs):
     array = np.ones(*args, **kwargs)
-    name = _get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return _create_ndarray(name, array)
+    name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
+    return create_ndarray(name, array)
 
 
 def _create_numpy_compute_instruction(function_name, *args, **kwargs):
@@ -183,8 +184,9 @@ def _create_numpy_compute_instruction(function_name, *args, **kwargs):
 def _create_numpy_compute_function(function_name):
     def function(*args, **kwargs):
         operands = [arg for arg in args if isinstance(arg, PersistentArray)]
-        return _create_from_numpy_compute_instruction(
-            *operands, instruction=_create_numpy_compute_instruction(function_name, *args, **kwargs)
+        return create_from_numpy_compute_instruction(
+            *operands,
+            instruction=_create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
     return function
@@ -214,9 +216,11 @@ def _create_numpy_binary_compute_function(function_name):
     def function(*args, **kwargs):
         operand_a, operand_b, *args = args
         if not isinstance(operand_b, PersistentArray):
-            operand_b = _create_ndarray(f"Scalar({operand_b})", np.asarray(operand_b))
-        return _create_from_numpy_compute_instruction(
-            operand_a, operand_b, instruction=_create_numpy_compute_instruction(function_name, *args, **kwargs)
+            operand_b = create_ndarray(f"Scalar({operand_b})", np.asarray(operand_b))
+        return create_from_numpy_compute_instruction(
+            operand_a,
+            operand_b,
+            instruction=_create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
     return function

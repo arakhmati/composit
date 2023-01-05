@@ -5,9 +5,9 @@ import numpy as np
 from pyrsistent import immutable, PClass, field
 
 from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal
-from persistent_numpy.ndarray import PersistentArray, Node
+from persistent_numpy.persistent_array import PersistentArray, Node
 
-from persistent_numpy.numpy_functions import _create_from_numpy_compute_instruction
+from persistent_numpy.numpy_functions import create_from_numpy_compute_instruction, node_operands
 
 
 class _variable(PClass):
@@ -33,7 +33,7 @@ def embedding(*operands):
     klass = immutable(name=function_name)
     klass.__call__ = compute
     instruction = klass()
-    return _create_from_numpy_compute_instruction(*operands, instruction=instruction)
+    return create_from_numpy_compute_instruction(*operands, instruction=instruction)
 
 
 def gelu(operand):
@@ -44,12 +44,7 @@ def gelu(operand):
     klass = immutable(name=function_name)
     klass.__call__ = compute
     instruction = klass()
-    return _create_from_numpy_compute_instruction(operand, instruction=instruction)
-
-
-def _operands(graph, node):
-    result = ((data["sink_input_port"], predecessor) for predecessor, _, data in graph.in_edges(node, data=True))
-    return [element[1] for element in sorted(result, key=lambda element: element[0])]
+    return create_from_numpy_compute_instruction(operand, instruction=instruction)
 
 
 def model_variables(model):
@@ -74,6 +69,6 @@ def forward(model, **variable_to_array):
         if node.name in cache:
             continue
         instruction = graph.get_node_attribute(node, "instruction")
-        input_arrays = [cache[operand.name] for operand in _operands(graph, node)]
+        input_arrays = [cache[operand.name] for operand in node_operands(graph, node)]
         cache[node.name] = instruction(*input_arrays)
     return cache[model.node.name]

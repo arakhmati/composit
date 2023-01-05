@@ -10,7 +10,7 @@ def check_results(function):
     pnp_result = function(persistent_numpy)
 
     assert np_result.shape == pnp_result.shape
-    assert numpy.allclose(np_result, pnp_result.to_numpy())
+    assert numpy.allclose(np_result, persistent_numpy.to_numpy(pnp_result))
 
 
 @pytest.mark.parametrize("np", [numpy, persistent_numpy])
