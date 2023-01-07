@@ -4,7 +4,6 @@ import torch
 import transformers
 
 import persistent_numpy as pnp
-import persistent_numpy.nn_functions as pnn
 
 
 def create_random_torch_float_tensor(*shape, minimum=-0.1, maximum=0.1):
@@ -82,7 +81,7 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
         parameters["qa_outputs.weight"] = create_random_torch_float_tensor(hidden_size, num_question_answering_labels)
         parameters["qa_outputs.bias"] = create_random_torch_float_tensor(num_question_answering_labels)
 
-    return parameters
+    return {name: array.numpy() for name, array in parameters.items()}
 
 
 def functional_softmax(input_tensor, axis):
@@ -154,7 +153,7 @@ def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
-    hidden_states = pnn.gelu(hidden_states)
+    hidden_states = pnp.nn.gelu(hidden_states)
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.output.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.output.dense.bias"]
     return hidden_states
@@ -210,8 +209,8 @@ def functional_bert(
     head_size,
 ):
 
-    word_embeddings = pnn.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
-    token_type_embeddings = pnn.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
+    word_embeddings = pnp.nn.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
+    token_type_embeddings = pnp.nn.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings
 
     encoder_input = functional_layer_norm(
@@ -320,10 +319,10 @@ def test_functional_bert_vs_transformers_bert(
         parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
     model = functional_bert_function(
-        pnn.variable(name="input_ids", shape=(batch_size, sequence_size)),
-        pnn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
+        pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size)),
+        pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
         None,
-        {name: pnn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
+        {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
         num_encoders,
         sequence_size,
         num_heads,
@@ -340,23 +339,25 @@ def test_functional_bert_vs_transformers_bert(
     for model_input in model_inputs:
         transformers_outputs.append(compute_torch(model_input[0]))
 
-    pnn_outputs = []
+    pnp_outputs = []
     for model_input in model_inputs:
         input_ids, token_type_ids = model_input
-        output = pnn.evaluate(
+        output = pnp.nn.evaluate(
             model,
-            input_ids=input_ids.numpy(),
-            token_type_ids=token_type_ids.numpy(),
-            **parameters,
+            inputs=dict(
+                input_ids=input_ids.numpy(),
+                token_type_ids=token_type_ids.numpy(),
+                **parameters,
+            ),
         )
-        pnn_outputs.append(output)
+        pnp_outputs.append(output)
 
-    for output, transformers_output in zip(pnn_outputs, transformers_outputs):
+    for output, transformers_output in zip(pnp_outputs, transformers_outputs):
         output = torch.from_numpy(output)
         assert torch.allclose(output, transformers_output.double(), atol=1e-5)
 
 
-@pytest.mark.parametrize("num_inputs", [4])
+@pytest.mark.parametrize("num_inputs", [1])
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [12])
 @pytest.mark.parametrize("sequence_size", [128])
@@ -378,32 +379,33 @@ def test_functional_bert_autograd(
     config.attention_probs_dropout_prob = 0.0  # Disable dropout in the self-attention
     config.position_embedding_type = None  # Disable position embedding
 
-    transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
-    transformers_parameters = transformers_model.state_dict()
-    parameters = {}
-    for name, value in transformers_parameters.items():
-        new_value = value
-        if "weight" in name and "embedding" not in name:
-            new_value = value.T
-        parameters[f"bert.{name}"] = new_value.numpy()
+    parameters = create_parameters(config.num_hidden_layers, config.hidden_size, config.vocab_size)
 
+    input_ids_variable = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
     model: pnp.PersistentArray = functional_bert(
-        pnn.variable(name="input_ids", shape=(batch_size, sequence_size)),
-        pnn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
+        input_ids_variable,
+        pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
         None,
-        {name: pnn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
+        {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
         num_encoders,
         sequence_size,
         num_heads,
         head_size,
     )
+    loss = pnp.sum(model, keepdims=True)
 
-    input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
-    token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-    output = pnn.evaluate(
-        model,
-        input_ids=input_ids.numpy(),
-        token_type_ids=token_type_ids.numpy(),
-        **parameters,
-    )
-    assert output.shape == (1, 128, 768)
+    for _ in range(num_inputs):
+        input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
+        token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
+        np_loss, np_input_ids = pnp.nn.evaluate(
+            loss,
+            input_ids_variable,
+            inputs=dict(
+                input_ids=input_ids.numpy(),
+                token_type_ids=token_type_ids.numpy(),
+                **parameters,
+            ),
+        )
+        # gradients = autograd(loss, variables_that_require_gradient)
+        assert torch.allclose(input_ids, torch.from_numpy(np_input_ids))
+    assert np_loss.shape == (1, 1, 1)

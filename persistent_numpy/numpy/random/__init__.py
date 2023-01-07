@@ -3,7 +3,7 @@ import inspect
 import numpy as np
 
 from persistent_numpy.introspection import get_name_from_args_and_kwargs
-from persistent_numpy.numpy_functions import create_ndarray
+from persistent_numpy.numpy import create_ndarray
 
 
 def random(*args, **kwargs):

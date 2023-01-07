@@ -2,21 +2,20 @@ import inspect
 import math
 
 import numpy as np
-from pyrsistent import immutable, PClass, field
+from pyrsistent import immutable, PClass, pmap_field, pmap
 
 from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, compose_all
 from persistent_numpy.persistent_array import PersistentArray, Node
-
-from persistent_numpy.numpy_functions import create_from_numpy_compute_instruction, node_operands
-
-
-class _variable(PClass):
-    requires_gradient = field(type=bool)
+from persistent_numpy.numpy import create_from_numpy_compute_instruction, node_operands
 
 
-def variable(*, name: str, shape: tuple, requires_gradient: bool = False):
+class Variable(PClass):
+    ...
+
+
+def variable(*, name: str, shape: tuple) -> PersistentArray:
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=_variable(requires_gradient=requires_gradient), shapes=[shape])
+    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=[shape])
     return PersistentArray(graph=graph, node=node)
 
 
@@ -47,20 +46,33 @@ def gelu(operand):
     return create_from_numpy_compute_instruction(operand, instruction=instruction)
 
 
-def initial_cache(graph, **variable_to_array):
+class Cache(PClass):
+    node_output_to_array = pmap_field(key_type=tuple, value_type=np.ndarray)
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(node_output_to_array=pmap(dictionary))
+
+    def __getitem__(self, persistent_array: PersistentArray):
+        node = persistent_array.node
+        output_index = persistent_array.output_index
+        return self.node_output_to_array[(node, output_index)]
+
+
+def initial_cache(graph, inputs):
     cache = {}
     for node in graph:
         instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, _variable):
-            cache[(node, 0)] = variable_to_array[node.name]
+        if isinstance(instruction, Variable):
+            cache[(node, 0)] = inputs[node.name]
     return cache
 
 
-def evaluate(*models, **variable_to_array):
+def evaluate(*outputs, inputs: dict[Variable, np.ndarray], return_cache: bool = False):
 
-    graph = compose_all(*tuple(model.graph for model in models))
+    graph = compose_all(*tuple(output.graph for output in outputs))
 
-    cache = initial_cache(graph, **variable_to_array)
+    cache = initial_cache(graph, inputs)
     for node in topological_traversal(graph):
         if (node, 0) in cache:
             continue
@@ -75,7 +87,23 @@ def evaluate(*models, **variable_to_array):
         else:
             raise RuntimeError("Unsupported type")
 
-    result = [cache[(model.node, model.output_index)] for model in models]
+    cache = Cache.from_dict(cache)
+
+    result = [cache[output] for output in outputs]
     if len(result) == 1:
-        return result[0]
-    return result
+        (result,) = result
+
+    if return_cache:
+        return result, cache
+    else:
+        return result
+
+
+__all__ = [
+    "Variable",
+    "variable",
+    "embedding",
+    "gelu",
+    "Cache",
+    "evaluate",
+]

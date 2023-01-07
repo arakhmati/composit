@@ -1,3 +1,3 @@
-from .numpy_functions import *
+from persistent_numpy.numpy import *
 
-import persistent_numpy.random
+import persistent_numpy.nn

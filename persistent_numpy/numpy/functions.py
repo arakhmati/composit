@@ -31,8 +31,8 @@ def node_operands(graph, node):
     )
 
 
-def to_numpy(*arrays: tuple[PersistentArray]):
-    graph = compose_all(*tuple(array.graph for array in arrays))
+def to_numpy(*outputs: tuple[PersistentArray]):
+    graph = compose_all(*tuple(output.graph for output in outputs))
 
     cache = {}
     for node in topological_traversal(graph):
@@ -47,7 +47,7 @@ def to_numpy(*arrays: tuple[PersistentArray]):
         else:
             raise RuntimeError("Unsupported type")
 
-    result = [cache[(array.node, array.output_index)] for array in arrays]
+    result = [cache[(output.node, output.output_index)] for output in outputs]
     if len(result) == 1:
         return result[0]
     return result
@@ -241,6 +241,8 @@ COMPUTE_FUNCTIONS = [
     "var",
 ]
 
+__all__ = COMPUTE_FUNCTIONS.copy()
+
 for function_name in COMPUTE_FUNCTIONS:
     setattr(THIS_MODULE, function_name, _create_numpy_compute_function(function_name))
 
@@ -272,6 +274,21 @@ for function_name in BINARY_COMPUTE_FUNCTIONS:
         function_name, dunder_method_name = function_name
     else:
         dunder_method_name = f"__{function_name}__"
+
+    __all__.append(function_name)
     setattr(THIS_MODULE, function_name, _create_numpy_binary_compute_function(function_name))
     function = getattr(THIS_MODULE, function_name)
     setattr(PersistentArray, dunder_method_name, function)
+
+__all__.extend(
+    [
+        "create_ndarray",
+        "create_from_numpy_compute_instruction",
+        "node_operands",
+        "ndarray",
+        "zeros",
+        "ones",
+        "set_item",
+        "to_numpy",
+    ]
+)
