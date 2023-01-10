@@ -59,6 +59,9 @@ class _ndarray(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
         return self.array
 
+    def __hash__(self):
+        return int(self.array.sum())
+
 
 class _get_item(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
@@ -82,7 +85,7 @@ class _set_item(PClass):
 
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shapes=[array.shape])
+    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shapes=(array.shape,))
     return PersistentArray(graph=graph, node=node)
 
 
@@ -91,11 +94,13 @@ def instruction_shape(instruction, input_shapes):
     dummy_input_arrays = [np.zeros(input_shape, dtype=np.int32) for input_shape in input_shapes]
     result = instruction(*dummy_input_arrays)
     if isinstance(result, np.ndarray):
-        return [result.shape]
+        return (result.shape,)
     elif isinstance(result, list):
-        return [array.shape for array in result]
+        return tuple(array.shape for array in result)
+    elif isinstance(result, np.int32):
+        return (np.asarray(result).shape,)
     else:
-        raise RuntimeError("Unsupported type")
+        raise RuntimeError(f"Unsupported type: {type(result)}")
 
 
 def create_from_numpy_compute_instruction(*operands, instruction) -> Union[PersistentArray, tuple[PersistentArray]]:
@@ -239,6 +244,8 @@ COMPUTE_FUNCTIONS = [
     "max",
     "mean",
     "var",
+    # Broadcast,
+    "broadcast_to",
 ]
 
 __all__ = COMPUTE_FUNCTIONS.copy()

@@ -15,7 +15,7 @@ class Variable(PClass):
 
 def variable(*, name: str, shape: tuple) -> PersistentArray:
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=[shape])
+    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,))
     return PersistentArray(graph=graph, node=node)
 
 

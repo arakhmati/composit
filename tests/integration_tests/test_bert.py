@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 import torch
@@ -382,11 +383,13 @@ def test_functional_bert_autograd(
     parameters = create_parameters(config.num_hidden_layers, config.hidden_size, config.vocab_size)
 
     input_ids_variable = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
+    token_type_ids_variable = pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    parameter_variables = {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
     model: pnp.PersistentArray = functional_bert(
         input_ids_variable,
-        pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
+        token_type_ids_variable,
         None,
-        {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
+        parameter_variables,
         num_encoders,
         sequence_size,
         num_heads,
@@ -394,18 +397,45 @@ def test_functional_bert_autograd(
     )
     loss = pnp.sum(model, keepdims=True)
 
+    input_vars_to_differentiate = [
+        parameter_variables["bert.embeddings.LayerNorm.weight"],
+        parameter_variables["bert.embeddings.LayerNorm.bias"],
+    ]
+    for encoder_index in range(num_encoders):
+        input_vars_to_differentiate.extend(
+            [
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.query.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.query.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.value.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.value.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.output.dense.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.output.dense.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.output.dense.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.output.LayerNorm.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.output.LayerNorm.bias"],
+            ]
+        )
+
     for _ in range(num_inputs):
         input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
         token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-        np_loss, np_input_ids = pnp.nn.evaluate(
-            loss,
-            input_ids_variable,
-            inputs=dict(
-                input_ids=input_ids.numpy(),
-                token_type_ids=token_type_ids.numpy(),
-                **parameters,
-            ),
+        gradients = pnp.nn.compute_gradients(
+            [loss],
+            input_vars_to_differentiate,
+            {
+                input_ids_variable: input_ids.numpy(),
+                token_type_ids_variable: token_type_ids.numpy(),
+                **{parameter_variables[key]: parameters[key] for key in parameters},
+            },
+            {loss: np.asarray(1.0)},
         )
-        # gradients = autograd(loss, variables_that_require_gradient)
-        assert torch.allclose(input_ids, torch.from_numpy(np_input_ids))
-    assert np_loss.shape == (1, 1, 1)
+        assert len(gradients) == len(input_vars_to_differentiate)
+
+    assert loss.shape == (1, 1, 1)

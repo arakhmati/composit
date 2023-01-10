@@ -24,6 +24,10 @@ class PersistentArray(PClass):
     def shape(self) -> tuple:
         return self.graph.nodes[self.node]["shapes"][self.output_index]
 
+    @property
+    def rank(self) -> int:
+        return len(self.shape)
+
     def visualize(self):
         def visualize_node(graph, node):
             shapes = graph.nodes[node]["shapes"]
