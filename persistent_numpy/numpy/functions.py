@@ -14,7 +14,7 @@ from persistent_numpy.string import random_string
 THIS_MODULE = sys.modules[__name__]
 
 
-def node_operands(graph, node):
+def get_operands(graph, node):
     def sort_key(in_edge):
         _, _, data = in_edge
         return data["sink_input_index"]
@@ -37,7 +37,7 @@ def to_numpy(*outputs: tuple[PersistentArray]):
     cache = {}
     for node in topological_traversal(graph):
         instruction = graph.nodes[node]["instruction"]
-        input_arrays = [cache[operand] for operand in node_operands(graph, node)]
+        input_arrays = [cache[operand] for operand in get_operands(graph, node)]
         instruction_output = instruction(*input_arrays)
         if isinstance(instruction_output, np.ndarray):
             cache[(node, 0)] = instruction_output
@@ -284,7 +284,7 @@ __all__.extend(
     [
         "create_ndarray",
         "create_from_numpy_compute_instruction",
-        "node_operands",
+        "get_operands",
         "ndarray",
         "zeros",
         "ones",

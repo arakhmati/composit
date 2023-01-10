@@ -240,7 +240,7 @@ class MultiDiGraph(PClass):
         return (node for node in nbunch if node in self)
 
     def neighbors(self, node):
-        return [neighbor for neighbor in self.adj[node]]
+        return iter(self.adj[node])
 
     def degree(self, nbunch=None, weight=None):
         return DiMultiDegreeView(self)(nbunch, weight)
@@ -272,6 +272,12 @@ class MultiDiGraph(PClass):
     def reverse(self, **kwargs) -> "networkx.MultiDiGraph":
         graph = to_networkx(self)
         graph = graph.reverse(**kwargs)
+        graph = from_networkx(graph)
+        return graph
+
+    def subgraph(self, nodes) -> "networkx.MultiDiGraph":
+        graph = to_networkx(self)
+        graph = graph.subgraph(nodes)
         graph = from_networkx(graph)
         return graph
 

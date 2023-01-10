@@ -6,7 +6,7 @@ from pyrsistent import immutable, PClass, pmap_field, pmap
 
 from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, compose_all
 from persistent_numpy.persistent_array import PersistentArray, Node
-from persistent_numpy.numpy import create_from_numpy_compute_instruction, node_operands
+from persistent_numpy.numpy import create_from_numpy_compute_instruction, get_operands
 
 
 class Variable(PClass):
@@ -58,6 +58,9 @@ class Cache(PClass):
         output_index = persistent_array.output_index
         return self.node_output_to_array[(node, output_index)]
 
+    def as_dict(self):
+        return {node.name: array for (node, _), array in self.node_output_to_array.items()}
+
 
 def initial_cache(graph, inputs):
     cache = {}
@@ -68,16 +71,16 @@ def initial_cache(graph, inputs):
     return cache
 
 
-def evaluate(*outputs, inputs: dict[Variable, np.ndarray], return_cache: bool = False):
+def evaluate(*output_vars, inputs: dict[Variable, np.ndarray], return_cache: bool = False):
 
-    graph = compose_all(*tuple(output.graph for output in outputs))
+    graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
     cache = initial_cache(graph, inputs)
     for node in topological_traversal(graph):
         if (node, 0) in cache:
             continue
         instruction = graph.nodes[node]["instruction"]
-        input_arrays = [cache[operand] for operand in node_operands(graph, node)]
+        input_arrays = [cache[operand] for operand in get_operands(graph, node)]
         instruction_output = instruction(*input_arrays)
         if isinstance(instruction_output, np.ndarray):
             cache[(node, 0)] = instruction_output
@@ -89,7 +92,7 @@ def evaluate(*outputs, inputs: dict[Variable, np.ndarray], return_cache: bool = 
 
     cache = Cache.from_dict(cache)
 
-    result = [cache[output] for output in outputs]
+    result = [cache[output_var] for output_var in output_vars]
     if len(result) == 1:
         (result,) = result
 
