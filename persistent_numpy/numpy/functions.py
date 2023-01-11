@@ -287,6 +287,38 @@ for function_name in BINARY_COMPUTE_FUNCTIONS:
     function = getattr(THIS_MODULE, function_name)
     setattr(PersistentArray, dunder_method_name, function)
 
+
+def _create_numpy_concatenate_function():
+    def _create_concatenate_instruction(axis=0, out=None, dtype=None, casting="same_kind"):
+        klass_kwargs = {
+            "axis": axis,
+            "out": out,
+            "dtype": dtype,
+            "casting": casting,
+        }
+
+        def compute(self, *inputs):
+            return np.concatenate(inputs, **self._asdict())
+
+        klass_attributes = list(klass_kwargs.keys())
+        klass = immutable(klass_attributes, name="concatenate")
+        klass.__call__ = compute
+
+        return klass(**klass_kwargs)
+
+    def function(inputs, *args, **kwargs):
+        return create_from_numpy_compute_instruction(
+            *inputs,
+            instruction=_create_concatenate_instruction(*args, **kwargs),
+        )
+
+    return function
+
+
+setattr(THIS_MODULE, "concatenate", _create_numpy_concatenate_function())
+__all__.append("concatenate")
+
+
 __all__.extend(
     [
         "create_ndarray",

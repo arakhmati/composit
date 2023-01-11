@@ -187,3 +187,13 @@ def test_split():
     for np_array, pnp_array in zip(np_list, persistent_numpy.to_numpy(*pnp_list)):
         assert np_array.shape == pnp_array.shape
         assert numpy.allclose(np_array, pnp_array)
+
+
+def test_concatenate():
+    def function(np):
+        array_a = np.ones((5, 10))
+        array_b = np.ones((5, 15))
+        result = np.concatenate((array_a, array_b), axis=1)
+        return result
+
+    check_results(function)
