@@ -62,7 +62,7 @@ class Cache(PClass):
         return {node.name: array for (node, _), array in self.node_output_to_array.items()}
 
 
-def initial_cache(graph, inputs):
+def initialize_cache(graph, inputs):
     cache = {}
     for node in graph:
         instruction = graph.nodes[node]["instruction"]
@@ -71,11 +71,16 @@ def initial_cache(graph, inputs):
     return cache
 
 
-def evaluate(*output_vars, inputs: dict[Variable, np.ndarray], return_cache: bool = False):
+def evaluate(
+    *output_vars,
+    inputs: dict[Variable, np.ndarray],
+    initialize_cache_function=initialize_cache,
+    return_cache: bool = False,
+):
 
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
-    cache = initial_cache(graph, inputs)
+    cache = initialize_cache_function(graph, inputs)
     for node in topological_traversal(graph):
         if (node, 0) in cache:
             continue

@@ -18,7 +18,7 @@ class PersistentArray(PClass):
 
     @property
     def name(self) -> str:
-        return self.node.name
+        return f"{self.node.name}_{self.output_index}"
 
     @property
     def shape(self) -> tuple:
