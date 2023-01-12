@@ -12,6 +12,20 @@ import persistent_numpy.nn.jacobians as jacobians
 THIS_MODULE = sys.modules[__name__]
 
 
+def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
+    if node in node_to_incoming_gradients:
+        incoming_gradients = node_to_incoming_gradients[node]
+    else:
+        incoming_gradients = [
+            nn.variable(name=f"{node.name}_{output_index}_gradient", shape=shape)
+            for output_index, shape in enumerate(backward_graph.nodes[node]["shapes"])
+        ]
+
+    assert isinstance(incoming_gradients, list)
+    if len(incoming_gradients) == 1:
+        (incoming_gradients,) = incoming_gradients
+    return incoming_gradients
+
 def chain_rule(*output_vars, input_vars: list[nn.Variable]):
 
     forward_graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
@@ -31,37 +45,33 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
 
     sorted_nodes = topological_traversal(backward_graph)
 
-    node_to_gradients = {}
+    node_to_incoming_gradients = {}
     for node in sorted_nodes:
         if backward_graph.out_degree(node) == 0:
             continue
 
         forward_instruction = forward_graph.nodes[node]["instruction"]
-        forward_operands = (in_edge for in_edge in pnp.get_operands(forward_graph, node))
+        forward_operands = tuple(in_edge for in_edge in pnp.get_operands(forward_graph, node))
         forward_input_vars = tuple(
             nn.variable(name=node.name, shape=forward_graph.nodes[node]["shapes"][output_index])
             for (node, output_index) in forward_operands
         )
-        if node in node_to_gradients:
-            incoming_gradients = node_to_gradients[node]
-        else:
-            incoming_gradients = [
-                nn.variable(name=f"{node.name}_{output_index}_gradient", shape=shape)
-                for output_index, shape in enumerate(backward_graph.nodes[node]["shapes"])
-            ]
-            if len(incoming_gradients) == 1:
-                (incoming_gradients,) = incoming_gradients
 
         create_outgoing_gradients = getattr(jacobians, f"{forward_instruction.__class__.__name__}_jacobian")
+        incoming_gradients = get_incoming_gradients(node, backward_graph, node_to_incoming_gradients)
         outgoing_gradients = create_outgoing_gradients(forward_instruction, incoming_gradients, forward_input_vars)
 
-        for forward_input_var, outgoing_gradient in zip(forward_input_vars, outgoing_gradients):
-            if forward_input_var.node in node_to_gradients:
-                outgoing_gradient_accumulator = node_to_gradients[forward_input_var.node]
-                outgoing_gradient = outgoing_gradient_accumulator + outgoing_gradient
-            node_to_gradients[forward_input_var.node] = outgoing_gradient
+        for (operand_node, output_index), outgoing_gradient in zip(forward_operands, outgoing_gradients):
+            if operand_node in node_to_incoming_gradients:
+                outgoing_gradient_accumulator = node_to_incoming_gradients[operand_node][output_index]
+                if outgoing_gradient_accumulator is not None:
+                    outgoing_gradient += outgoing_gradient_accumulator
+            else:
+                node_to_incoming_gradients[operand_node] = [None] * len(forward_graph.nodes[operand_node]["shapes"])
+            node_to_incoming_gradients[operand_node][output_index] = outgoing_gradient
 
-    result = [node_to_gradients[input_var.node] for input_var in input_vars]
+    # Input vars always have only 1 output
+    result = [node_to_incoming_gradients[input_var.node][0] for input_var in input_vars]
     return result
 
 
@@ -82,9 +92,10 @@ def initialize_backward_cache(graph, inputs):
 
 
 def compute_gradients(output_vars, input_vars_to_differentiate, inputs, incoming_gradients):
-    inputs = {input.node.name: array for input, array in inputs.items()}
     gradient_vars = pnp.nn.chain_rule(*output_vars, input_vars=input_vars_to_differentiate)
+
     # TODO: evaluate calls below can be combined into a single function once the graphs can be merged together
+    inputs = {input.node.name: array for input, array in inputs.items()}
     _, forward_cache = pnp.nn.evaluate(
         *output_vars,
         inputs=inputs,

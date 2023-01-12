@@ -133,7 +133,7 @@ def create_from_numpy_compute_instruction(*operands, instruction) -> Union[Persi
 
 def get_item(self, indices) -> "PersistentArray":
     if not isinstance(indices, PersistentArray):
-        name = f"{indices}"
+        name = f"Indices({indices})"
         indices = create_ndarray(name, np.asarray(indices, dtype=int))
     return create_from_numpy_compute_instruction(self, indices, instruction=_get_item())
 

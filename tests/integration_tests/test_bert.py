@@ -404,10 +404,10 @@ def test_functional_bert_autograd(
     for encoder_index in range(num_encoders):
         input_vars_to_differentiate.extend(
             [
-                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.weight"],
-                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.bias"],
                 parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.query.weight"],
                 parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.query.bias"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.weight"],
+                parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.key.bias"],
                 parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.value.weight"],
                 parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.self.value.bias"],
                 parameter_variables[f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight"],

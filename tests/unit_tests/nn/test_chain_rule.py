@@ -205,3 +205,27 @@ def test_split(input_shape, slice_size, axis):
     )
 
     assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
+
+
+@pytest.mark.parametrize("input_shape,slice_size,axis", [[(5, 25, 15, 3), 5, 2]])
+def test_split_add(input_shape, slice_size, axis):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_outputs = torch.split(torch_input, slice_size, dim=axis)
+    torch_output = torch_outputs[0] + torch_outputs[1] + torch_outputs[2]
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_vars = pnp.split(input_var, indices_or_sections=input_shape[axis] / slice_size, axis=axis)
+    output_var = output_vars[0] + output_vars[1] + output_vars[2]
+
+    outgoing_gradient = pnp.nn.compute_gradients(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
