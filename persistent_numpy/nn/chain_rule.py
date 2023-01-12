@@ -1,5 +1,6 @@
 import networkx as nx
 from pyrsistent import pset
+from toolz import functoolz
 
 import persistent_numpy as pnp
 from persistent_numpy.multidigraph import topological_traversal, compose_all
@@ -28,6 +29,7 @@ def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
     return incoming_gradients
 
 
+@functoolz.memoize
 def chain_rule(*output_vars, input_vars: list[nn.Variable]):
 
     forward_graph = compose_all(*tuple(output_var.graph for output_var in output_vars))

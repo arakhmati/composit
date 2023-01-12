@@ -20,7 +20,7 @@ def initialize_cache(graph, inputs):
 
 
 def differentiate(output_vars, input_vars_to_differentiate, inputs, incoming_gradients):
-    gradient_vars = nn.chain_rule(*output_vars, input_vars=input_vars_to_differentiate)
+    gradient_vars = nn.chain_rule(*output_vars, input_vars=tuple(input_vars_to_differentiate))
 
     # TODO: evaluate calls below can be combined into a single function once the graphs can be merged together
     inputs = {input.node.name: array for input, array in inputs.items()}
