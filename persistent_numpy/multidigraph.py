@@ -364,11 +364,6 @@ def merge_graphs(*graph_node_pairs) -> "MultiDiGraph":
                 new_graph = new_graph.add_edge(source, sink, key, **data)
             return new_graph
 
-        elif len(graph_b) == 1:
-            attributes = graph_b._node[graph_b_node]
-            new_graph = graph_a.add_node(graph_b_node, **attributes)
-            return new_graph
-
         else:
             _node = graph_a._node.update(graph_b._node)
 
