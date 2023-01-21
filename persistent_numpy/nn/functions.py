@@ -1,6 +1,6 @@
-import inspect
 import math
 
+import numba
 import numpy as np
 from pyrsistent import immutable, PClass, pmap_field, pmap
 
@@ -19,31 +19,40 @@ def variable(*, name: str, shape: tuple) -> PersistentArray:
     return PersistentArray(graph=graph, node=node)
 
 
-def embedding(*operands):
-    def compute(self, input_tensor, weights):
-        batch_size, sequence_size = input_tensor.shape
-        result = np.zeros((batch_size, sequence_size, weights.shape[1]))
-        for batch_index in range(batch_size):
-            for sequence_index in range(sequence_size):
-                result[batch_index, sequence_index] = weights[input_tensor[batch_index, sequence_index]]
-        return result
+def compute(compute_function):
+    compute_function = numba.jit(
+        compute_function, nopython=True, parallel=True, cache=True, error_model="numpy", fastmath=True
+    )
+    compute_function = staticmethod(compute_function)
 
-    function_name = inspect.currentframe().f_code.co_name
-    klass = immutable(name=function_name)
-    klass.__call__ = compute
-    instruction = klass()
-    return create_from_numpy_compute_instruction(*operands, instruction=instruction)
+    def wrapper(*operands):
+        function_name = compute_function.__name__
+        klass = immutable(name=function_name)
+        klass.__call__ = staticmethod(compute_function)
+        instruction = klass()
+        return create_from_numpy_compute_instruction(*operands, instruction=instruction)
+
+    return wrapper
 
 
-def gelu(operand):
-    def compute(self, input_tensor):
-        return 0.5 * input_tensor * (1 + np.vectorize(math.erf)(input_tensor / np.sqrt(2)))
+@compute
+def embedding(input_tensor, weights):
+    batch_size, sequence_size = input_tensor.shape
+    result = np.zeros((batch_size, sequence_size, weights.shape[1]))
+    for batch_index in range(batch_size):
+        for sequence_index in range(sequence_size):
+            result[batch_index, sequence_index] = weights[input_tensor[batch_index, sequence_index]]
+    return result
 
-    function_name = inspect.currentframe().f_code.co_name
-    klass = immutable(name=function_name)
-    klass.__call__ = compute
-    instruction = klass()
-    return create_from_numpy_compute_instruction(operand, instruction=instruction)
+
+@numba.vectorize(["float64(float64)", "float32(float32)"])
+def erf(input_tensor):
+    return math.erf(input_tensor)
+
+
+@compute
+def gelu(input_tensor):
+    return 0.5 * input_tensor * (1 + erf(input_tensor / np.sqrt(2)))
 
 
 class Cache(PClass):

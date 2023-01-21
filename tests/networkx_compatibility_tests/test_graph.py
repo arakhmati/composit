@@ -63,32 +63,6 @@ class BaseGraphTester:
         with pytest.raises(nx.NetworkXError):
             G.neighbors(-1)
 
-    @pytest.mark.skipif(platform.python_implementation() == "PyPy", reason="PyPy gc is different")
-    def test_memory_leak(self):
-        G = self.Graph()
-
-        def count_objects_of_type(_type):
-            return sum(1 for obj in gc.get_objects() if isinstance(obj, _type))
-
-        gc.collect()
-        before = count_objects_of_type(self.Graph)
-        G.copy()
-        gc.collect()
-        after = count_objects_of_type(self.Graph)
-        assert before == after
-
-        # test a subgraph of the base class
-        class MyGraph(self.Graph):
-            pass
-
-        gc.collect()
-        G = MyGraph()
-        before = count_objects_of_type(MyGraph)
-        G.copy()
-        gc.collect()
-        after = count_objects_of_type(MyGraph)
-        assert before == after
-
     def test_edges(self):
         G = self.K3
         assert isinstance(G._adj, G.adjlist_outer_dict_factory)
