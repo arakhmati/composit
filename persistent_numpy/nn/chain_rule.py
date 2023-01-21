@@ -1,15 +1,10 @@
-import sys
-
 import networkx as nx
-import numpy as np
 from pyrsistent import pset
 
 import persistent_numpy as pnp
 from persistent_numpy.multidigraph import topological_traversal, compose_all
 import persistent_numpy.nn as nn
 import persistent_numpy.nn.jacobians as jacobians
-
-THIS_MODULE = sys.modules[__name__]
 
 
 def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
@@ -25,6 +20,7 @@ def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
     if len(incoming_gradients) == 1:
         (incoming_gradients,) = incoming_gradients
     return incoming_gradients
+
 
 def chain_rule(*output_vars, input_vars: list[nn.Variable]):
 
@@ -73,41 +69,3 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
     # Input vars always have only 1 output
     result = [node_to_incoming_gradients[input_var.node][0] for input_var in input_vars]
     return result
-
-
-def initialize_backward_cache(graph, inputs):
-    cache = {}
-    for node in graph:
-        instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, nn.Variable):
-            if node.name in inputs:
-                cache[(node, 0)] = inputs[node.name]
-            else:
-                # If gradient array does not exist, then it's initialized to 0
-                shapes = graph.nodes[node]["shapes"]
-                assert len(shapes) == 1
-                shape = shapes[0]
-                cache[(node, 0)] = np.zeros(shape)
-    return cache
-
-
-def compute_gradients(output_vars, input_vars_to_differentiate, inputs, incoming_gradients):
-    gradient_vars = pnp.nn.chain_rule(*output_vars, input_vars=input_vars_to_differentiate)
-
-    # TODO: evaluate calls below can be combined into a single function once the graphs can be merged together
-    inputs = {input.node.name: array for input, array in inputs.items()}
-    _, forward_cache = pnp.nn.evaluate(
-        *output_vars,
-        inputs=inputs,
-        return_cache=True,
-    )
-
-    incoming_gradients = {
-        f"{incoming_gradient.name}_gradient": array for incoming_gradient, array in incoming_gradients.items()
-    }
-    outgoing_gradients = pnp.nn.evaluate(
-        *gradient_vars,
-        inputs=dict(**incoming_gradients, **forward_cache.as_dict()),
-        initialize_cache_function=initialize_backward_cache,
-    )
-    return outgoing_gradients

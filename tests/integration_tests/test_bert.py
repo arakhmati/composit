@@ -426,7 +426,7 @@ def test_functional_bert_autograd(
     for _ in range(num_inputs):
         input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
         token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-        gradients = pnp.nn.compute_gradients(
+        gradients = pnp.nn.differentiate(
             [loss],
             input_vars_to_differentiate,
             {

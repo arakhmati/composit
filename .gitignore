@@ -3,6 +3,7 @@
 
 # Python
 **/*.egg-info
+**/__pycache__
 
 # C++
 build/
