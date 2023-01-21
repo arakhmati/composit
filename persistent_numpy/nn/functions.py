@@ -1,9 +1,8 @@
-import math
-
 import numba
 import numpy as np
 from pyrsistent import immutable, PClass, pmap_field, pmap
 
+from persistent_numpy.nn.vectorized_functions import cdf
 from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, compose_all
 from persistent_numpy.persistent_array import PersistentArray, Node
 from persistent_numpy.numpy import create_from_numpy_compute_instruction, get_operands
@@ -19,10 +18,11 @@ def variable(*, name: str, shape: tuple) -> PersistentArray:
     return PersistentArray(graph=graph, node=node)
 
 
-def compute(compute_function):
-    compute_function = numba.jit(
-        compute_function, nopython=True, parallel=True, cache=True, error_model="numpy", fastmath=True
-    )
+def wrap_as_instruction(compute_function, *, use_njit=True):
+    if use_njit:
+        compute_function = numba.jit(
+            compute_function, nopython=True, parallel=True, cache=True, error_model="numpy", fastmath=True
+        )
     compute_function = staticmethod(compute_function)
 
     def wrapper(*operands):
@@ -35,7 +35,7 @@ def compute(compute_function):
     return wrapper
 
 
-@compute
+@wrap_as_instruction
 def embedding(input_tensor, weights):
     batch_size, sequence_size = input_tensor.shape
     result = np.zeros((batch_size, sequence_size, weights.shape[1]))
@@ -45,14 +45,9 @@ def embedding(input_tensor, weights):
     return result
 
 
-@numba.vectorize(["float64(float64)", "float32(float32)"])
-def erf(input_tensor):
-    return math.erf(input_tensor)
-
-
-@compute
+@wrap_as_instruction
 def gelu(input_tensor):
-    return 0.5 * input_tensor * (1 + erf(input_tensor / np.sqrt(2)))
+    return input_tensor * cdf(input_tensor)
 
 
 class Cache(PClass):
@@ -119,8 +114,11 @@ def evaluate(
 __all__ = [
     "Variable",
     "variable",
+    # Compute functions
+    "wrap_as_instruction",
     "embedding",
     "gelu",
+    # Numpy evaluation
     "Cache",
     "evaluate",
 ]

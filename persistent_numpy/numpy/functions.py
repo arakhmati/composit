@@ -229,12 +229,16 @@ def _create_numpy_compute_function(function_name):
     return function
 
 
+def square(input_tensor):
+    return input_tensor * input_tensor
+
+
 COMPUTE_FUNCTIONS = [
     # Unary
     "abs",
     "exp",
     "sqrt",
-    "square",
+    "reciprocal",
     # Data Movement
     "transpose",
     "reshape",
@@ -328,6 +332,7 @@ __all__.extend(
         "zeros",
         "ones",
         "set_item",
+        "square",
         "to_numpy",
     ]
 )

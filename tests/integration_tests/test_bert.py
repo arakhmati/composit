@@ -136,7 +136,6 @@ def functional_multi_head_attention(
 
 
 def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
-    """
     mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
     input_tensor_minus_mean = input_tensor - mean
     var = pnp.mean(pnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
@@ -149,6 +148,7 @@ def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
     var = pnp.sqrt(pnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
     output = (input_tensor - mean) / var
     return output * weight + bias
+    """
 
 
 def functional_feedforward(hidden_states, parameters, encoder_index):

@@ -160,7 +160,8 @@ def test_transpose(input_shape, order):
         {output_var: torch_incoming_gradient.numpy()},
     )
 
-    assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
 
 
 @pytest.mark.parametrize("input_shape,target_shape", [[(5, 25, 15, 3), (125, 45)], [(18, 1, 15, 3, 8), (6, 90, 12)]])
@@ -182,7 +183,8 @@ def test_reshape(input_shape, target_shape):
         {output_var: torch_incoming_gradient.numpy()},
     )
 
-    assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
 
 
 @pytest.mark.parametrize("input_shape,slice_size,axis", [[(5, 25, 15, 3), 5, 2]])
@@ -204,7 +206,8 @@ def test_split(input_shape, slice_size, axis):
         {output_vars[1]: torch_incoming_gradient.numpy()},
     )
 
-    assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
 
 
 @pytest.mark.parametrize("input_shape,slice_size,axis", [[(5, 25, 15, 3), 5, 2]])
@@ -228,4 +231,143 @@ def test_split_add(input_shape, slice_size, axis):
         {output_var: torch_incoming_gradient.numpy()},
     )
 
-    assert np.allclose(outgoing_gradient, torch_input.grad.numpy())
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_exp(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.exp(torch_input)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.exp(input_var)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_sqrt(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.sqrt(torch_input)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.sqrt(input_var)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_square(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.square(torch_input)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.square(input_var)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_gelu(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.nn.functional.gelu(torch_input)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.nn.gelu(input_var)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_max(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output, _ = torch.max(torch_input, dim=2, keepdim=True)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.max(input_var, axis=2, keepdims=True)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15, 3)])
+def test_mean(input_shape):
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.mean(torch_input, dim=2, keepdim=True)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = pnp.mean(input_var, axis=2, keepdims=True)
+
+    outgoing_gradient = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(outgoing_gradient, torch_outgoing_gradient)

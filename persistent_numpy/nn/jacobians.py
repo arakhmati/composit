@@ -1,6 +1,10 @@
 import sys
 
+import numpy as np
+
 import persistent_numpy as pnp
+from persistent_numpy.nn.vectorized_functions import cdf, pdf
+from toolz.functoolz import partial
 
 THIS_MODULE = sys.modules[__name__]
 
@@ -92,47 +96,61 @@ def sum_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
 
 
 def max_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
+    axis: int = forward_instruction.axis
+    keepdims: int = forward_instruction.keepdims
+
+    @partial(pnp.nn.wrap_as_instruction, use_njit=False)
+    def max_jacobian(incoming_gradient, input_var):
+        outgoing_gradient = np.broadcast_to(incoming_gradient, input_var.shape).copy()
+        max_values = np.max(input_var, axis, keepdims=keepdims)
+        outgoing_gradient[input_var != max_values] = 0
+        return outgoing_gradient
+
     input_var = forward_input_vars[0]
-    outgoing_gradient = pnp.broadcast_to(incoming_gradient, input_var.shape)
+    outgoing_gradient = max_jacobian(incoming_gradient, input_var)
     return (outgoing_gradient,)
 
 
 def mean_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
     input_var = forward_input_vars[0]
-    outgoing_gradient = pnp.broadcast_to(incoming_gradient, input_var.shape)
+    axes = list(range(len(input_var.shape)))
+    if isinstance(forward_instruction.axis, int):
+        axes = [forward_instruction.axis]
+    elif isinstance(forward_instruction.axis, tuple):
+        axes = forward_instruction.axis
+    num_elements = sum([input_var.shape[axis] for axis in axes])
+    outgoing_gradient = pnp.broadcast_to(incoming_gradient, input_var.shape) / num_elements
     return (outgoing_gradient,)
 
 
 def var_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
-    input_var = forward_input_vars[0]
-    outgoing_gradient = pnp.broadcast_to(incoming_gradient, input_var.shape)
-    return (outgoing_gradient,)
+    raise NotImplementedError
 
 
 def sqrt_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
     input_var = forward_input_vars[0]
-    outgoing_gradient = pnp.broadcast_to(incoming_gradient, input_var.shape)
+    outgoing_gradient = pnp.reciprocal(pnp.sqrt(input_var) * 2) * incoming_gradient
     return (outgoing_gradient,)
 
 
 def gelu_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
+    @pnp.nn.wrap_as_instruction
+    def gelu_jacobian(incoming_gradient, input_var):
+        return incoming_gradient * (cdf(input_var) + input_var * pdf(input_var))
+
     input_var = forward_input_vars[0]
-    return (input_var,)
+    outgoing_gradient = gelu_jacobian(incoming_gradient, input_var)
+    return (outgoing_gradient,)
 
 
 def exp_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    # TODO: implement
     input_var = forward_input_vars[0]
-    return (input_var,)
+    outgoing_gradient = pnp.exp(input_var) * incoming_gradient
+    return (outgoing_gradient,)
 
 
 def split_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
     return (pnp.concatenate(incoming_gradients, axis=forward_instruction.axis),)
 
 
-__all__ = [attr for attr in THIS_MODULE.__dict__.keys() if "gradient" in attr]
+__all__ = [attr for attr in THIS_MODULE.__dict__.keys() if "jacobian" in attr]
