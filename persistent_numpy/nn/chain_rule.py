@@ -7,12 +7,18 @@ import persistent_numpy.nn as nn
 import persistent_numpy.nn.jacobians as jacobians
 
 
+def get_incoming_gradient_name(node_name, output_index):
+    if output_index == 0:
+        return f"{node_name}_gradient"
+    return f"{node_name}_{output_index}_gradient"
+
+
 def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
     if node in node_to_incoming_gradients:
         incoming_gradients = node_to_incoming_gradients[node]
     else:
         incoming_gradients = [
-            nn.variable(name=f"{node.name}_{output_index}_gradient", shape=shape)
+            nn.variable(name=get_incoming_gradient_name(node.name, output_index), shape=shape)
             for output_index, shape in enumerate(backward_graph.nodes[node]["shapes"])
         ]
 

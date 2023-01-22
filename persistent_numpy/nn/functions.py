@@ -80,6 +80,7 @@ def evaluate(
     inputs: dict[Variable, np.ndarray],
     initialize_cache_function=initialize_cache,
     return_cache: bool = False,
+    always_return_tuple: bool = False,
 ):
 
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
@@ -102,7 +103,7 @@ def evaluate(
     cache = Cache.from_dict(cache)
 
     result = [cache[output_var] for output_var in output_vars]
-    if len(result) == 1:
+    if len(result) == 1 and not always_return_tuple:
         (result,) = result
 
     if return_cache:

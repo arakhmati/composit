@@ -292,13 +292,13 @@ def test_functional_bert_vs_transformers_bert(
     if functional_bert_function == functional_bert:
         transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
 
-        def compute_torch(*args):
+        def torch_forward(*args):
             return transformers_model(*args)["last_hidden_state"]
 
     elif functional_bert_function == functional_bert_for_question_answering:
         transformers_model = transformers.models.bert.modeling_bert.BertForQuestionAnswering(config)
 
-        def compute_torch(*args):
+        def torch_forward(*args):
             qa_outputs = transformers_model(*args)
             start_logits = qa_outputs["start_logits"].reshape((1, 128, 1))
             end_logits = qa_outputs["end_logits"].reshape((1, 128, 1))
@@ -338,7 +338,7 @@ def test_functional_bert_vs_transformers_bert(
 
     transformers_outputs = []
     for model_input in model_inputs:
-        transformers_outputs.append(compute_torch(model_input[0]))
+        transformers_outputs.append(torch_forward(model_input[0]))
 
     pnp_outputs = []
     for model_input in model_inputs:
@@ -360,11 +360,11 @@ def test_functional_bert_vs_transformers_bert(
 
 @pytest.mark.parametrize("num_inputs", [1])
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("num_encoders", [12])
-@pytest.mark.parametrize("sequence_size", [128])
-@pytest.mark.parametrize("num_heads", [12])
-@pytest.mark.parametrize("head_size", [64])
-@pytest.mark.parametrize("vocab_size", [30522])
+@pytest.mark.parametrize("num_encoders", [3])
+@pytest.mark.parametrize("sequence_size", [32])
+@pytest.mark.parametrize("num_heads", [1])
+@pytest.mark.parametrize("head_size", [16])
+@pytest.mark.parametrize("vocab_size", [16])
 def test_functional_bert_autograd(
     num_inputs,
     batch_size,
@@ -379,8 +379,27 @@ def test_functional_bert_autograd(
     config.hidden_dropout_prob = 0.0  # Disable dropout after the embeddings
     config.attention_probs_dropout_prob = 0.0  # Disable dropout in the self-attention
     config.position_embedding_type = None  # Disable position embedding
+    config.num_attention_heads = num_heads
+    config.num_hidden_layers = num_encoders
+    config.hidden_size = num_heads * head_size
+    config.vocab_size = vocab_size
 
-    parameters = create_parameters(config.num_hidden_layers, config.hidden_size, config.vocab_size)
+    transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
+    for parameter in transformers_model.parameters():
+        parameter.requires_grad = True
+    transformers_parameters = {name: parameter for name, parameter in transformers_model.named_parameters()}
+
+    def torch_forward(*args):
+        hidden_states = transformers_model(*args)["last_hidden_state"]
+        return hidden_states
+
+    parameters = {}
+    for name, value in transformers_parameters.items():
+        new_value = value.detach()
+        if "weight" in name and "embedding" not in name:
+            new_value = new_value.T
+        parameters[name] = new_value.numpy()
+    parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
     input_ids_variable = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
     token_type_ids_variable = pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
@@ -395,7 +414,7 @@ def test_functional_bert_autograd(
         num_heads,
         head_size,
     )
-    loss = pnp.sum(model, keepdims=True)
+    loss = model
 
     input_vars_to_differentiate = [
         parameter_variables["bert.embeddings.LayerNorm.weight"],
@@ -426,7 +445,12 @@ def test_functional_bert_autograd(
     for _ in range(num_inputs):
         input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
         token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-        gradients = pnp.nn.differentiate(
+        torch_loss = torch_forward(input_ids, token_type_ids)
+
+        incoming_gradient = torch.randn(batch_size, sequence_size, num_heads * head_size) / 100
+        torch_loss.backward(incoming_gradient)
+
+        pnp_gradients = pnp.nn.differentiate(
             [loss],
             input_vars_to_differentiate,
             {
@@ -434,8 +458,14 @@ def test_functional_bert_autograd(
                 token_type_ids_variable: token_type_ids.numpy(),
                 **{parameter_variables[key]: parameters[key] for key in parameters},
             },
-            {loss: np.asarray(1.0)},
+            {loss: incoming_gradient.numpy()},
         )
-        assert len(gradients) == len(input_vars_to_differentiate)
+        assert len(pnp_gradients) == len(input_vars_to_differentiate)
+        pnp_gradients = {var.name: value for value, var in zip(pnp_gradients, input_vars_to_differentiate)}
 
-    assert loss.shape == (1, 1, 1)
+        for name, pnp_gradient in reversed(pnp_gradients.items()):
+            torch_parameter = transformers_parameters[name.replace("bert.", "")]
+            torch_gradient = torch_parameter.grad.numpy()
+            if "weight" in name and "embedding" not in name:
+                torch_gradient = torch_gradient.T
+            assert np.allclose(pnp_gradient, torch_gradient, atol=1e-4, rtol=1e-5)

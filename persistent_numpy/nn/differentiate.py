@@ -37,5 +37,6 @@ def differentiate(output_vars, input_vars_to_differentiate, inputs, incoming_gra
         *gradient_vars,
         inputs=dict(**incoming_gradients, **forward_cache.as_dict()),
         initialize_cache_function=initialize_cache,
+        always_return_tuple=True,
     )
     return outgoing_gradients

@@ -30,6 +30,9 @@ def matmul_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
 
 def _maybe_reduce_jacobian(outgoing_gradient, input_var):
     axes = []
+    if len(input_var.shape) == 1 and len(outgoing_gradient.shape) == 3:
+        # TODO: handle this case generically
+        return pnp.sum(outgoing_gradient, axis=(0, 1))
     for axis, _ in enumerate(input_var.shape):
         if outgoing_gradient.shape[axis] > input_var.shape[axis]:
             axes.append(axis)
