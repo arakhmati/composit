@@ -14,71 +14,7 @@ from networkx.classes.reportviews import (
     InMultiEdgeView,
     OutMultiEdgeView,
 )
-
-# Fields in networkx.MultiDiGraph
-# A commented out line means that the function is implemented
-[
-    # "_adj",
-    # "_node",
-    # "_pred",
-    # "_succ",
-    # "add_edge",
-    "add_edges_from",
-    # "add_node",
-    "add_nodes_from",
-    "add_weighted_edges_from",
-    # "adj",
-    "adjacency",
-    "adjlist_inner_dict_factory",
-    "adjlist_outer_dict_factory",
-    "clear",
-    "clear_edges",
-    "copy",
-    # "degree",
-    "edge_attr_dict_factory",
-    "edge_key_dict_factory",
-    "edge_subgraph",
-    # "edges",
-    "get_edge_data",
-    # "graph",
-    "graph_attr_dict_factory",
-    "has_edge",
-    # "has_node",
-    # "has_predecessor",
-    # "has_successor",
-    # "in_degree",
-    # "in_edges",
-    # "is_directed",
-    # "is_multigraph",
-    "name",
-    # "nbunch_iter",
-    # "neighbors",
-    "new_edge_key",
-    "node_attr_dict_factory",
-    "node_dict_factory",
-    # "nodes",
-    # "number_of_edges",
-    "number_of_nodes",
-    "order",
-    # "out_degree",
-    # "out_edges",
-    # "pred",
-    # "predecessors",
-    # "remove_edge",
-    "remove_edges_from",
-    "remove_node",
-    "remove_nodes_from",
-    # "reverse",
-    # "size",
-    "subgraph",
-    # "succ",
-    # "successors",
-    "to_directed",
-    "to_directed_class",
-    # "to_undirected",
-    "to_undirected_class",
-    "update",
-]
+from toolz import functoolz
 
 
 class MultiDiGraph(PClass):
@@ -342,6 +278,7 @@ def to_networkx(graph) -> "networkx.MultiDiGraph":
     return nx_graph
 
 
+@functoolz.memoize
 def compose_all(*graphs) -> "MultiDiGraph":
     new_graph, *_ = tuple(graphs)
 
