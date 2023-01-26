@@ -49,13 +49,17 @@ def evaluate(
         instruction = graph.nodes[node]["instruction"]
         input_arrays = [cache[operand] for operand in get_operands(graph, node)]
         instruction_output = instruction(*input_arrays)
+
+        if np.isscalar(instruction_output):
+            instruction_output = np.asarray(instruction_output)
+
         if isinstance(instruction_output, np.ndarray):
             cache[(node, 0)] = instruction_output
         elif isinstance(instruction_output, list):
             for output_index, instruction_output in enumerate(instruction_output):
                 cache[(node, output_index)] = instruction_output
         else:
-            raise RuntimeError("Unsupported type")
+            raise RuntimeError(f"Unsupported type: {type(instruction_output)}")
 
     cache = Cache.from_dict(cache)
 
