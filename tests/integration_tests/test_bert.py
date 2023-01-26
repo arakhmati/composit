@@ -461,7 +461,7 @@ def test_functional_bert_autograd(
             {loss: incoming_gradient.numpy()},
         )
         assert len(pnp_gradients) == len(input_vars_to_differentiate)
-        pnp_gradients = {var.name: value for value, var in zip(pnp_gradients, input_vars_to_differentiate)}
+        pnp_gradients = {var.name: value for var, value in pnp_gradients.items()}
 
         for name, pnp_gradient in reversed(pnp_gradients.items()):
             torch_parameter = transformers_parameters[name.replace("bert.", "")]

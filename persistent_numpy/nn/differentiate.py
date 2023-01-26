@@ -39,4 +39,8 @@ def differentiate(output_vars, input_vars_to_differentiate, inputs, incoming_gra
         initialize_cache_function=initialize_cache,
         always_return_tuple=True,
     )
+
+    outgoing_gradients = {
+        input_var: gradient for input_var, gradient in zip(input_vars_to_differentiate, outgoing_gradients)
+    }
     return outgoing_gradients
