@@ -26,3 +26,38 @@ def test_gelu():
 
     assert result.shape == torch_result.shape
     assert np.allclose(pnp.to_numpy(result), torch_result)
+
+
+def test_convolution():
+    image = pnp.random.random((1, 3, 28, 28))
+    filters = pnp.random.random((32, 3, 3, 3))
+    result = pnp.nn.convolution(image, filters)
+
+    torch_image = torch.from_numpy(pnp.to_numpy(image))
+    torch_filters = torch.from_numpy(pnp.to_numpy(filters))
+    torch_result = torch.nn.functional.conv2d(torch_image, torch_filters).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(pnp.to_numpy(result), torch_result)
+
+
+def test_average_pooling():
+    image = pnp.random.random((1, 3, 28, 28))
+    result = pnp.nn.average_pooling(image, kernel_size=(2, 2))
+
+    torch_image = torch.from_numpy(pnp.to_numpy(image))
+    torch_result = torch.nn.functional.avg_pool2d(torch_image, kernel_size=[2, 2], stride=[1, 1]).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(pnp.to_numpy(result), torch_result)
+
+
+def test_max_pooling():
+    image = pnp.random.random((1, 3, 28, 28))
+    result = pnp.nn.max_pooling(image, kernel_size=(2, 2))
+
+    torch_image = torch.from_numpy(pnp.to_numpy(image))
+    torch_result = torch.nn.functional.max_pool2d(torch_image, kernel_size=[2, 2], stride=[1, 1]).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(pnp.to_numpy(result), torch_result)
