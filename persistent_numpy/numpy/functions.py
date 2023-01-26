@@ -53,7 +53,7 @@ def to_numpy(*outputs: tuple[PersistentArray]):
     return result
 
 
-class _ndarray(PClass):
+class NumpyArray(PClass):
     array = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
@@ -63,7 +63,7 @@ class _ndarray(PClass):
         return hash((self.array.sum(), self.array.shape))
 
 
-class _get_item(PClass):
+class GetItem(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
         array, indices = input_arrays
         if isinstance(indices, np.ndarray):
@@ -73,7 +73,7 @@ class _get_item(PClass):
         return array[indices]
 
 
-class _set_item(PClass):
+class SetItem(PClass):
     indices = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
@@ -85,7 +85,7 @@ class _set_item(PClass):
 
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=_ndarray(array=array), shapes=(array.shape,))
+    graph = MultiDiGraph().add_node(node, instruction=NumpyArray(array=array), shapes=(array.shape,))
     return PersistentArray(graph=graph, node=node)
 
 
@@ -135,14 +135,14 @@ def get_item(self, indices) -> "PersistentArray":
     if not isinstance(indices, PersistentArray):
         name = f"Indices({indices})"
         indices = create_ndarray(name, np.asarray(indices, dtype=int))
-    return create_from_numpy_compute_instruction(self, indices, instruction=_get_item())
+    return create_from_numpy_compute_instruction(self, indices, instruction=GetItem())
 
 
 PersistentArray.__getitem__ = get_item
 
 
 def set_item(self, indices, values) -> "PersistentArray":
-    return create_from_numpy_compute_instruction(self, values, instruction=_set_item(indices=indices))
+    return create_from_numpy_compute_instruction(self, values, instruction=SetItem(indices=indices))
 
 
 PersistentArray.set_item = set_item
