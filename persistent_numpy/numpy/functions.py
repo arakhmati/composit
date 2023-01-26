@@ -60,7 +60,7 @@ class _ndarray(PClass):
         return self.array
 
     def __hash__(self):
-        return int(self.array.sum())
+        return hash((self.array.sum(), self.array.shape))
 
 
 class _get_item(PClass):
