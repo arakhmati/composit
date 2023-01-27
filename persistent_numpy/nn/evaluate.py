@@ -1,8 +1,8 @@
 import numpy as np
 from pyrsistent import PClass, pmap_field, pmap
 
-from persistent_numpy.multidigraph import topological_traversal, compose_all
-from persistent_numpy.nn import Variable
+from persistent_numpy.multidigraph import topological_traversal, compose_all, MultiDiGraph
+from persistent_numpy import nn
 from persistent_numpy.persistent_array import PersistentArray
 from persistent_numpy.numpy import get_operands
 
@@ -20,21 +20,22 @@ class Cache(PClass):
         return self.node_output_to_array[(node, output_index)]
 
     def as_dict(self):
-        return {node.name: array for (node, _), array in self.node_output_to_array.items()}
+        return {
+            nn.variable(name=node.name, shape=array.shape): array
+            for (node, _), array in self.node_output_to_array.items()
+        }
 
 
 def initialize_cache(graph, inputs):
     cache = {}
-    for node in graph:
-        instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, Variable):
-            cache[(node, 0)] = inputs[node.name]
+    for parray, array in inputs.items():
+        cache[(parray.node, parray.output_index)] = array
     return cache
 
 
 def evaluate(
     *output_vars,
-    inputs: dict[Variable, np.ndarray],
+    inputs: dict[PersistentArray, np.ndarray],
     initialize_cache_function=initialize_cache,
     return_cache: bool = False,
     always_return_tuple: bool = False,

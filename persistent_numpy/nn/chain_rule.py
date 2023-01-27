@@ -9,9 +9,7 @@ import persistent_numpy.nn.jacobians as jacobians
 
 
 def get_incoming_gradient_name(node_name, output_index):
-    if output_index == 0:
-        return f"{node_name}_gradient"
-    return f"{node_name}_{output_index}_gradient"
+    return f"{node_name}_gradient_{output_index}"
 
 
 def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):

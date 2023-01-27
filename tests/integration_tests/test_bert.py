@@ -319,11 +319,15 @@ def test_functional_bert_vs_transformers_bert(
         # Update parameter names to include "bert." prefix to match the names of parameters in the models with heads
         parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
+    input_ids_var = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
+    token_type_ids_var = pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    parameters = {pnp.nn.variable(name=name, shape=value.shape): parameters[name] for name, value in parameters.items()}
+
     model = functional_bert_function(
-        pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size)),
-        pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size)),
+        input_ids_var,
+        token_type_ids_var,
         None,
-        {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()},
+        {var.node.name: var for var in parameters.keys()},
         num_encoders,
         sequence_size,
         num_heads,
@@ -345,11 +349,11 @@ def test_functional_bert_vs_transformers_bert(
         input_ids, token_type_ids = model_input
         output = pnp.nn.evaluate(
             model,
-            inputs=dict(
-                input_ids=input_ids.numpy(),
-                token_type_ids=token_type_ids.numpy(),
+            inputs={
+                input_ids_var: input_ids.numpy(),
+                token_type_ids_var: token_type_ids.numpy(),
                 **parameters,
-            ),
+            },
         )
         pnp_outputs.append(output)
 
@@ -461,7 +465,7 @@ def test_functional_bert_autograd(
             {loss: incoming_gradient.numpy()},
         )
         assert len(pnp_gradients) == len(input_vars_to_differentiate)
-        pnp_gradients = {var.name: value for var, value in pnp_gradients.items()}
+        pnp_gradients = {var.node.name: value for var, value in pnp_gradients.items()}
 
         for name, pnp_gradient in reversed(pnp_gradients.items()):
             torch_parameter = transformers_parameters[name.replace("bert.", "")]

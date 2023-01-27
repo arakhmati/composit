@@ -18,8 +18,6 @@ class PersistentArray(PClass):
 
     @property
     def name(self) -> str:
-        if self.output_index == 0:
-            return f"{self.node.name}"
         return f"{self.node.name}_{self.output_index}"
 
     @property
