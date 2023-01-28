@@ -44,7 +44,7 @@ def differentiate(output_vars, input_vars_to_differentiate, inputs, incoming_gra
 
     outgoing_gradients = nn.evaluate(
         *gradient_vars,
-        inputs={**incoming_gradients, **forward_cache.as_dict()},
+        inputs={**incoming_gradients, **forward_cache.as_dict_from_variable_to_array()},
         initialize_cache_function=initialize_cache,
         always_return_tuple=True,
     )

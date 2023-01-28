@@ -1,3 +1,5 @@
+import collections
+
 import numpy as np
 from pyrsistent import PClass, pmap_field, pmap
 
@@ -19,7 +21,7 @@ class Cache(PClass):
         output_index = persistent_array.output_index
         return self.node_output_to_array[(node, output_index)]
 
-    def as_dict(self):
+    def as_dict_from_variable_to_array(self):
         return {
             nn.variable(name=node.name, shape=array.shape): array
             for (node, _), array in self.node_output_to_array.items()
@@ -56,7 +58,7 @@ def evaluate(
 
         if isinstance(instruction_output, np.ndarray):
             cache[(node, 0)] = instruction_output
-        elif isinstance(instruction_output, list):
+        elif isinstance(instruction_output, collections.abc.Iterable):
             for output_index, instruction_output in enumerate(instruction_output):
                 cache[(node, output_index)] = instruction_output
         else:
