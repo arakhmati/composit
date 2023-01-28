@@ -110,3 +110,29 @@ def test_modules(final_module):
 
     assert result.shape == torch_result.shape
     assert np.allclose(pnp.to_numpy(result), torch_result)
+
+
+def test_modules_chain_rule():
+    input_shape = (5, 25, 15)
+
+    torch_input = torch.rand(input_shape, requires_grad=True)
+    torch_output = torch.nn.functional.gelu(torch_input + torch_input)
+
+    torch_incoming_gradient = torch.rand(torch_output.shape)
+    torch_output.backward(torch_incoming_gradient)
+
+    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
+    output_var = add_and_apply_gelu(input_var)
+
+    # TODO: implement Module_jacobian
+    return
+
+    gradients = pnp.nn.differentiate(
+        [output_var],
+        [input_var],
+        {input_var: torch_input.detach().numpy()},
+        {output_var: torch_incoming_gradient.numpy()},
+    )
+
+    torch_outgoing_gradient = torch_input.grad.numpy()
+    assert np.allclose(gradients[input_var], torch_outgoing_gradient)
