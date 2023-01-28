@@ -7,12 +7,12 @@ import transformers
 import persistent_numpy as pnp
 
 
-def create_random_torch_float_tensor(*shape, minimum=-0.1, maximum=0.1):
-    return (maximum - minimum) * torch.rand(shape) + minimum
+def create_random_float(shape, minimum=-0.1, maximum=0.1):
+    return np.random.uniform(minimum, maximum, shape).astype(np.float64)
 
 
-def create_random_torch_long_tensor(*shape, minimum, maximum):
-    return torch.randint(minimum, maximum, shape)
+def create_random_long(shape, minimum, maximum):
+    return np.random.randint(minimum, maximum, shape, dtype=np.int64)
 
 
 def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answering_labels=None):
@@ -20,67 +20,55 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
     intermediate_size = hidden_size * 4
 
     parameters = {
-        "bert.embeddings.word_embeddings.weight": create_random_torch_float_tensor(vocab_size, hidden_size),
-        "bert.embeddings.token_type_embeddings.weight": torch.zeros(2, hidden_size),
-        "bert.embeddings.LayerNorm.weight": create_random_torch_float_tensor(hidden_size),
-        "bert.embeddings.LayerNorm.bias": create_random_torch_float_tensor(hidden_size),
+        "bert.embeddings.word_embeddings.weight": create_random_float((vocab_size, hidden_size)),
+        "bert.embeddings.token_type_embeddings.weight": np.zeros((2, hidden_size), dtype=np.float64),
+        "bert.embeddings.LayerNorm.weight": create_random_float((hidden_size,)),
+        "bert.embeddings.LayerNorm.bias": create_random_float((hidden_size,)),
     }
 
     for encoder_index in range(num_encoders):
         parameters.update(
             {
-                f"bert.encoder.layer.{encoder_index}.attention.self.query.weight": create_random_torch_float_tensor(
-                    hidden_size, hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.self.query.weight": create_random_float(
+                    (hidden_size, hidden_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.self.query.bias": create_random_torch_float_tensor(
-                    hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.self.query.bias": create_random_float((hidden_size,)),
+                f"bert.encoder.layer.{encoder_index}.attention.self.key.weight": create_random_float(
+                    (hidden_size, hidden_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.self.key.weight": create_random_torch_float_tensor(
-                    hidden_size, hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.self.key.bias": create_random_float((hidden_size,)),
+                f"bert.encoder.layer.{encoder_index}.attention.self.value.weight": create_random_float(
+                    (hidden_size, hidden_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.self.key.bias": create_random_torch_float_tensor(
-                    hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.self.value.bias": create_random_float((hidden_size,)),
+                f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight": create_random_float(
+                    (hidden_size, hidden_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.self.value.weight": create_random_torch_float_tensor(
-                    hidden_size, hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.output.dense.bias": create_random_float((hidden_size,)),
+                f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.weight": create_random_float(
+                    (hidden_size,)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.self.value.bias": create_random_torch_float_tensor(
-                    hidden_size
+                f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.bias": create_random_float(
+                    (hidden_size,)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight": create_random_torch_float_tensor(
-                    hidden_size, hidden_size
+                f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight": create_random_float(
+                    (hidden_size, intermediate_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.output.dense.bias": create_random_torch_float_tensor(
-                    hidden_size
+                f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias": create_random_float(
+                    (intermediate_size,)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.weight": create_random_torch_float_tensor(
-                    hidden_size
+                f"bert.encoder.layer.{encoder_index}.output.dense.weight": create_random_float(
+                    (intermediate_size, hidden_size)
                 ),
-                f"bert.encoder.layer.{encoder_index}.attention.output.LayerNorm.bias": create_random_torch_float_tensor(
-                    hidden_size
-                ),
-                f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight": create_random_torch_float_tensor(
-                    hidden_size, intermediate_size
-                ),
-                f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias": create_random_torch_float_tensor(
-                    intermediate_size
-                ),
-                f"bert.encoder.layer.{encoder_index}.output.dense.weight": create_random_torch_float_tensor(
-                    intermediate_size, hidden_size
-                ),
-                f"bert.encoder.layer.{encoder_index}.output.dense.bias": create_random_torch_float_tensor(hidden_size),
-                f"bert.encoder.layer.{encoder_index}.output.LayerNorm.weight": create_random_torch_float_tensor(
-                    hidden_size
-                ),
-                f"bert.encoder.layer.{encoder_index}.output.LayerNorm.bias": create_random_torch_float_tensor(
-                    hidden_size
-                ),
+                f"bert.encoder.layer.{encoder_index}.output.dense.bias": create_random_float(hidden_size),
+                f"bert.encoder.layer.{encoder_index}.output.LayerNorm.weight": create_random_float((hidden_size,)),
+                f"bert.encoder.layer.{encoder_index}.output.LayerNorm.bias": create_random_float((hidden_size,)),
             }
         )
 
     if num_question_answering_labels is not None:
-        parameters["qa_outputs.weight"] = create_random_torch_float_tensor(hidden_size, num_question_answering_labels)
-        parameters["qa_outputs.bias"] = create_random_torch_float_tensor(num_question_answering_labels)
+        parameters["qa_outputs.weight"] = create_random_float((hidden_size, num_question_answering_labels))
+        parameters["qa_outputs.bias"] = create_random_float((num_question_answering_labels,))
 
     return {name: array.numpy() for name, array in parameters.items()}
 
@@ -288,6 +276,10 @@ def test_functional_bert_vs_transformers_bert(
     config.hidden_dropout_prob = 0.0  # Disable dropout after the embeddings
     config.attention_probs_dropout_prob = 0.0  # Disable dropout in the self-attention
     config.position_embedding_type = None  # Disable position embedding
+    config.num_attention_heads = num_heads
+    config.num_hidden_layers = num_encoders
+    config.hidden_size = num_heads * head_size
+    config.vocab_size = vocab_size
 
     if functional_bert_function == functional_bert:
         transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
@@ -336,12 +328,13 @@ def test_functional_bert_vs_transformers_bert(
 
     model_inputs = []
     for _ in range(num_inputs):
-        input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
-        token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
+        input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
+        token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
         model_inputs.append((input_ids, token_type_ids))
 
     transformers_outputs = []
     for model_input in model_inputs:
+        model_input = [torch.from_numpy(x) for x in model_input]
         transformers_outputs.append(torch_forward(model_input[0]))
 
     pnp_outputs = []
@@ -350,8 +343,8 @@ def test_functional_bert_vs_transformers_bert(
         output = pnp.nn.evaluate(
             model,
             inputs={
-                input_ids_var: input_ids.numpy(),
-                token_type_ids_var: token_type_ids.numpy(),
+                input_ids_var: input_ids,
+                token_type_ids_var: token_type_ids,
                 **parameters,
             },
         )
@@ -362,11 +355,11 @@ def test_functional_bert_vs_transformers_bert(
         assert torch.allclose(output, transformers_output.double(), atol=1e-5)
 
 
-@pytest.mark.parametrize("num_inputs", [1])
-@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("num_inputs", [2])
+@pytest.mark.parametrize("batch_size", [2])
 @pytest.mark.parametrize("num_encoders", [3])
 @pytest.mark.parametrize("sequence_size", [32])
-@pytest.mark.parametrize("num_heads", [1])
+@pytest.mark.parametrize("num_heads", [3])
 @pytest.mark.parametrize("head_size", [16])
 @pytest.mark.parametrize("vocab_size", [16])
 def test_functional_bert_autograd(
@@ -446,30 +439,40 @@ def test_functional_bert_autograd(
             ]
         )
 
+    accumulated_gradients = {}
     for _ in range(num_inputs):
-        input_ids = create_random_torch_long_tensor(batch_size, sequence_size, minimum=0, maximum=vocab_size)
-        token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.long)
-        torch_loss = torch_forward(input_ids, token_type_ids)
+        input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
+        token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
+        torch_loss = torch_forward(torch.from_numpy(input_ids), torch.from_numpy(token_type_ids))
 
-        incoming_gradient = torch.randn(batch_size, sequence_size, num_heads * head_size) / 100
-        torch_loss.backward(incoming_gradient)
+        incoming_gradient = create_random_float((batch_size, sequence_size, num_heads * head_size), -0.001, 0.001)
+        torch_loss.backward(torch.from_numpy(incoming_gradient))
 
         pnp_gradients = pnp.nn.differentiate(
             [loss],
             input_vars_to_differentiate,
             {
-                input_ids_variable: input_ids.numpy(),
-                token_type_ids_variable: token_type_ids.numpy(),
+                input_ids_variable: input_ids,
+                token_type_ids_variable: token_type_ids,
                 **{parameter_variables[key]: parameters[key] for key in parameters},
             },
-            {loss: incoming_gradient.numpy()},
+            {loss: incoming_gradient},
         )
         assert len(pnp_gradients) == len(input_vars_to_differentiate)
         pnp_gradients = {var.node.name: value for var, value in pnp_gradients.items()}
 
-        for name, pnp_gradient in reversed(pnp_gradients.items()):
+        # Accumulate gradients
+        for key, value in pnp_gradients.items():
+            if key in accumulated_gradients:
+                accumulated_gradients[key] += value
+            else:
+                accumulated_gradients[key] = value
+
+        for name, pnp_gradient in reversed(accumulated_gradients.items()):
             torch_parameter = transformers_parameters[name.replace("bert.", "")]
             torch_gradient = torch_parameter.grad.numpy()
             if "weight" in name and "embedding" not in name:
                 torch_gradient = torch_gradient.T
-            assert np.allclose(pnp_gradient, torch_gradient, atol=1e-4, rtol=1e-5)
+
+            all_close = np.allclose(pnp_gradient, torch_gradient, atol=1e-4)
+            assert all_close
