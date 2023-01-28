@@ -1,6 +1,5 @@
 from collections.abc import Iterable
 
-
 import graphviz
 import networkx
 from pyrsistent import PClass, field, pmap_field, PMap, pmap
@@ -15,6 +14,8 @@ from networkx.classes.reportviews import (
     OutMultiEdgeView,
 )
 from toolz import functoolz
+
+from persistent_numpy.string import random_string
 
 
 class MultiDiGraph(PClass):
@@ -69,9 +70,18 @@ class MultiDiGraph(PClass):
         return node in self
 
     def add_node(self, node, **kwargs):
-        _node = self._node.set(node, pmap(kwargs))
-        _pred = self._pred.set(node, pmap())
-        _succ = self._succ.set(node, pmap())
+        attributes = self._node.get(node, pmap())
+        attributes = attributes.update(pmap(kwargs))
+        _node = self._node.set(node, attributes)
+
+        _pred = self._pred
+        if node not in _pred:
+            _pred = _pred.set(node, pmap())
+
+        _succ = self._succ
+        if node not in _succ:
+            _succ = _succ.set(node, pmap())
+
         new_graph = self.set(_node=_node, _pred=_pred, _succ=_succ)
         return new_graph
 
@@ -222,33 +232,45 @@ def topological_traversal(graph):
     return networkx.topological_sort(graph)
 
 
-def default_visualize_node(graph, node):
-    return f"{node}"
+def default_visualize_node(graphviz_graph, graph, node):
+    graphviz_graph.node(node.name, label=f"{node}")
 
 
-def default_visualize_edge(graph, source, sink, edge):
-    return ""
+def default_visualize_edge(graphviz_graph, graph, edge):
+    source, sink, keys, data = edge
+    graphviz_graph.edge(
+        source.name,
+        sink.name,
+    )
 
 
 def visualize_graph(
     graph: MultiDiGraph,
+    *,
+    graphviz_graph=None,
     visualize_node=default_visualize_node,
     visualize_edge=default_visualize_edge,
+    render=True,
 ) -> None:
-    dot = graphviz.Digraph()
+    if graphviz_graph is None:
+        graphviz_graph = graphviz.Digraph()
 
-    for node in graph.nodes():
-        dot.node(node.name, label=visualize_node(graph, node))
+    for node in topological_traversal(graph):
+        visualize_node(graphviz_graph, graph, node)
 
-        for predecessor in graph.predecessors(node):
-            for edge in graph._pred[node][predecessor]:
-                dot.edge(
-                    predecessor.name,
-                    node.name,
-                    label=visualize_edge(graph, node, predecessor, edge),
-                )
+    for node in topological_traversal(graph):
+        for edge in graph.in_edges(node, data=True, keys=True):
+            visualize_edge(graphviz_graph, graph, edge)
 
-    dot.render("graph.gv", view=True, format="svg")
+    if render:
+        import os
+        import time
+
+        file_name = f"graph-{random_string()}.gv"
+        graphviz_graph.render(file_name, view=True, format="svg")
+        time.sleep(1)
+        os.remove(file_name)
+        os.remove(f"{file_name}.svg")
 
 
 def from_networkx(nx_graph: networkx.MultiDiGraph) -> MultiDiGraph:

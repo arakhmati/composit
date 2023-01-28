@@ -18,7 +18,7 @@ class PersistentArray(PClass):
 
     @property
     def name(self) -> str:
-        return f"{self.node.name}_{self.output_index}"
+        return self.node.name
 
     @property
     def shape(self) -> tuple:
@@ -29,8 +29,8 @@ class PersistentArray(PClass):
         return len(self.shape)
 
     def visualize(self):
-        def visualize_node(graph, node):
+        def visualize_node(graphviz_graph, graph, node):
             shapes = graph.nodes[node]["shapes"]
-            return f"{node}:{shapes}"
+            graphviz_graph.node(node.name, label=f"{node}:{shapes}")
 
         visualize_graph(self.graph, visualize_node=visualize_node)
