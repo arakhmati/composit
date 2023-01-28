@@ -103,7 +103,7 @@ def instruction_shape(instruction, input_shapes):
 
     if isinstance(result, np.ndarray):
         return (result.shape,)
-    elif isinstance(result, list):
+    elif isinstance(result, (list, tuple)):
         return tuple(array.shape for array in result)
     else:
         raise RuntimeError(f"Unsupported type: {type(result)}")

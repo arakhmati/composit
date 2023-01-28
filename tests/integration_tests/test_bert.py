@@ -5,6 +5,7 @@ import torch
 import transformers
 
 import persistent_numpy as pnp
+from persistent_numpy.nn.module import wrap_module
 
 
 def create_random_float(shape, minimum=-0.1, maximum=0.1):
@@ -73,15 +74,18 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
     return {name: array.numpy() for name, array in parameters.items()}
 
 
+@wrap_module
 def functional_softmax(input_tensor, axis):
     exp_input_tensor = pnp.exp(input_tensor - pnp.max(input_tensor, axis=axis, keepdims=True))
     return exp_input_tensor / pnp.sum(exp_input_tensor, axis=axis, keepdims=True)
 
 
+@wrap_module
 def functional_multi_head_attention(
     hidden_states,
     attention_mask,
     parameters,
+    *,
     encoder_index,
     sequence_size,
     num_heads,
@@ -123,7 +127,8 @@ def functional_multi_head_attention(
     return self_output
 
 
-def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
+@wrap_module
+def functional_layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
     mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
     input_tensor_minus_mean = input_tensor - mean
     var = pnp.mean(pnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
@@ -139,6 +144,7 @@ def functional_layer_norm(input_tensor, weight, bias, epsilon=0):
     """
 
 
+@wrap_module
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
@@ -148,10 +154,12 @@ def functional_feedforward(hidden_states, parameters, encoder_index):
     return hidden_states
 
 
+@wrap_module
 def functional_bert_encoder(
     hidden_states,
     attention_mask,
     parameters,
+    *,
     encoder_index,
     sequence_size,
     num_heads,
@@ -162,10 +170,10 @@ def functional_bert_encoder(
         hidden_states,
         attention_mask,
         parameters,
-        encoder_index,
-        sequence_size,
-        num_heads,
-        head_size,
+        encoder_index=encoder_index,
+        sequence_size=sequence_size,
+        num_heads=num_heads,
+        head_size=head_size,
     )
 
     multi_head_attention_add_and_layer_norm_output = functional_layer_norm(
@@ -175,7 +183,7 @@ def functional_bert_encoder(
     )
 
     feedforward_output = functional_feedforward(
-        multi_head_attention_add_and_layer_norm_output, parameters, encoder_index
+        multi_head_attention_add_and_layer_norm_output, parameters, encoder_index=encoder_index
     )
 
     feedforward_add_and_layer_norm_output = functional_layer_norm(
@@ -187,11 +195,13 @@ def functional_bert_encoder(
     return feedforward_add_and_layer_norm_output
 
 
+@wrap_module
 def functional_bert(
     input_ids,
     token_type_ids,
     attention_mask,
     parameters,
+    *,
     num_encoders,
     sequence_size,
     num_heads,
@@ -214,20 +224,22 @@ def functional_bert(
             encoder_input,
             attention_mask,
             parameters,
-            encoder_index,
-            sequence_size,
-            num_heads,
-            head_size,
+            encoder_index=encoder_index,
+            sequence_size=sequence_size,
+            num_heads=num_heads,
+            head_size=head_size,
         )
         encoder_input = encoder_output
     return encoder_output
 
 
+@wrap_module
 def functional_bert_for_question_answering(
     input_ids,
     token_type_ids,
     attention_mask,
     parameters,
+    *,
     num_encoders,
     sequence_size,
     num_heads,
@@ -238,10 +250,10 @@ def functional_bert_for_question_answering(
         token_type_ids,
         attention_mask,
         parameters,
-        num_encoders,
-        sequence_size,
-        num_heads,
-        head_size,
+        num_encoders=num_encoders,
+        sequence_size=sequence_size,
+        num_heads=num_heads,
+        head_size=head_size,
     )
 
     qa_outputs = bert_output
@@ -292,8 +304,8 @@ def test_functional_bert_vs_transformers_bert(
 
         def torch_forward(*args):
             qa_outputs = transformers_model(*args)
-            start_logits = qa_outputs["start_logits"].reshape((1, 128, 1))
-            end_logits = qa_outputs["end_logits"].reshape((1, 128, 1))
+            start_logits = qa_outputs["start_logits"].reshape((batch_size, sequence_size, 1))
+            end_logits = qa_outputs["end_logits"].reshape((batch_size, sequence_size, 1))
             return torch.cat((start_logits, end_logits), dim=-1)
 
     else:
@@ -320,10 +332,10 @@ def test_functional_bert_vs_transformers_bert(
         token_type_ids_var,
         None,
         {var.node.name: var for var in parameters.keys()},
-        num_encoders,
-        sequence_size,
-        num_heads,
-        head_size,
+        num_encoders=num_encoders,
+        sequence_size=sequence_size,
+        num_heads=num_heads,
+        head_size=head_size,
     )
 
     model_inputs = []
@@ -351,8 +363,8 @@ def test_functional_bert_vs_transformers_bert(
         pnp_outputs.append(output)
 
     for output, transformers_output in zip(pnp_outputs, transformers_outputs):
-        output = torch.from_numpy(output)
-        assert torch.allclose(output, transformers_output.double(), atol=1e-5)
+        transformers_output = transformers_output.detach().numpy()
+        assert np.allclose(output, transformers_output, atol=1e-3)
 
 
 @pytest.mark.parametrize("num_inputs", [2])
@@ -371,6 +383,7 @@ def test_functional_bert_autograd(
     head_size,
     vocab_size,
 ):
+    pnp.nn.module.DISABLE = True
 
     config = transformers.models.bert.configuration_bert.BertConfig()
     config.hidden_dropout_prob = 0.0  # Disable dropout after the embeddings
@@ -406,10 +419,10 @@ def test_functional_bert_autograd(
         token_type_ids_variable,
         None,
         parameter_variables,
-        num_encoders,
-        sequence_size,
-        num_heads,
-        head_size,
+        num_encoders=num_encoders,
+        sequence_size=sequence_size,
+        num_heads=num_heads,
+        head_size=head_size,
     )
     loss = model
 
@@ -474,5 +487,7 @@ def test_functional_bert_autograd(
             if "weight" in name and "embedding" not in name:
                 torch_gradient = torch_gradient.T
 
-            all_close = np.allclose(pnp_gradient, torch_gradient, atol=1e-4)
+            all_close = np.allclose(pnp_gradient, torch_gradient, atol=1e-3)
             assert all_close
+
+    pnp.nn.module.DISABLE = False

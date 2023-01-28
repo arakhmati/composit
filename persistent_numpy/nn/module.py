@@ -9,20 +9,34 @@ import persistent_numpy as pnp
 from persistent_numpy.persistent_array import PersistentArray, Node
 from persistent_numpy.multidigraph import MultiDiGraph, compose_all, visualize_graph
 
+DISABLE = False  # Temporary hack until Module is supported in chain_rule
 
-class ModuleArgument(PClass):
+
+class ModuleInput(PClass):
     def __call__(self, *args):
         return args
 
 
-def module_argument(*, name: str, shape: tuple) -> PersistentArray:
+def module_input(*, name: str, shape: tuple) -> PersistentArray:
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=ModuleArgument(), shapes=(shape,))
+    graph = MultiDiGraph().add_node(node, instruction=ModuleInput(), shapes=(shape,))
     return PersistentArray(graph=graph, node=node)
 
 
+class ModuleOutput(PClass):
+    def __call__(self, *args):
+        return args
+
+
+def module_output(input_var) -> PersistentArray:
+    return pnp.create_from_numpy_compute_instruction(
+        input_var,
+        instruction=ModuleOutput(),
+    )
+
+
 class Module(PClass):
-    module_function = field()
+    function = field()
     graph: MultiDiGraph = field()
     input_vars = field()
     output_vars = field()
@@ -33,34 +47,102 @@ class Module(PClass):
         return output
 
 
-def create_module(module_function, input_vars, module_input_vars, output_vars):
-    module_graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
+def create_module(module_function, module_graph, operands, module_input_vars, module_output_var):
     return pnp.create_from_numpy_compute_instruction(
-        *input_vars,
+        *operands,
         instruction=Module(
-            module_function=module_function, graph=module_graph, input_vars=module_input_vars, output_vars=output_vars
+            function=module_function, graph=module_graph, input_vars=module_input_vars, output_vars=module_output_var
         ),
     )
+
+
+def flatten_vars(vars, graph=None):
+    """Convert input vars to nn.variables"""
+
+    flat_vars = []
+    for var in vars:
+
+        if var is None:
+            continue
+
+        elif isinstance(var, PersistentArray):
+            flat_vars.append(var)
+
+        elif isinstance(var, dict):
+            for key in sorted(var):
+                value = var[key]
+                if graph is not None:
+                    if value.node in graph:
+                        flat_vars.append(value)
+                else:
+                    flat_vars.append(value)
+
+        else:
+            raise ValueError
+
+    return tuple(flat_vars)
+
+
+def convert_input_vars_to_module_input_vars(input_vars):
+    """Convert input vars to nn.variables"""
+
+    module_input_vars = []
+    for input_var in input_vars:
+
+        if input_var is None:
+            module_input_var = None
+
+        elif isinstance(input_var, PersistentArray):
+            name = input_var.node.name
+            if input_var.output_index > 0:
+                name = f"{name}_{input_var.output_index}"
+            module_input_var = module_input(name=name, shape=input_var.shape)
+
+        elif isinstance(input_var, dict):
+            old_dict = input_var
+            new_dict = {}
+            for key in sorted(old_dict):
+                value = old_dict[key]
+                name = value.node.name
+                if value.output_index > 0:
+                    name = f"{name}_{value.output_index}"
+                new_dict[key] = module_input(name=name, shape=value.shape)
+            module_input_var = new_dict
+
+        else:
+            raise ValueError(f"{type(input_var)}")
+
+        module_input_vars.append(module_input_var)
+
+    return tuple(module_input_vars)
 
 
 def wrap_module(module_function):
     module_function_parameters = inspect.signature(module_function).parameters
 
-    def wrapper(*input_vars, **kwargs):
+    def wrapper(*operands, **kwargs):
+        if DISABLE:
+            return module_function(*operands, **kwargs)
+
         kwargs.update(
             {key: value.default for key, value in module_function_parameters.items() if value.default != inspect._empty}
         )
 
-        # Convert input vars to nn.variables
-        module_input_vars = tuple(
-            module_argument(name=f"{input_var.node.name}_{input_var.output_index}", shape=input_var.shape)
-            for input_var in input_vars
-        )
-        output_vars = module_function(*module_input_vars, **kwargs)
-        if not isinstance(output_vars, collections.abc.Iterable):
-            output_vars = (output_vars,)
+        module_input_vars = convert_input_vars_to_module_input_vars(operands)
 
-        return create_module(module_function, input_vars, module_input_vars, output_vars)
+        module_output_vars = module_function(*module_input_vars, **kwargs)
+        if not isinstance(module_output_vars, collections.abc.Iterable):
+            module_output_vars = (module_output_vars,)
+
+        module_output_vars = tuple(module_output(module_output_var) for module_output_var in module_output_vars)
+        module_graph = compose_all(*tuple(module_output_var.graph for module_output_var in module_output_vars))
+
+        flattened_operands = flatten_vars(operands, module_graph)
+        flattened_module_input_vars = flatten_vars(module_input_vars, module_graph)
+
+        return create_module(
+            module_function, module_graph, flattened_operands, flattened_module_input_vars, module_output_vars
+        )
 
     return wrapper
 
@@ -92,13 +174,18 @@ def visualize_modules(
         if isinstance(instruction, Module):
             with graphviz_graph.subgraph(name=node.name) as cluster_graph:
                 cluster_graph.attr(
-                    color=LEVEL_COLORS[level % len(LEVEL_COLORS)],
+                    fontcolor="white",
+                    bgcolor=LEVEL_COLORS[level % len(LEVEL_COLORS)],
                     cluster="true",
-                    label=instruction.module_function.__name__,
+                    label=instruction.function.__name__,
                 )
+                cluster_graph.node_attr["style"] = "filled"
+                cluster_graph.node_attr["fillcolor"] = "white"
                 visualize_modules(instruction.graph, graphviz_graph=cluster_graph, level=level + 1, level_prefix=name)
         else:
-            graphviz_graph.node(name, label=f"{type(instruction).__name__}")
+            shapes = graph.nodes[node]["shapes"]
+            shapes = shapes[0] if len(shapes) == 1 else shapes
+            graphviz_graph.node(name, label=f"{type(instruction).__name__}:{shapes}")
 
     def visualize_edge(graphviz_graph, graph, edge):
         source, sink, keys, data = edge
@@ -133,6 +220,7 @@ def visualize_modules(
             source_name,
             sink_name,
             label=f"{data['source_output_index']} - {data['sink_input_index']}",
+            fontcolor="black" if level == 0 else "white",
         )
 
     visualize_graph(
