@@ -10,7 +10,7 @@ def check_results(function):
     pnp_array = function(persistent_numpy)
 
     assert np_array.shape == pnp_array.shape
-    assert numpy.allclose(np_array, persistent_numpy.to_numpy(pnp_array))
+    assert numpy.allclose(np_array, persistent_numpy.evaluate(pnp_array))
 
 
 @pytest.mark.parametrize("np", [numpy, persistent_numpy])
@@ -182,9 +182,9 @@ def test_split():
 
     for np_array, pnp_array in zip(np_list, pnp_list):
         assert np_array.shape == pnp_array.shape
-        assert numpy.allclose(np_array, persistent_numpy.to_numpy(pnp_array))
+        assert numpy.allclose(np_array, persistent_numpy.evaluate(pnp_array))
 
-    for np_array, pnp_array in zip(np_list, persistent_numpy.to_numpy(*pnp_list)):
+    for np_array, pnp_array in zip(np_list, persistent_numpy.evaluate(*pnp_list)):
         assert np_array.shape == pnp_array.shape
         assert numpy.allclose(np_array, pnp_array)
 

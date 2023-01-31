@@ -2,7 +2,7 @@ import networkx as nx
 from pyrsistent import pset
 from toolz import functoolz
 
-import persistent_numpy as pnp
+from persistent_numpy.numpy.core import get_operands
 from persistent_numpy.multidigraph import topological_traversal, compose_all
 import persistent_numpy.nn as nn
 import persistent_numpy.nn.jacobians as jacobians
@@ -53,7 +53,7 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
             continue
 
         forward_instruction = forward_graph.nodes[node]["instruction"]
-        forward_operands = tuple(in_edge for in_edge in pnp.get_operands(forward_graph, node))
+        forward_operands = tuple(in_edge for in_edge in get_operands(forward_graph, node))
         forward_input_vars = tuple(
             nn.variable(name=node.name, shape=forward_graph.nodes[node]["shapes"][output_index])
             for (node, output_index) in forward_operands

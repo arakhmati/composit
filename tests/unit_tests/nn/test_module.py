@@ -97,7 +97,7 @@ def test_modules(final_module):
     result = result / 3
     visualize_modules(result.graph, render=False)
 
-    torch_array = torch.from_numpy(pnp.to_numpy(array))
+    torch_array = torch.from_numpy(pnp.evaluate(array))
     torch_result = torch_array
     torch_result = torch_result + torch_result
     torch_result = torch.nn.functional.gelu(torch_result)
@@ -109,7 +109,7 @@ def test_modules(final_module):
     torch_result = torch_result.numpy()
 
     assert result.shape == torch_result.shape
-    assert np.allclose(pnp.to_numpy(result), torch_result)
+    assert np.allclose(pnp.evaluate(result), torch_result)
 
 
 def test_modules_chain_rule():

@@ -4,10 +4,10 @@ from pyrsistent import immutable, PClass
 from toolz.functoolz import partial
 
 
-from persistent_numpy.nn.vectorized_functions import cdf
 from persistent_numpy.multidigraph import MultiDiGraph
+from persistent_numpy.nn.vectorized_functions import cdf
+from persistent_numpy.numpy.core import create_from_numpy_compute_instruction
 from persistent_numpy.persistent_array import PersistentArray, Node
-from persistent_numpy.numpy import create_from_numpy_compute_instruction
 
 
 class Variable(PClass):

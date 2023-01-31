@@ -6,6 +6,7 @@ import numpy as np
 from pyrsistent import PClass, field
 
 import persistent_numpy as pnp
+from persistent_numpy.numpy.core import create_from_numpy_compute_instruction
 from persistent_numpy.persistent_array import PersistentArray, Node
 from persistent_numpy.multidigraph import MultiDiGraph, compose_all, visualize_graph
 
@@ -29,7 +30,7 @@ class ModuleOutput(PClass):
 
 
 def module_output(input_var) -> PersistentArray:
-    return pnp.create_from_numpy_compute_instruction(
+    return create_from_numpy_compute_instruction(
         input_var,
         instruction=ModuleOutput(),
     )
@@ -48,7 +49,7 @@ class Module(PClass):
 
 
 def create_module(module_function, module_graph, operands, module_input_vars, module_output_var):
-    return pnp.create_from_numpy_compute_instruction(
+    return create_from_numpy_compute_instruction(
         *operands,
         instruction=Module(
             function=module_function, graph=module_graph, input_vars=module_input_vars, output_vars=module_output_var
