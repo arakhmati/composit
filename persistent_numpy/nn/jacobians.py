@@ -102,7 +102,7 @@ def max_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     axis: int = forward_instruction.axis
     keepdims: int = forward_instruction.keepdims
 
-    @partial(pnp.nn.wrap_as_instruction, use_njit=False)
+    @pnp.nn.wrap_as_instruction(use_njit=False)
     def max_jacobian(incoming_gradient, input_var):
         outgoing_gradient = np.broadcast_to(incoming_gradient, input_var.shape).copy()
         max_values = np.max(input_var, axis, keepdims=keepdims)
@@ -137,7 +137,7 @@ def sqrt_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
 
 
 def gelu_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
-    @pnp.nn.wrap_as_instruction
+    @pnp.nn.wrap_as_instruction()
     def gelu_jacobian(incoming_gradient, input_var):
         return incoming_gradient * (cdf(input_var) + input_var * pdf(input_var))
 

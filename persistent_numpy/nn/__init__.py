@@ -1,3 +1,4 @@
+from .core import Variable, wrap_as_instruction
 from .functions import *
 from .evaluate import Cache, evaluate
 

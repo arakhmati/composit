@@ -1,17 +1,10 @@
-import numba
 import numpy as np
-from pyrsistent import immutable, PClass
-from toolz.functoolz import partial
 
 
 from persistent_numpy.multidigraph import MultiDiGraph
+from persistent_numpy.nn.core import Variable, wrap_as_instruction
 from persistent_numpy.nn.vectorized_functions import cdf
-from persistent_numpy.numpy.core import create_from_numpy_compute_instruction
 from persistent_numpy.persistent_array import PersistentArray, Node
-
-
-class Variable(PClass):
-    ...
 
 
 def variable(*, name: str, shape: tuple) -> PersistentArray:
@@ -20,24 +13,7 @@ def variable(*, name: str, shape: tuple) -> PersistentArray:
     return PersistentArray(graph=graph, node=node)
 
 
-def wrap_as_instruction(compute_function, *, use_njit=True):
-    if use_njit:
-        compute_function = numba.jit(
-            compute_function, nopython=True, parallel=True, cache=True, error_model="numpy", fastmath=True
-        )
-    compute_function = staticmethod(compute_function)
-
-    def wrapper(*operands, **klass_kwargs):
-        klass_attributes = list(klass_kwargs.keys())
-        klass = immutable(klass_attributes, name=compute_function.__name__)
-        klass.__call__ = partial(compute_function, **klass_kwargs)
-        instruction = klass(**klass_kwargs)
-        return create_from_numpy_compute_instruction(*operands, instruction=instruction)
-
-    return wrapper
-
-
-@wrap_as_instruction
+@wrap_as_instruction()
 def embedding(input_tensor, weights):
     batch_size, sequence_size = input_tensor.shape
     result = np.zeros((batch_size, sequence_size, weights.shape[1]))
@@ -47,12 +23,12 @@ def embedding(input_tensor, weights):
     return result
 
 
-@wrap_as_instruction
+@wrap_as_instruction()
 def gelu(input_tensor):
     return input_tensor * cdf(input_tensor)
 
 
-@partial(wrap_as_instruction, use_njit=False)
+@wrap_as_instruction(use_njit=False)
 def convolution(image, filters):
     # TODO: Make convolution generic for all dimensions?
 
@@ -80,7 +56,7 @@ def convolution(image, filters):
     return output
 
 
-@wrap_as_instruction
+@wrap_as_instruction()
 def average_pooling(image, *, kernel_size):
     # TODO: Make average_pooling generic for all dimensions?
 
@@ -106,7 +82,7 @@ def average_pooling(image, *, kernel_size):
     return output
 
 
-@wrap_as_instruction
+@wrap_as_instruction()
 def max_pooling(image, *, kernel_size):
     # TODO: Make max_pooling generic for all dimensions?
 
@@ -133,10 +109,7 @@ def max_pooling(image, *, kernel_size):
 
 
 __all__ = [
-    "Variable",
     "variable",
-    # Compute functions
-    "wrap_as_instruction",
     "embedding",
     "gelu",
     "convolution",
