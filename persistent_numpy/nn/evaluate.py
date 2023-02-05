@@ -3,7 +3,7 @@ import collections
 import numpy as np
 from pyrsistent import PClass, pmap_field, pmap
 
-from persistent_numpy.multidigraph import topological_traversal, compose_all, MultiDiGraph
+from persistent_numpy.multidigraph import topological_traversal, compose_all
 from persistent_numpy import nn
 from persistent_numpy.numpy.core import get_operands
 from persistent_numpy.persistent_array import PersistentArray

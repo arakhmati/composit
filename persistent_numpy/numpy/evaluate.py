@@ -1,5 +1,4 @@
 import numpy as np
-from toolz import functoolz
 
 from persistent_numpy.numpy.core import get_operands
 from persistent_numpy.multidigraph import topological_traversal, compose_all

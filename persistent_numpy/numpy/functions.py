@@ -1,10 +1,8 @@
 import inspect
 import sys
-from typing import Union
 
 import numpy as np
-from pyrsistent import immutable, PClass, field
-from toolz import functoolz
+from pyrsistent import PClass, field
 
 from persistent_numpy.numpy.core import (
     create_ndarray,
@@ -14,8 +12,7 @@ from persistent_numpy.numpy.core import (
     create_numpy_concatenate_function,
 )
 from persistent_numpy.introspection import get_name_from_args_and_kwargs
-from persistent_numpy.multidigraph import MultiDiGraph, topological_traversal, merge_graphs, compose_all
-from persistent_numpy.persistent_array import PersistentArray, Node
+from persistent_numpy.persistent_array import PersistentArray
 from persistent_numpy.string import random_string
 
 THIS_MODULE = sys.modules[__name__]

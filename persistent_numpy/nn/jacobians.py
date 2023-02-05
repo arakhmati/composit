@@ -4,7 +4,6 @@ import numpy as np
 
 import persistent_numpy as pnp
 from persistent_numpy.nn.vectorized_functions import cdf, pdf
-from toolz.functoolz import partial
 
 THIS_MODULE = sys.modules[__name__]
 
