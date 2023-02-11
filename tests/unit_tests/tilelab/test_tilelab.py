@@ -96,28 +96,23 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
 
     matmul_shape = input_0_shape[:-1] + input_1_shape[-1:]
 
-    np_input_0 = np.random.uniform(-0.5, 0.5, input_0_shape)
-    np_input_1 = np.random.uniform(-0.5, 0.5, input_1_shape)
-    np_input_2 = np.random.uniform(-0.5, 0.5, matmul_shape)
-    np_input_3 = np.random.uniform(-0.5, 0.5, matmul_shape)
-
-    input_var_0 = pnp.nn.variable(name="input_var_0", shape=np_input_0.shape)
-    input_var_1 = pnp.nn.variable(name="input_var_1", shape=np_input_1.shape)
-    input_var_2 = pnp.nn.variable(name="input_var_2", shape=np_input_2.shape)
-    input_var_3 = pnp.nn.variable(name="input_var_3", shape=np_input_3.shape)
+    input_var_0 = pnp.nn.variable(name="input_var_0", shape=input_0_shape)
+    input_var_1 = pnp.nn.variable(name="input_var_1", shape=input_1_shape)
+    input_var_2 = pnp.nn.variable(name="input_var_2", shape=matmul_shape)
+    input_var_3 = pnp.nn.variable(name="input_var_3", shape=matmul_shape)
     matmul_output_var = input_var_0 @ input_var_1
     add_output_var = matmul_output_var + input_var_2
     output_var = add_output_var + matmul_output_var - pnp.sum(input_var_3, -1, keepdims=True)
 
     evaluate_inputs = {
-        input_var_0: np_input_0,
-        input_var_1: np_input_1,
-        input_var_2: np_input_2,
-        input_var_3: np_input_3,
+        input_var_0: np.random.uniform(-0.5, 0.5, input_var_0.shape),
+        input_var_1: np.random.uniform(-0.5, 0.5, input_var_1.shape),
+        input_var_2: np.random.uniform(-0.5, 0.5, input_var_2.shape),
+        input_var_3: np.random.uniform(-0.5, 0.5, input_var_3.shape),
     }
 
-    matmul_output, add_output, output = pnp.nn.evaluate(
-        matmul_output_var, add_output_var, output_var, inputs=evaluate_inputs
+    output = pnp.nn.evaluate(
+        output_var, inputs=evaluate_inputs
     )
 
     input_var_to_scheme = {
