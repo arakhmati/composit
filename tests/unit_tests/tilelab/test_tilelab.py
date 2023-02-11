@@ -142,5 +142,5 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     assert manually_tilized_output == tilized_output
     assert np.allclose(manually_tilized_output.evaluate(), tilized_output.evaluate(inputs=evaluate_inputs))
 
-    tiles = list(tilized_output)
+    tiles = list(tilized_output.tiles())
     assert len(tiles) == 64
