@@ -158,12 +158,12 @@ def test_set_item():
     def function(np):
         numpy.random.seed(0)
         array = np.random.random((5, 25, 15))
-        smaller_array = np.random.random((25, 15))
+        smaller_array = np.random.random((23, 15))
         if np == numpy:
-            array[0] = smaller_array
+            array[0, 2:] = smaller_array
         else:
-            # Make a new language that support persistent __setitem__? ;)
-            array = np.set_item(array, 0, smaller_array)
+            # Make a new language that supports persistent __setitem__? ;)
+            array = np.set_item(array, (0, slice(2, None)), smaller_array)
         return array
 
     check_results(function)

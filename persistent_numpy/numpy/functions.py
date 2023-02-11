@@ -19,12 +19,39 @@ THIS_MODULE = sys.modules[__name__]
 __all__ = []
 
 
+class IntegerIndex(PClass):
+    value = field()
+
+
+class SliceIndex(PClass):
+    start = field()
+    stop = field()
+    step = field()
+
+    @property
+    def value(self):
+        return slice(self.start, self.stop, self.step)
+
+
+def process_indices(indices):
+    result = []
+    for index in indices:
+        if isinstance(index, int):
+            index = IntegerIndex(value=index)
+        elif isinstance(index, slice):
+            index = SliceIndex(start=index.start, stop=index.stop, step=index.step)
+        else:
+            raise TypeError(f"Unsupported type: {type(index)}")
+        result.append(index)
+    return tuple(result)
+
+
 class GetItem(PClass):
     indices = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
         (array,) = input_arrays
-        indices = tuple(slice(start, stop, step) for start, stop, step in self.indices)
+        indices = tuple(index.value for index in self.indices)
         return array[indices]
 
 
@@ -40,8 +67,8 @@ class DynamicGetItem(PClass):
 
 def get_item(self, indices) -> "PersistentArray":
     if isinstance(indices[0], slice):
-        indices = [(x.start, x.stop, x.step) for x in indices]
-        return create_from_numpy_compute_instruction(self, instruction=GetItem(indices=tuple(indices)))
+        indices = process_indices(indices)
+        return create_from_numpy_compute_instruction(self, instruction=GetItem(indices=indices))
 
     if not isinstance(indices, PersistentArray):
         name = f"Indices({indices})"
@@ -60,11 +87,13 @@ class SetItem(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
         old_array, new_slice = input_arrays
         new_array = old_array.copy()
-        new_array[self.indices] = new_slice
+        indices = tuple(index.value for index in self.indices)
+        new_array[indices] = new_slice
         return new_array
 
 
 def set_item(self, indices, values) -> "PersistentArray":
+    indices = process_indices(indices)
     return create_from_numpy_compute_instruction(self, values, instruction=SetItem(indices=indices))
 
 
