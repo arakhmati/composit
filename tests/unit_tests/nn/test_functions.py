@@ -2,6 +2,7 @@ import numpy as np
 import torch.nn.functional
 
 import persistent_numpy as pnp
+import persistent_numpy.nn
 
 
 def test_embedding():

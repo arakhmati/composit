@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional
 
 import persistent_numpy as pnp
+import persistent_numpy.nn
 
 
 @pytest.mark.parametrize("input_0_shape", [(5, 25, 15)])

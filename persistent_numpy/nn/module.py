@@ -38,9 +38,12 @@ def module_output(input_var) -> PersistentArray:
 
 class Module(PClass):
     function = field()
-    graph: MultiDiGraph = field()
     input_vars = field()
     output_vars = field()
+
+    @property
+    def graph(self):
+        return compose_all(*tuple(module_output_var.graph for module_output_var in self.output_vars))
 
     def __call__(self, *input_arrays: list[np.ndarray]):
         inputs = {input_var: input_array for input_var, input_array in zip(self.input_vars, input_arrays)}
@@ -48,12 +51,10 @@ class Module(PClass):
         return output
 
 
-def create_module(module_function, module_graph, operands, module_input_vars, module_output_var):
+def create_module(module_function, operands, module_input_vars, module_output_var):
     return create_from_numpy_compute_instruction(
         *operands,
-        instruction=Module(
-            function=module_function, graph=module_graph, input_vars=module_input_vars, output_vars=module_output_var
-        ),
+        instruction=Module(function=module_function, input_vars=module_input_vars, output_vars=module_output_var),
     )
 
 
@@ -141,9 +142,7 @@ def wrap_module(module_function):
         flattened_operands = flatten_vars(operands, module_graph)
         flattened_module_input_vars = flatten_vars(module_input_vars, module_graph)
 
-        return create_module(
-            module_function, module_graph, flattened_operands, flattened_module_input_vars, module_output_vars
-        )
+        return create_module(module_function, flattened_operands, flattened_module_input_vars, module_output_vars)
 
     return wrapper
 

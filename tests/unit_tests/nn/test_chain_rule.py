@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 import persistent_numpy as pnp
+import persistent_numpy.nn
 
 
 def test_matmul_autograd():

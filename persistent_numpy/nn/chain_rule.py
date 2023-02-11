@@ -43,13 +43,13 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
         nodes_from_output_vars = nodes_from_output_vars.union(nx.ancestors(forward_graph, output_node))
 
     chain_rule_nodes = nodes_from_inputs.intersection(nodes_from_output_vars)
-    backward_graph = forward_graph.subgraph(chain_rule_nodes).reverse()
+    reversed_forward_subgraph = forward_graph.subgraph(chain_rule_nodes).reverse()
 
-    sorted_nodes = topological_traversal(backward_graph)
+    sorted_nodes = topological_traversal(reversed_forward_subgraph)
 
     node_to_incoming_gradients = {}
     for node in sorted_nodes:
-        if backward_graph.out_degree(node) == 0:
+        if reversed_forward_subgraph.out_degree(node) == 0:
             continue
 
         forward_instruction = forward_graph.nodes[node]["instruction"]
@@ -60,7 +60,7 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
         )
 
         create_outgoing_gradients = getattr(jacobians, f"{forward_instruction.__class__.__name__}_jacobian")
-        incoming_gradients = get_incoming_gradients(node, backward_graph, node_to_incoming_gradients)
+        incoming_gradients = get_incoming_gradients(node, reversed_forward_subgraph, node_to_incoming_gradients)
         outgoing_gradients = create_outgoing_gradients(forward_instruction, incoming_gradients, forward_input_vars)
 
         for (operand_node, output_index), outgoing_gradient in zip(forward_operands, outgoing_gradients):

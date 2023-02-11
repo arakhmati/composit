@@ -111,9 +111,7 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
         input_var_3: np.random.uniform(-0.5, 0.5, input_var_3.shape),
     }
 
-    output = pnp.nn.evaluate(
-        output_var, inputs=evaluate_inputs
-    )
+    output = pnp.nn.evaluate(output_var, inputs=evaluate_inputs)
 
     input_var_to_scheme = {
         input_var_0: [
