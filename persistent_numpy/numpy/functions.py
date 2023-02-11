@@ -67,7 +67,7 @@ def asarray(array, name=None):
     return create_ndarray(name, array)
 
 
-__all__.append("ones")
+__all__.append("asarray")
 
 
 def named_ndarray(*args, name, **kwargs):

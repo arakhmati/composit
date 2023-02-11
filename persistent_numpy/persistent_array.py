@@ -1,6 +1,6 @@
 from pyrsistent import PClass, field
 
-from persistent_numpy.multidigraph import MultiDiGraph, visualize_graph
+from persistent_numpy.multidigraph import MultiDiGraph, visualize_graph, compose_all
 from persistent_numpy.hash import deterministic_hash
 
 
@@ -28,9 +28,12 @@ class PersistentArray(PClass):
     def rank(self) -> int:
         return len(self.shape)
 
-    def visualize(self):
-        def visualize_node(graphviz_graph, graph, node):
-            shapes = graph.nodes[node]["shapes"]
-            graphviz_graph.node(node.name, label=f"{node}:{shapes}")
 
-        visualize_graph(self.graph, visualize_node=visualize_node)
+def visualize(*arrays):
+    def visualize_node(graphviz_graph, graph, node):
+        shapes = graph.nodes[node]["shapes"]
+        graphviz_graph.node(node.name, label=f"{node}:{shapes}")
+
+    graph = compose_all(*(array.graph for array in arrays))
+
+    visualize_graph(graph, visualize_node=visualize_node)
