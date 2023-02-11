@@ -20,6 +20,15 @@ __all__ = []
 
 
 class GetItem(PClass):
+    indices = field()
+
+    def __call__(self, *input_arrays: list[np.ndarray]):
+        (array,) = input_arrays
+        indices = tuple(slice(start, stop, step) for start, stop, step in self.indices)
+        return array[indices]
+
+
+class DynamicGetItem(PClass):
     def __call__(self, *input_arrays: list[np.ndarray]):
         array, indices = input_arrays
         if isinstance(indices, np.ndarray):
@@ -30,10 +39,15 @@ class GetItem(PClass):
 
 
 def get_item(self, indices) -> "PersistentArray":
+    if isinstance(indices[0], slice):
+        indices = [(x.start, x.stop, x.step) for x in indices]
+        return create_from_numpy_compute_instruction(self, instruction=GetItem(indices=tuple(indices)))
+
     if not isinstance(indices, PersistentArray):
         name = f"Indices({indices})"
         indices = create_ndarray(name, np.asarray(indices, dtype=int))
-    return create_from_numpy_compute_instruction(self, indices, instruction=GetItem())
+
+    return create_from_numpy_compute_instruction(self, indices, instruction=DynamicGetItem())
 
 
 __all__.append("get_item")
@@ -59,8 +73,12 @@ PersistentArray.set_item = set_item
 
 
 def asarray(array, name=None):
+    if isinstance(array, PersistentArray):
+        return array
+
     if not isinstance(array, np.ndarray):
         array = np.asarray(array)
+
     if name is None:
         name = random_string()
 
