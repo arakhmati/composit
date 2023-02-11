@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 
 import persistent_numpy as pnp
-from persistent_numpy.tilelab import TilizationLevel, tilize, retilize
+from persistent_numpy.tilelab import TilizationLevel, tilize_tensor, retilize_tensor, tilize
 
 
 @pytest.mark.parametrize("input_shape", [(4, 32, 32)])
@@ -25,7 +25,7 @@ def test_concatenate(
 
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
-    tilized_input = tilize(
+    tilized_input = tilize_tensor(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
@@ -34,7 +34,7 @@ def test_concatenate(
         ],
     )
 
-    differently_tilized_input = tilize(
+    differently_tilized_input = tilize_tensor(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
@@ -43,7 +43,7 @@ def test_concatenate(
         ],
     )
 
-    retilized_input = retilize(tilized_input, differently_tilized_input)
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
 
     assert retilized_input == differently_tilized_input
 
@@ -67,7 +67,7 @@ def test_slice(
 
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
-    tilized_input = tilize(
+    tilized_input = tilize_tensor(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
@@ -76,7 +76,7 @@ def test_slice(
         ],
     )
 
-    differently_tilized_input = tilize(
+    differently_tilized_input = tilize_tensor(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
@@ -85,7 +85,7 @@ def test_slice(
         ],
     )
 
-    retilized_input = retilize(tilized_input, differently_tilized_input)
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
 
     assert retilized_input == differently_tilized_input
 
@@ -109,79 +109,45 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     add_output_var = matmul_output_var + input_var_2
     output_var = add_output_var + matmul_output_var - pnp.sum(input_var_3, -1, keepdims=True)
 
+    evaluate_inputs = {
+        input_var_0: np_input_0,
+        input_var_1: np_input_1,
+        input_var_2: np_input_2,
+        input_var_3: np_input_3,
+    }
+
     matmul_output, add_output, output = pnp.nn.evaluate(
-        matmul_output_var,
-        add_output_var,
-        output_var,
-        inputs={
-            input_var_0: np_input_0,
-            input_var_1: np_input_1,
-            input_var_2: np_input_2,
-            input_var_3: np_input_3,
-        },
+        matmul_output_var, add_output_var, output_var, inputs=evaluate_inputs
     )
 
-    tilized_input_0 = tilize(
-        np_input_0,
-        [
+    input_var_to_scheme = {
+        input_var_0: [
             TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
             TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
             TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
         ],
-    )
-
-    tilized_input_1 = tilize(
-        np_input_1,
-        [
+        input_var_1: [
             TilizationLevel(level_name="buffer", tile_shape=(16, 8)),
             TilizationLevel(level_name="block", tile_shape=(8, 4)),
             TilizationLevel(level_name="tile", tile_shape=(4, 4)),
         ],
-    )
-
-    input_2_tilization_levels = [
-        TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
-        TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
-        TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
-    ]
-
-    tilized_input_2 = tilize(
-        np_input_2,
-        input_2_tilization_levels,
-    )
-
-    tilized_input_3 = tilize(
-        np_input_3,
-        [
+        input_var_2: [
             TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
             TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
+            TilizationLevel(level_name="tile", tile_shape=(1, 4, 2)),
         ],
-    )
-
-    tilized_matmul = tilized_input_0 @ tilized_input_1
-    retilized_matmul = retilize(tilized_matmul, tilized_input_2)
-    tilized_add = retilized_matmul + tilized_input_2
-    tilized_output = tilized_add + retilized_matmul - tilized_input_3.sum(axis=-1)
-
-    manually_tilized_matmul = tilize(
-        matmul_output,
-        [
-            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 8)),
-            TilizationLevel(level_name="block", tile_shape=(1, 8, 4)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
+        input_var_3: [
+            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
+            TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
+            TilizationLevel(level_name="tile", tile_shape=(1, 4, 2)),
         ],
-    )
-    assert manually_tilized_matmul == tilized_matmul
+    }
 
-    manually_tilized_add = tilize(
-        add_output,
-        input_2_tilization_levels,
-    )
-    assert manually_tilized_add == tilized_add
+    tilized_output = tilize(output_var, inputs=input_var_to_scheme)
+    manually_tilized_output = tilize_tensor(output, tilized_output.levels)
 
-    manually_tilized_output = tilize(
-        output,
-        input_2_tilization_levels,
-    )
     assert manually_tilized_output == tilized_output
+    assert np.allclose(manually_tilized_output.evaluate(), tilized_output.evaluate(inputs=evaluate_inputs))
+
+    tiles = list(tilized_output)
+    assert len(tiles) == 64
