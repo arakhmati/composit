@@ -90,6 +90,48 @@ def test_slice(
     assert retilized_input == differently_tilized_input
 
 
+@pytest.mark.parametrize("input_shape", [(1, 16, 16)])
+@pytest.mark.parametrize("buffer_tile_shape", [(1, 16, 16)])
+@pytest.mark.parametrize("block_tile_shape", [(1, 8, 8)])
+@pytest.mark.parametrize("tile_shape", [(1, 4, 2)])
+@pytest.mark.parametrize("new_buffer_tile_shape", [(1, 16, 8)])
+@pytest.mark.parametrize("new_block_tile_shape", [(1, 8, 4)])
+@pytest.mark.parametrize("new_tile_shape", [(1, 4, 4)])
+def test_buffer_slice_block_slice_tile_concatenate(
+    input_shape,
+    buffer_tile_shape,
+    block_tile_shape,
+    tile_shape,
+    new_buffer_tile_shape,
+    new_block_tile_shape,
+    new_tile_shape,
+):
+
+    np_input = np.random.uniform(-0.5, 0.5, input_shape)
+
+    tilized_input = tilize_tensor(
+        np_input,
+        [
+            TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
+            TilizationLevel(level_name="block", tile_shape=block_tile_shape),
+            TilizationLevel(level_name="tile", tile_shape=tile_shape),
+        ],
+    )
+
+    differently_tilized_input = tilize_tensor(
+        np_input,
+        [
+            TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
+            TilizationLevel(level_name="block", tile_shape=new_block_tile_shape),
+            TilizationLevel(level_name="tile", tile_shape=new_tile_shape),
+        ],
+    )
+
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
+
+    assert retilized_input == differently_tilized_input
+
+
 @pytest.mark.parametrize("input_0_shape", [(1, 32, 64)])
 @pytest.mark.parametrize("input_1_shape", [(64, 16)])
 def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
@@ -143,4 +185,4 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     assert np.allclose(manually_tilized_output.evaluate(), tilized_output.evaluate(inputs=evaluate_inputs))
 
     tiles = list(tilized_output.tiles())
-    assert len(tiles) == 64
+    assert len(tiles) == 32
