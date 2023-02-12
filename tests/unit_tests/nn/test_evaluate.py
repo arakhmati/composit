@@ -19,19 +19,12 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(input_0_shape,
     np_input_3 = np.random.uniform(-0.5, 0.5, matmul_shape)
 
     torch_input_0 = torch.from_numpy(np_input_0)
-    torch_input_0.requires_grad = True
     torch_input_1 = torch.from_numpy(np_input_1)
-    torch_input_1.requires_grad = True
     torch_input_2 = torch.from_numpy(np_input_2)
-    torch_input_2.requires_grad = True
     torch_input_3 = torch.from_numpy(np_input_3)
-    torch_input_3.requires_grad = True
     torch_matmul_output = torch_input_0 @ torch_input_1
     torch_add_output = torch_matmul_output + torch_input_2
     torch_output = torch_add_output + torch_matmul_output - torch_input_3.sum(dim=-1, keepdims=True)
-
-    torch_incoming_gradient = torch.rand(torch_output.shape)
-    torch_output.backward(torch_incoming_gradient)
 
     input_var_0 = pnp.nn.variable(name="input_var_0", shape=np_input_0.shape)
     input_var_1 = pnp.nn.variable(name="input_var_1", shape=np_input_1.shape)

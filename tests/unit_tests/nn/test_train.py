@@ -72,7 +72,6 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
         torch_optimizer.zero_grad()
 
         torch_input = torch.from_numpy(np_input.copy()).detach()
-        torch_input.requires_grad = True
         torch_output = torch_model(torch_input, torch_parameters[0], torch_parameters[1], torch_parameters[2])
         torch_incoming_gradient = torch.from_numpy(np_incoming_gradient.copy())
         torch_output.backward(torch_incoming_gradient)
