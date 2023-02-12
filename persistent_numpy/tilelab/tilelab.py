@@ -25,10 +25,10 @@ class TilizedTensor(PClass):
     index_to_tile = field()
 
     @property
-    def levels(self):
+    def tilization_hierarchy(self):
         return [TilizationLevel(level_name=self.level_name, tile_shape=self.tile_shape)] + first(
             self.index_to_tile.values()
-        ).levels
+        ).tilization_hierarchy
 
     def num_tiles_per_axis(self):
         return tuple(dim // tile_dim for dim, tile_dim in zip(self.shape, self.tile_shape))
@@ -163,7 +163,7 @@ class Tile(PClass):
         return self.tile.shape
 
     @property
-    def levels(self):
+    def tilization_hierarchy(self):
         return []
 
     def __repr__(self):
@@ -299,18 +299,17 @@ def concatenate_tensors(tensors, axis):
         return Tile(tile=tile)
 
 
-def retilize_tensor(tensor_to_retilize: TilizedTensor, target_tensor: TilizedTensor):
+def retilize_tensor(tensor_to_retilize: TilizedTensor, tilization_hierarchy: list[TilizationLevel]):
     if isinstance(tensor_to_retilize, Tile):
         return tensor_to_retilize
 
-    if tensor_to_retilize.level_name != target_tensor.level_name:
-        raise RuntimeError("Level names must match")
+    tilization_level, *remaining_tilization_hierarchy = tilization_hierarchy
 
     shape = list(tensor_to_retilize.shape)
     tile_shape = list(tensor_to_retilize.tile_shape)
 
     tilized_tensor = tensor_to_retilize
-    for axis_to_retilize, (dim, target_dim) in enumerate(zip(tilized_tensor.tile_shape, target_tensor.tile_shape)):
+    for axis_to_retilize, (dim, target_dim) in enumerate(zip(tilized_tensor.tile_shape, tilization_level.tile_shape)):
         index_to_tile = {}
         if dim < target_dim:
             assert target_dim % dim == 0
@@ -358,8 +357,7 @@ def retilize_tensor(tensor_to_retilize: TilizedTensor, target_tensor: TilizedTen
         else:
             continue
 
-        shape[axis_to_retilize] = target_tensor.shape[axis_to_retilize]
-        tile_shape[axis_to_retilize] = target_tensor.tile_shape[axis_to_retilize]
+        tile_shape[axis_to_retilize] = tilization_level.tile_shape[axis_to_retilize]
         tilized_tensor = TilizedTensor(
             level_name=tilized_tensor.level_name,
             shape=tuple(shape),
@@ -368,19 +366,11 @@ def retilize_tensor(tensor_to_retilize: TilizedTensor, target_tensor: TilizedTen
         )
         assert math.prod(tilized_tensor.num_tiles_per_axis()) == len(tilized_tensor.index_to_tile)
 
-    assert tilized_tensor.shape == target_tensor.shape
-    assert tilized_tensor.tile_shape == target_tensor.tile_shape
-    assert tilized_tensor.index_to_tile.keys() == target_tensor.index_to_tile.keys()
-    assert tilized_tensor.num_tiles_per_axis() == target_tensor.num_tiles_per_axis()
-    assert len(tilized_tensor.index_to_tile) == len(target_tensor.index_to_tile)
-
     # Retilize sub-tiles
     ranges = tuple(range(num_tiles) for axis, num_tiles in enumerate(tilized_tensor.num_tiles_per_axis()))
     index_to_tile = {}
     for indices in itertools.product(*ranges):
-        index_to_tile[indices] = retilize_tensor(
-            tilized_tensor.index_to_tile[indices], target_tensor.index_to_tile[indices]
-        )
+        index_to_tile[indices] = retilize_tensor(tilized_tensor.index_to_tile[indices], remaining_tilization_hierarchy)
     tilized_tensor = tilized_tensor.set(index_to_tile=pmap(index_to_tile))
 
     return tilized_tensor
@@ -401,8 +391,6 @@ def tilize(
 
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
-    add_count = 0
-
     cache = initialize_cache_function(graph, inputs)
     for node in topological_traversal(graph):
         if (node, 0) in cache:
@@ -416,14 +404,17 @@ def tilize(
             instruction_output = input_arrays[0].sum(axis=instruction.axis, keepdims=instruction.keepdims)
         elif instruction.__class__.__name__ == "add":
             input_0, input_1 = input_arrays
-            if input_0.levels != input_1.levels and math.prod(input_0.shape) == math.prod(input_1.shape):
-                input_1 = retilize_tensor(input_1, input_0)
+            if input_0.tilization_hierarchy != input_1.tilization_hierarchy and math.prod(input_0.shape) == math.prod(
+                input_1.shape
+            ):
+                input_1 = retilize_tensor(input_1, input_0.tilization_hierarchy)
             instruction_output = input_0 + input_1
-            add_count += 1
         elif instruction.__class__.__name__ == "subtract":
             input_0, input_1 = input_arrays
-            if input_0.levels != input_1.levels and math.prod(input_0.shape) == math.prod(input_1.shape):
-                input_1 = retilize_tensor(input_1, input_0)
+            if input_0.tilization_hierarchy != input_1.tilization_hierarchy and math.prod(input_0.shape) == math.prod(
+                input_1.shape
+            ):
+                input_1 = retilize_tensor(input_1, input_0.tilization_hierarchy)
             instruction_output = input_0 - input_1
         else:
             raise RuntimeError(f"Unrecognized instruction: {instruction}")

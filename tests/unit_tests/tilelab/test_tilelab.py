@@ -43,7 +43,7 @@ def test_concatenate(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
 
     assert retilized_input == differently_tilized_input
 
@@ -85,7 +85,7 @@ def test_slice(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
 
     assert retilized_input == differently_tilized_input
 
@@ -127,7 +127,7 @@ def test_buffer_slice_block_slice_tile_concatenate(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input)
+    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
 
     assert retilized_input == differently_tilized_input
 
@@ -179,7 +179,7 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     }
 
     tilized_output = tilize(output_var, inputs=input_var_to_scheme)
-    manually_tilized_output = tilize_tensor(output, tilized_output.levels)
+    manually_tilized_output = tilize_tensor(output, tilized_output.tilization_hierarchy)
 
     assert manually_tilized_output == tilized_output
     assert np.allclose(manually_tilized_output.evaluate(), tilized_output.evaluate(inputs=evaluate_inputs))
