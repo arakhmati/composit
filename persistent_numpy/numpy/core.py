@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import inspect
-import sys
 from typing import Union
 
 import numpy as np
@@ -78,7 +79,12 @@ def create_from_numpy_compute_instruction(*operands, instruction) -> Union[Persi
     new_node = Node(name=name)
     graph = graph.add_node(new_node, instruction=instruction, shapes=shapes)
     for index, operand in enumerate(operands):
-        graph = graph.add_edge(operand.node, new_node, source_output_index=operand.output_index, sink_input_index=index)
+        graph = graph.add_edge(
+            operand.node,
+            new_node,
+            source_output_index=operand.output_index,
+            sink_input_index=index,
+        )
 
     result = tuple(
         PersistentArray(graph=graph, node=new_node, output_index=output_index) for output_index, _ in enumerate(shapes)

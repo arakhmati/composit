@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 
 from persistent_numpy.numpy.core import get_operands

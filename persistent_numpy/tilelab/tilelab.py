@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import collections
 import itertools
 import math
 import operator
 
 import numpy as np
-from pyrsistent import PClass, field, pmap, pvector
+from pyrsistent import PClass, field, pmap
 from toolz.itertoolz import first
 
 import persistent_numpy as pnp
@@ -157,6 +159,7 @@ class TilizedTensor(PClass):
 
 class Tile(PClass):
     tile = field()
+    level_name = field(initial="atomic")
 
     @property
     def shape(self):

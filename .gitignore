@@ -11,3 +11,9 @@ build/
 
 venv/
 wvenv/
+
+# Pytest
+tmp/
+
+# Profiling
+prof/
