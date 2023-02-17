@@ -204,7 +204,6 @@ def tilize_tensor(
     tensor,
     tilization_hierarchy: list[TilizationLevel],
 ):
-
     tilization_level, *remaining_tilization_hierarchy = tilization_hierarchy
     tile_shape = tilization_level.tile_shape
 
@@ -241,7 +240,6 @@ def slice_tensors(tensor, axis, start, end, slice_size):
     shape[axis] = (end - start) * slice_size
 
     if isinstance(tensor, TilizedTensor):
-
         index_to_tile = {}
         ranges = tuple(range(num_tiles) for num_tiles in tensor.num_tiles_per_axis())
         for indices in itertools.product(*ranges):
@@ -352,7 +350,11 @@ def retilize_tensor(tensor_to_retilize: TilizedTensor, tilization_hierarchy: lis
                 end = start + num_tiles
 
                 index_to_tile[new_indices] = slice_tensors(
-                    tilized_tensor[indices], axis=axis_to_retilize, start=start, end=end, slice_size=slice_size
+                    tilized_tensor[indices],
+                    axis=axis_to_retilize,
+                    start=start,
+                    end=end,
+                    slice_size=slice_size,
                 )
         else:
             continue
@@ -387,8 +389,8 @@ def tilize(
     *output_vars,
     inputs,
     initialize_cache_function=initialize_cache,
+    return_cache=False,
 ):
-
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
     cache = initialize_cache_function(graph, inputs)
@@ -431,4 +433,6 @@ def tilize(
     if len(result) == 1:
         (result,) = result
 
+    if return_cache:
+        return result, cache
     return result

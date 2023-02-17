@@ -3,7 +3,12 @@ import pytest
 import numpy as np
 
 import persistent_numpy as pnp
-from persistent_numpy.tilelab import TilizationLevel, tilize_tensor, retilize_tensor, tilize
+from persistent_numpy.tilelab import (
+    TilizationLevel,
+    tilize_tensor,
+    retilize_tensor,
+    tilize,
+)
 
 
 @pytest.mark.parametrize("input_shape", [(4, 32, 32)])
@@ -182,7 +187,10 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     manually_tilized_output = tilize_tensor(output, tilized_output.tilization_hierarchy)
 
     assert manually_tilized_output == tilized_output
-    assert np.allclose(manually_tilized_output.evaluate(), tilized_output.evaluate(inputs=evaluate_inputs))
+    assert np.allclose(
+        manually_tilized_output.evaluate(),
+        tilized_output.evaluate(inputs=evaluate_inputs),
+    )
 
     tiles = list(tilized_output.tiles())
     assert len(tiles) == 32
