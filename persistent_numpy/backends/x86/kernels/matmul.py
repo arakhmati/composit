@@ -6,9 +6,7 @@ import persistent_numpy.nn
 from persistent_numpy.tilelab import TilizedTensor
 
 
-def generate_kernel(path, input_a, input_b, *, unroll_levels=None, transpose_b_levels=None):
-    if unroll_levels is None:
-        unroll_levels = set()
+def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manually: bool):
     if transpose_b_levels is None:
         transpose_b_levels = set()
 
@@ -33,182 +31,113 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
 void MatmulKernel(const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_a, const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_b, float* __restrict__ __attribute__((aligned(ALIGNMENT))) output) {\n
 """
         )
-        generate_indices(f, input_a, input_b, unroll_levels=unroll_levels, transpose_b_levels=transpose_b_levels)
+        generate_indices(f, input_a, input_b, transpose_b_levels=transpose_b_levels, use_avx_manually=use_avx_manually)
         f.write("}\n")
 
 
 def generate_indices(
-    f, input_a, input_b, a_offset="0", b_offset="0", output_offset="0", *, unroll_levels, transpose_b_levels
+    f, input_a, input_b, a_offset="0", b_offset="0", output_offset="0", *, transpose_b_levels, use_avx_manually: bool
 ):
     level_name = input_a.level_name
     if isinstance(input_a, TilizedTensor):
-        if level_name in unroll_levels:
+        a_num_tiles_per_axis = input_a.num_tiles_per_axis()
+        b_num_tiles_per_axis = input_b.num_tiles_per_axis()
+        a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
+        _, n_range = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
 
-            assert level_name not in transpose_b_levels
+        b_size, m_size, k_size, n_size = a_ranges + (n_range,)
 
-            a_num_tiles_per_axis = input_a.num_tiles_per_axis()
-            b_num_tiles_per_axis = input_b.num_tiles_per_axis()
-            a_ranges = tuple(range(num_tiles) for num_tiles in a_num_tiles_per_axis)
-            _, n_range = (range(num_tiles) for num_tiles in b_num_tiles_per_axis)
+        b = f"{level_name}_b"
+        m = f"{level_name}_m"
+        k = f"{level_name}_k"
+        n = f"{level_name}_n"
 
-            for *a_indices, n in itertools.product(*a_ranges, n_range):
-                a_indices = tuple(a_indices)
-                *_, m, k = a_indices
-                b_indices = (k, n)
-                a_tile = input_a[a_indices]
-                b_tile = input_b[b_indices]
+        f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
+        f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
 
-                next_a_offset = (
-                    f"{a_offset} + {(m * input_a.num_tiles_per_axis()[-1] + k) * math.prod(input_a.tile_shape)}"
-                )
-                next_b_offset = (
-                    f"{b_offset} + {(k * input_b.num_tiles_per_axis()[-1] + n) * math.prod(input_b.tile_shape)}"
-                )
-                next_output_offset = f"{output_offset} + {(m * input_b.num_tiles_per_axis()[-1] + n) * math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])}"
+        if level_name in transpose_b_levels:
+            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
 
-                generate_indices(
-                    f,
-                    a_tile,
-                    b_tile,
-                    a_offset=next_a_offset,
-                    b_offset=next_b_offset,
-                    output_offset=next_output_offset,
-                    unroll_levels=unroll_levels,
-                    transpose_b_levels=transpose_b_levels,
-                )
+            next_output_offset = f"{level_name}_output_offset"
+            f.write(
+                f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
+            )
+
+            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
+
+            next_a_offset = f"{level_name}_a_offset"
+            next_b_offset = f"{level_name}_b_offset"
+
+            f.write(f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n")
+            f.write(f"auto {next_b_offset} = {b_offset} + ({n} * {k_size} + {k}) * {math.prod(input_b.tile_shape)};\n")
+
+            a_tile = input_a[(0, 0, 0)]
+            b_tile = input_b[(0, 0)]
+
+            generate_indices(
+                f,
+                a_tile,
+                b_tile,
+                a_offset=next_a_offset,
+                b_offset=next_b_offset,
+                output_offset=next_output_offset,
+                transpose_b_levels=transpose_b_levels,
+                use_avx_manually=use_avx_manually,
+            )
+
+            f.write("}\n")
+
         else:
+            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
+            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
 
-            a_num_tiles_per_axis = input_a.num_tiles_per_axis()
-            b_num_tiles_per_axis = input_b.num_tiles_per_axis()
-            a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
-            _, n_range = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
+            next_a_offset = f"{level_name}_a_offset"
+            next_b_offset = f"{level_name}_b_offset"
+            next_output_offset = f"{level_name}_output_offset"
 
-            b_size, m_size, k_size, n_size = a_ranges + (n_range,)
+            f.write(f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n")
+            f.write(f"auto {next_b_offset} = {b_offset} + ({k} * {n_size} + {n}) * {math.prod(input_b.tile_shape)};\n")
+            f.write(
+                f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
+            )
 
-            b = f"{level_name}_b"
-            m = f"{level_name}_m"
-            k = f"{level_name}_k"
-            n = f"{level_name}_n"
+            a_tile = input_a[(0, 0, 0)]
+            b_tile = input_b[(0, 0)]
 
-            f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
-            f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
+            generate_indices(
+                f,
+                a_tile,
+                b_tile,
+                a_offset=next_a_offset,
+                b_offset=next_b_offset,
+                output_offset=next_output_offset,
+                transpose_b_levels=transpose_b_levels,
+                use_avx_manually=use_avx_manually,
+            )
 
-            if level_name in transpose_b_levels:
-                f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
-                next_output_offset = f"{level_name}_output_offset"
-                f.write(
-                    f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
-                )
-
-                f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-
-                next_a_offset = f"{level_name}_a_offset"
-                next_b_offset = f"{level_name}_b_offset"
-
-                f.write(
-                    f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n"
-                )
-                f.write(
-                    f"auto {next_b_offset} = {b_offset} + ({n} * {k_size} + {k}) * {math.prod(input_b.tile_shape)};\n"
-                )
-
-                a_tile = input_a[(0, 0, 0)]
-                b_tile = input_b[(0, 0)]
-
-                generate_indices(
-                    f,
-                    a_tile,
-                    b_tile,
-                    a_offset=next_a_offset,
-                    b_offset=next_b_offset,
-                    output_offset=next_output_offset,
-                    unroll_levels=unroll_levels,
-                    transpose_b_levels=transpose_b_levels,
-                )
-
-                f.write("}\n")
-
-            else:
-                f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-                f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
-                next_a_offset = f"{level_name}_a_offset"
-                next_b_offset = f"{level_name}_b_offset"
-                next_output_offset = f"{level_name}_output_offset"
-
-                f.write(
-                    f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n"
-                )
-                f.write(
-                    f"auto {next_b_offset} = {b_offset} + ({k} * {n_size} + {n}) * {math.prod(input_b.tile_shape)};\n"
-                )
-                f.write(
-                    f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
-                )
-
-                a_tile = input_a[(0, 0, 0)]
-                b_tile = input_b[(0, 0)]
-
-                generate_indices(
-                    f,
-                    a_tile,
-                    b_tile,
-                    a_offset=next_a_offset,
-                    b_offset=next_b_offset,
-                    output_offset=next_output_offset,
-                    unroll_levels=unroll_levels,
-                    transpose_b_levels=transpose_b_levels,
-                )
-
-                f.write("}\n")
             f.write("}\n")
-            f.write("}\n")
-            f.write("}\n")
+        f.write("}\n")
+        f.write("}\n")
+        f.write("}\n")
     else:
-        if level_name in unroll_levels:
-            *b_ranges, m_range, k_range = tuple(range(num_tiles) for num_tiles in input_a.shape)
-            _, n_range = (range(num_tiles) for num_tiles in input_b.shape)
 
-            if level_name in transpose_b_levels:
-                ranges = b_ranges + [m_range, n_range, k_range]
-            else:
-                ranges = b_ranges + [m_range, k_range, n_range]
+        a_ranges = tuple(num_tiles for num_tiles in input_a.shape)
+        _, n_range = (num_tiles for num_tiles in input_b.shape)
 
-            for *a_indices, n in itertools.product(*ranges):
-                *batch_indices, m, k = a_indices
-                assert all(batch_index == 0 for batch_index in batch_indices)
+        b_size, m_size, k_size, n_size = a_ranges + (n_range,)
 
-                a_index = f"{a_offset} + {m * input_a.shape[-1] + k}"
+        b = f"_b"
+        m = f"_m"
+        k = f"_k"
+        n = f"_n"
 
-                if level_name in transpose_b_levels:
-                    b_index = f"{b_offset} + {n * input_b.shape[-2] + k}"
-                else:
-                    b_index = f"{b_offset} + {k * input_b.shape[-1] + n}"
+        f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
+        f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
 
-                output_index = f"{output_offset} + {m * input_b.shape[-1] + n}"
-                f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
+        if level_name in transpose_b_levels:
+            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
 
-        else:
-            a_ranges = tuple(num_tiles for num_tiles in input_a.shape)
-            _, n_range = (num_tiles for num_tiles in input_b.shape)
-
-            b_size, m_size, k_size, n_size = a_ranges + (n_range,)
-
-            b = f"_b"
-            m = f"_m"
-            k = f"_k"
-            n = f"_n"
-
-            f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
-            f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
-
-            if level_name in transpose_b_levels:
-                f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
-                # output_index = f"_output_offset"
-                # f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
-
+            if use_avx_manually:
                 f.write(f"__m256 output_vector = _mm256_setzero_ps();\n")
 
                 f.write(f"for (auto {k} = 0; {k} < {k_size}; {k} += AVX_SIZE) {{\n")
@@ -217,38 +146,45 @@ def generate_indices(
                 f.write(f"__m256 input_b_vector = _mm256_load_ps(input_b + {b_offset} + {n} * {k_size} + {k});\n")
                 f.write(f"output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);\n")
 
-                # a_index = f"_a_offset"
-                # b_index = f"_b_offset"
-                #
-                # f.write(f"auto {a_index} = {a_offset} + ({m} * {k_size} + {k});\n")
-                # f.write(f"auto {b_index} = {b_offset} + ({n} * {k_size} + {k});\n")
-                #
-                # f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
-
                 f.write("}\n")
 
                 f.write(f"output[{output_offset} + {m} * {n_size} + {n}] += _mm256_reduce_add_ps(output_vector);\n")
             else:
+                f.write(f"for (auto {k} = 0; {k} < {n_size}; {k}++) {{\n")
 
-                f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-                f.write("#pragma GCC ivdep\n")
-                f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
+                output_index = f"_output_offset"
+                f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
                 a_index = f"_a_offset"
                 b_index = f"_b_offset"
-                output_index = f"_output_offset"
 
                 f.write(f"auto {a_index} = {a_offset} + ({m} * {k_size} + {k});\n")
-                f.write(f"auto {b_index} = {b_offset} + ({k} * {n_size} + {n});\n")
-                f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
+                f.write(f"auto {b_index} = {b_offset} + ({n} * {k_size} + {k});\n")
 
                 f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
 
                 f.write("}\n")
 
+        else:
+
+            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
+            f.write("#pragma GCC ivdep\n")
+            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
+
+            a_index = f"_a_offset"
+            b_index = f"_b_offset"
+            output_index = f"_output_offset"
+
+            f.write(f"auto {a_index} = {a_offset} + ({m} * {k_size} + {k});\n")
+            f.write(f"auto {b_index} = {b_offset} + ({k} * {n_size} + {n});\n")
+            f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
+
+            f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
+
             f.write("}\n")
-            f.write("}\n")
-            f.write("}\n")
+
+        f.write("}\n")
+        f.write("}\n")
+        f.write("}\n")
 
 
 def transpose_tiles(tensor, transpose_levels, order):

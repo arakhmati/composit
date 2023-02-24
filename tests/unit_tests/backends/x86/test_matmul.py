@@ -104,21 +104,13 @@ def run_pnp_kernel(test_output_path):
 def run_matmul(
     test_output_path,
     compare_against_torch: bool,
-    unroll_levels: list[str],
     transpose_b_levels: list[str],
+    use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
-    l3_cache_a_shape: tuple[int, ...],
-    l2_cache_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
-    avx_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l3_cache_b_shape: tuple[int, ...],
-    l2_cache_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
-    avx_b_shape: tuple[int, ...],
 ):
-    if math.prod(avx_a_shape) > 64 and "atomic" in unroll_levels:
-        pytest.skip("AVX shape is too big for unrolling")
 
     input_var_a = pnp.nn.variable(name="input_var_a", shape=input_a_shape)
     input_var_b = pnp.nn.variable(name="input_var_b", shape=input_b_shape)
@@ -135,16 +127,10 @@ def run_matmul(
 
     input_var_to_scheme = {
         input_var_a: [
-            TilizationLevel(level_name="l3_cache", tile_shape=l3_cache_a_shape),
-            TilizationLevel(level_name="l2_cache", tile_shape=l2_cache_a_shape),
             TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
-            TilizationLevel(level_name="avx", tile_shape=avx_a_shape),
         ],
         input_var_b: [
-            TilizationLevel(level_name="l3_cache", tile_shape=l3_cache_b_shape),
-            TilizationLevel(level_name="l2_cache", tile_shape=l2_cache_b_shape),
             TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape),
-            TilizationLevel(level_name="avx", tile_shape=avx_b_shape),
         ],
     }
 
@@ -155,83 +141,73 @@ def run_matmul(
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
+    tilized_input_a = cache[(input_var_a.node, input_var_a.output_index)]
+    tilized_input_b = cache[(input_var_b.node, input_var_b.output_index)]
+
     generate_kernel(
         test_output_path,
-        cache[(input_var_a.node, input_var_a.output_index)],
-        cache[(input_var_b.node, input_var_b.output_index)],
-        unroll_levels=unroll_levels,
+        tilized_input_a,
+        tilized_input_b,
         transpose_b_levels=transpose_b_levels,
+        use_avx_manually=use_avx_manually,
     )
 
     generate_data(
         test_output_path,
-        cache[(input_var_a.node, input_var_a.output_index)],
-        cache[(input_var_b.node, input_var_b.output_index)],
-        cache[(output_var.node, output_var.output_index)],
+        tilized_input_a,
+        tilized_input_b,
+        tilized_output,
         evaluate_inputs,
         transpose_b_levels=transpose_b_levels,
     )
 
+    fig, ax = plt.subplots()
     if compare_against_torch:
         torch_execution_times = run_torch(np_input_a, np_input_b)
-        plt.plot(torch_execution_times, color="red")
+        ax.plot(torch_execution_times, color="red")
 
     pnp_execution_times = run_pnp_kernel(test_output_path)
-    plt.plot(pnp_execution_times, color="green")
-    plt.savefig(test_output_path / "execution_times.png")
-    plt.clf()
+
+    ax.plot(pnp_execution_times, color="green")
+
+    def center_y_axis(axes):
+        y_max = np.abs(axes.get_ylim()).max()
+        axes.set_ylim(ymin=0, ymax=y_max)
+
+    center_y_axis(ax)
+    fig.savefig(test_output_path / "execution_times.png")
+    fig.clf()
 
 
 @pytest.mark.parametrize("compare_against_torch", [False])
-@pytest.mark.parametrize("unroll_levels", [[], ["atomic"]])
-@pytest.mark.parametrize("transpose_b_levels", [[], ["atomic"], ["atomic", "avx", "l1_cache", "l2_cache", "l3_cache"]])
+@pytest.mark.parametrize("transpose_b_levels", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
+@pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
-@pytest.mark.parametrize("l3_cache_a_shape", [(1, 64, 64)])
-@pytest.mark.parametrize("l2_cache_a_shape", [(1, 32, 64)])
-@pytest.mark.parametrize("l1_cache_a_shape", [(1, 32, 32)])
-@pytest.mark.parametrize("avx_a_shape", [(1, 8, 8), (1, 32, 32)])
+@pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
 @pytest.mark.parametrize("input_b_shape", [(128, 128)])
-@pytest.mark.parametrize("l3_cache_b_shape", [(64, 64)])
-@pytest.mark.parametrize("l2_cache_b_shape", [(64, 32)])
-@pytest.mark.parametrize("l1_cache_b_shape", [(32, 32)])
-@pytest.mark.parametrize("avx_b_shape", [(8, 8), (32, 32)])
+@pytest.mark.parametrize("l1_cache_b_shape", [(64, 64)])
 def test_matmul(
     request,
     compare_against_torch: bool,
-    unroll_levels: list[str],
     transpose_b_levels: list[str],
+    use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
-    l3_cache_a_shape: tuple[int, ...],
-    l2_cache_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
-    avx_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l3_cache_b_shape: tuple[int, ...],
-    l2_cache_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
-    avx_b_shape: tuple[int, ...],
 ):
-    if math.prod(avx_a_shape) > 64 and "atomic" in unroll_levels:
-        pytest.skip("AVX shape is too big for unrolling")
-
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
 
     run_matmul(
         test_output_path,
         compare_against_torch,
-        unroll_levels,
         transpose_b_levels,
+        use_avx_manually,
         input_a_shape,
-        l3_cache_a_shape,
-        l2_cache_a_shape,
         l1_cache_a_shape,
-        avx_a_shape,
         input_b_shape,
-        l3_cache_b_shape,
-        l2_cache_b_shape,
         l1_cache_b_shape,
-        avx_b_shape,
     )
 
 
@@ -239,16 +215,10 @@ if __name__ == "__main__":
     run_matmul(
         FILE_DIR / "test_output" / "custom",
         compare_against_torch=True,
-        unroll_levels=[],
-        transpose_b_levels=["atomic", "avx", "l1_cache", "l2_cache", "l3_cache"],
+        transpose_b_levels=["atomic", "l1_cache"],
+        use_avx_manually=True,
         input_a_shape=(1, 128, 128),
-        l3_cache_a_shape=(1, 64, 64),
-        l2_cache_a_shape=(1, 32, 64),
-        l1_cache_a_shape=(1, 32, 32),
-        avx_a_shape=(1, 32, 32),
+        l1_cache_a_shape=(1, 64, 64),
         input_b_shape=(128, 128),
-        l3_cache_b_shape=(64, 64),
-        l2_cache_b_shape=(64, 32),
-        l1_cache_b_shape=(32, 32),
-        avx_b_shape=(32, 32),
+        l1_cache_b_shape=(64, 64),
     )
