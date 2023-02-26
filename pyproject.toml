@@ -2,4 +2,8 @@
 target-version = ['py37', 'py38']
 line-length = 120
 include = '(\.pyi?)$'
-exclude = 'third_party|venv|wvenv'
+exclude = 'vendor|venv|wvenv'
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "pyimmer/tests"]
+python_files = ["test_*.py", "*_test.py"]
