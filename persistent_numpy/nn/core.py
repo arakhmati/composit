@@ -1,4 +1,3 @@
-import numba
 from pyrsistent import immutable, PClass
 from toolz.functoolz import partial
 
@@ -18,12 +17,8 @@ def variable(*, name: str, shape: tuple) -> PersistentArray:
     return PersistentArray(graph=graph, node=node)
 
 
-def wrap_as_instruction(*, use_njit=True):
+def wrap_as_instruction():
     def outer_wrapper(compute_function):
-        if use_njit:
-            compute_function = numba.jit(
-                compute_function, nopython=True, parallel=True, cache=True, error_model="numpy", fastmath=True
-            )
         compute_function = staticmethod(compute_function)
 
         def wrapper(*operands, **klass_kwargs):

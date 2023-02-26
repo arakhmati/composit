@@ -28,7 +28,7 @@ def gelu(input_tensor):
     return input_tensor * cdf(input_tensor)
 
 
-@wrap_as_instruction(use_njit=False)
+@wrap_as_instruction()
 def convolution(image, filters):
     # TODO: Make convolution generic for all dimensions?
 
