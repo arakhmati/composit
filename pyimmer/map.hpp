@@ -34,8 +34,21 @@ static int py_immer_map_Init(py_immer_map_t *self, PyObject *args,
 }
 
 static PyObject *py_immer_map_get(PyObject *self, PyObject *args) {
-  auto key = py_object_wrapper_t{PyTuple_GET_ITEM(args, 0)};
+
+  auto nargs = PyTuple_Size(args);
+
   auto pmap = (py_immer_map_t *)self;
+  auto key = py_object_wrapper_t{PyTuple_GET_ITEM(args, 0)};
+
+  PyObject *default_value = Py_None;
+  if (nargs > 1) {
+    default_value = PyTuple_GET_ITEM(args, 1);
+  }
+  Py_INCREF(default_value);
+
+  if (pmap->immer_map.find(key) == nullptr) {
+    return default_value;
+  }
   return pmap->immer_map.at(key).get();
 }
 
@@ -104,13 +117,17 @@ static py_immer_map_t *pmap(PyObject *self, PyObject *args) {
 
   auto pmap = (py_immer_map_t *)(PyObject_CallObject(
       (PyObject *)&py_immer_map_type, NULL));
-  auto dictionary = PyTuple_GET_ITEM(args, 0);
 
-  Py_ssize_t position = 0;
-  PyObject *key, *value;
-  while (PyDict_Next(dictionary, &position, &key, &value)) {
-    pmap->immer_map = pmap->immer_map.insert(
-        {py_object_wrapper_t{key}, py_object_wrapper_t{value}});
+  auto nargs = PyTuple_Size(args);
+  if (nargs > 0) {
+    auto dictionary = PyTuple_GET_ITEM(args, 0);
+
+    Py_ssize_t position = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(dictionary, &position, &key, &value)) {
+      pmap->immer_map = pmap->immer_map.insert(
+          {py_object_wrapper_t{key}, py_object_wrapper_t{value}});
+    }
   }
 
   return pmap;
