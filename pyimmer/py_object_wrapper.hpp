@@ -12,11 +12,14 @@ namespace pyimmer::py_object_wrapper {
 class py_object_wrapper_t {
 public:
   py_object_wrapper_t(PyObject *py_object) : py_object_(py_object) {
-    Py_INCREF(py_object_);
+    Py_INCREF(this->py_object_);
   }
+  py_object_wrapper_t() { Py_DECREF(this->py_object_); }
 
-  PyObject *get() const { return this->py_object_; }
-  PyObject *get() { return this->py_object_; }
+  PyObject *get() const {
+    Py_INCREF(this->py_object_);
+    return this->py_object_;
+  }
 
   friend struct std::hash<py_object_wrapper_t>;
 

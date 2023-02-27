@@ -20,6 +20,8 @@ typedef struct py_immer_map_t {
   immer_map_t immer_map;
 } py_immer_map_t;
 
+static py_immer_map_t *create_map_instance();
+
 static PyObject *py_immer_map_New(PyTypeObject *type, PyObject *args,
                                   PyObject *kwds) {
   constexpr auto num_items = 0;
@@ -33,6 +35,15 @@ static int py_immer_map_Init(py_immer_map_t *self, PyObject *args,
   return 0;
 }
 
+static PyObject *py_immer_map_get_item(PyObject *self, PyObject *key) {
+  auto pmap = (py_immer_map_t *)self;
+  if (pmap->immer_map.find(py_object_wrapper_t{key}) == nullptr) {
+    PyErr_SetString(PyExc_KeyError, "Key is not in the persistent map!");
+    return NULL;
+  }
+  return pmap->immer_map.at(key).get();
+}
+
 static PyObject *py_immer_map_get(PyObject *self, PyObject *args) {
 
   auto nargs = PyTuple_Size(args);
@@ -44,9 +55,9 @@ static PyObject *py_immer_map_get(PyObject *self, PyObject *args) {
   if (nargs > 1) {
     default_value = PyTuple_GET_ITEM(args, 1);
   }
-  Py_INCREF(default_value);
 
   if (pmap->immer_map.find(key) == nullptr) {
+    Py_INCREF(default_value);
     return default_value;
   }
   return pmap->immer_map.at(key).get();
@@ -57,15 +68,80 @@ static Py_ssize_t py_immer_map_len(PyObject *self) {
   return pmap->immer_map.size();
 }
 
+static int py_immer_map_contains(PyObject *self, PyObject *value) {
+
+  auto pmap = (py_immer_map_t *)self;
+  auto key = py_object_wrapper_t{value};
+
+  if (pmap->immer_map.find(key) == nullptr) {
+    return 0;
+  }
+  return 1;
+}
+
+static PySequenceMethods py_immer_sequence_methods = {
+    .sq_length = py_immer_map_len,
+    .sq_concat = NULL,
+    .sq_repeat = NULL,
+    .sq_item = NULL,
+    .sq_ass_item = NULL,
+    .sq_contains = py_immer_map_contains,
+    .sq_inplace_concat = NULL,
+    .sq_inplace_repeat = NULL,
+};
+
 static PyMappingMethods py_immer_map_mapping_methods = {
     .mp_length = py_immer_map_len,
-    .mp_subscript = py_immer_map_get,
+    .mp_subscript = py_immer_map_get_item,
     .mp_ass_subscript = NULL,
 };
 
+static py_immer_map_t *py_immer_map_set(py_immer_map_t *self, PyObject *args) {
+
+  auto old_pmap = (py_immer_map_t *)self;
+  auto pmap = create_map_instance();
+  pmap->immer_map = old_pmap->immer_map;
+
+  auto key = PyTuple_GET_ITEM(args, 0);
+  auto value = PyTuple_GET_ITEM(args, 1);
+  pmap->immer_map = pmap->immer_map.insert(
+      {py_object_wrapper_t{key}, py_object_wrapper_t{value}});
+
+  return pmap;
+}
+
+static py_immer_map_t *py_immer_map_update(py_immer_map_t *self,
+                                           PyObject *args) {
+
+  auto old_pmap = (py_immer_map_t *)self;
+  auto pmap = create_map_instance();
+  pmap->immer_map = old_pmap->immer_map;
+
+  auto dictionary = PyTuple_GET_ITEM(args, 0);
+  if (PyDict_CheckExact(dictionary)) {
+    Py_ssize_t position = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(dictionary, &position, &key, &value)) {
+      pmap->immer_map = pmap->immer_map.insert(
+          {py_object_wrapper_t{key}, py_object_wrapper_t{value}});
+    }
+  } else {
+    auto immer_pmap_with_updates = ((py_immer_map_t *)dictionary)->immer_map;
+    for (auto &&[key, value] : immer_pmap_with_updates) {
+      pmap->immer_map = pmap->immer_map.insert({key, value});
+    }
+  }
+
+  return pmap;
+}
+
 static PyMethodDef py_immer_map_methods[] = {
     {"get", (PyCFunction)py_immer_map_get, METH_VARARGS,
-     "Return the value given key"},
+     "Return value given key"},
+    {"set", (PyCFunction)py_immer_map_set, METH_VARARGS,
+     "Update map with key-value pair"},
+    {"update", (PyCFunction)py_immer_map_update, METH_VARARGS,
+     "Update map with key-value pairs from another map or dict"},
     {NULL} /* Sentinel */
 };
 
@@ -84,7 +160,7 @@ static PyTypeObject py_immer_map_type = {
     {}, /* tp_as_async */
     {}, /* tp_repr */
     {}, /* tp_as_number */
-    {}, /* tp_as_sequence */
+    &py_immer_sequence_methods,
     &py_immer_map_mapping_methods,
     {}, /* tp_hash */
     {}, /* tp_call */
@@ -113,21 +189,18 @@ static PyTypeObject py_immer_map_type = {
     py_immer_map_New,
 };
 
+static py_immer_map_t *create_map_instance() {
+  return (py_immer_map_t *)(PyObject_CallObject((PyObject *)&py_immer_map_type,
+                                                NULL));
+}
+
 static py_immer_map_t *pmap(PyObject *self, PyObject *args) {
 
-  auto pmap = (py_immer_map_t *)(PyObject_CallObject(
-      (PyObject *)&py_immer_map_type, NULL));
+  auto pmap = create_map_instance();
 
   auto nargs = PyTuple_Size(args);
   if (nargs > 0) {
-    auto dictionary = PyTuple_GET_ITEM(args, 0);
-
-    Py_ssize_t position = 0;
-    PyObject *key, *value;
-    while (PyDict_Next(dictionary, &position, &key, &value)) {
-      pmap->immer_map = pmap->immer_map.insert(
-          {py_object_wrapper_t{key}, py_object_wrapper_t{value}});
-    }
+    pmap = py_immer_map_update(pmap, args);
   }
 
   return pmap;
