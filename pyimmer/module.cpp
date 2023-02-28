@@ -26,10 +26,12 @@ PyMODINIT_FUNC PyInit_pyimmer(void) {
   PyModule_AddObject(module, "PMap",
                      (PyObject *)&pyimmer::map::py_immer_map_type);
 
-  if (PyType_Ready(&pyimmer::map_key_iterator::py_immer_map_key_iterator_type) < 0) {
+  if (PyType_Ready(&pyimmer::map_key_iterator::py_immer_map_key_iterator_type) <
+      0) {
     return NULL;
   }
-  Py_INCREF((PyObject *)&pyimmer::map_key_iterator::py_immer_map_key_iterator_type);
+  Py_INCREF(
+      (PyObject *)&pyimmer::map_key_iterator::py_immer_map_key_iterator_type);
   PyModule_AddObject(
       module, pyimmer::map_key_iterator::py_immer_map_key_iterator_type.tp_name,
       (PyObject *)&pyimmer::map_key_iterator::py_immer_map_key_iterator_type);

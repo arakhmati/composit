@@ -128,7 +128,7 @@ static py_immer_map_t *py_immer_map_update(py_immer_map_t *self,
   return py_immer_map;
 }
 
-static PyObject *py_immer_map_iter(PyObject *object) {
+static PyObject *py_immer_map_key_iter(PyObject *object) {
 
   using pyimmer::map_key_iterator::py_immer_map_key_iterator_t;
   using pyimmer::map_key_iterator::py_immer_map_key_iterator_type;
@@ -145,6 +145,8 @@ static PyMethodDef py_immer_map_methods[] = {
      "Update map with key-value pair"},
     {"update", (PyCFunction)py_immer_map_update, METH_VARARGS,
      "Update map with key-value pairs from another map or dict"},
+    {"keys", (PyCFunction)py_immer_map_key_iter, METH_VARARGS,
+     "Iterate over keys"},
     {NULL} /* Sentinel */
 };
 
@@ -180,7 +182,7 @@ static PyTypeObject py_immer_map_type = {
     {}, /* tp_clear */
     {}, /* tp_richcompare */
     {}, /* tp_weaklistoffset */
-    py_immer_map_iter,
+    py_immer_map_key_iter,
     {}, /* tp_iternext */
     py_immer_map_methods,
     py_immer_map_members,
