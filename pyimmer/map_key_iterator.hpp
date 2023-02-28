@@ -33,8 +33,8 @@ static PyObject *py_immer_map_key_iterator_next(
     py_immer_map_key_iterator_t *py_immer_map_key_iterator) {
 
   if (py_immer_map_key_iterator->index < py_immer_map_key_iterator->length) {
-    PyObject *element = py_immer_map_key_iterator->iterator->first.get();
-    PyObject *result = Py_BuildValue("O", element);
+    PyObject *key = py_immer_map_key_iterator->iterator->first.get();
+    PyObject *result = Py_BuildValue("O", key);
 
     py_immer_map_key_iterator->iterator =
         std::next(py_immer_map_key_iterator->iterator);

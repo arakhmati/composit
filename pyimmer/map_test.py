@@ -169,6 +169,7 @@ def test_initialize_pmap_with_two_items_and_iterate_over_keys():
     for iterator_key in m.keys():
         assert iterator_key in keys
         keys.remove(iterator_key)
+    assert len(keys) == 0
 
 
 def test_initialize_pmap_with_three_items_and_iterate_over_keys():
@@ -182,6 +183,7 @@ def test_initialize_pmap_with_three_items_and_iterate_over_keys():
     for iterator_key in m.keys():
         assert iterator_key in keys
         keys.remove(iterator_key)
+    assert len(keys) == 0
 
 
 def test_initialize_empty_pmap_and_iterate_over_values():
@@ -209,6 +211,7 @@ def test_initialize_pmap_with_two_items_and_iterate_over_values():
     for iterator_value in m.values():
         assert iterator_value in values
         values.remove(iterator_value)
+    assert len(values) == 0
 
 
 def test_initialize_pmap_with_three_items_and_iterate_over_values():
@@ -222,3 +225,47 @@ def test_initialize_pmap_with_three_items_and_iterate_over_values():
     for iterator_value in m.values():
         assert iterator_value in values
         values.remove(iterator_value)
+    assert len(values) == 0
+
+
+def test_initialize_empty_pmap_and_iterate_over_items():
+    m = pmap()
+    assert len(m) == 0
+    for _ in m.items():
+        ...
+
+
+def test_initialize_pmap_with_one_item_and_iterate_over_items():
+    key, value = "key", "value"
+    m = pmap({key: value})
+    assert len(m) == 1
+    for iterator_key, iterator_value in m.items():
+        assert key == iterator_key
+        assert value == iterator_value
+
+
+def test_initialize_pmap_with_two_items_and_iterate_over_items():
+    key_0, value_0 = "key", "value"
+    key_1, value_1 = 123, 456
+    m = pmap({key_0: value_0, key_1: value_1})
+
+    assert len(m) == 2
+    items = [(key_0, value_0), (key_1, value_1)]
+    for iterator_item in m.items():
+        assert iterator_item in items
+        items.remove(iterator_item)
+    assert len(items) == 0
+
+
+def test_initialize_pmap_with_three_items_and_iterate_over_items():
+    key_0, value_0 = "key", "value"
+    key_1, value_1 = 123, 456
+    key_2, value_2 = 321, 654
+    m = pmap({key_0: value_0, key_1: value_1, key_2: value_2})
+
+    assert len(m) == 3
+    items = [(key_0, value_0), (key_1, value_1), (key_2, value_2)]
+    for iterator_item in m.items():
+        assert iterator_item in items
+        items.remove(iterator_item)
+    assert len(items) == 0

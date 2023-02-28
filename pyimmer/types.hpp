@@ -41,3 +41,13 @@ struct py_immer_map_value_iterator_t {
   Py_ssize_t length;
 };
 } // namespace pyimmer::map_value_iterator
+
+namespace pyimmer::map_item_iterator {
+struct py_immer_map_item_iterator_t {
+  PyObject_HEAD;
+  pyimmer::map::py_immer_map_t *py_immer_map;
+  immer_map_t::iterator iterator;
+  Py_ssize_t index;
+  Py_ssize_t length;
+};
+} // namespace pyimmer::map_item_iterator

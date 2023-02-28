@@ -34,8 +34,8 @@ static PyObject *py_immer_map_value_iterator_next(
 
   if (py_immer_map_value_iterator->index <
       py_immer_map_value_iterator->length) {
-    PyObject *element = py_immer_map_value_iterator->iterator->second.get();
-    PyObject *result = Py_BuildValue("O", element);
+    PyObject *value = py_immer_map_value_iterator->iterator->second.get();
+    PyObject *result = Py_BuildValue("O", value);
 
     py_immer_map_value_iterator->iterator =
         std::next(py_immer_map_value_iterator->iterator);

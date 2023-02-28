@@ -1,5 +1,6 @@
 #pragma once
 
+#include "map_item_iterator.hpp"
 #include "map_key_iterator.hpp"
 #include "map_value_iterator.hpp"
 #include "py_object_wrapper.hpp"
@@ -150,6 +151,17 @@ static PyObject *py_immer_map_value_iter(PyObject *object) {
                              args);
 }
 
+static PyObject *py_immer_map_item_iter(PyObject *object) {
+
+  using pyimmer::map_item_iterator::py_immer_map_item_iterator_t;
+  using pyimmer::map_item_iterator::py_immer_map_item_iterator_type;
+  PyObject *args = PyTuple_New(1);
+  PyTuple_SetItem(args, 0, object);
+
+  return PyObject_CallObject((PyObject *)&py_immer_map_item_iterator_type,
+                             args);
+}
+
 static PyMethodDef py_immer_map_methods[] = {
     {"get", (PyCFunction)py_immer_map_get, METH_VARARGS,
      "Return value given key"},
@@ -161,6 +173,8 @@ static PyMethodDef py_immer_map_methods[] = {
      "Iterate over keys"},
     {"values", (PyCFunction)py_immer_map_value_iter, METH_VARARGS,
      "Iterate over values"},
+    {"items", (PyCFunction)py_immer_map_item_iter, METH_VARARGS,
+     "Iterate over items"},
     {NULL} /* Sentinel */
 };
 
