@@ -17,7 +17,9 @@ static PyObject *py_immer_map_key_iterator_new(PyTypeObject *type, PyObject *arg
     return NULL;
   }
 
-  auto immer_map = ((pyimmer::map::py_immer_map_t *)py_immer_map)->immer_map;
+  Py_INCREF(py_immer_map);
+  py_immer_map_key_iterator->py_immer_map = (pyimmer::map::py_immer_map_t *)py_immer_map;
+  auto& immer_map = py_immer_map_key_iterator->py_immer_map->immer_map;
   py_immer_map_key_iterator->iterator = immer_map.begin();
   py_immer_map_key_iterator->index = 0;
   py_immer_map_key_iterator->length = immer_map.size();
@@ -44,6 +46,8 @@ py_immer_map_key_iterator_next(py_immer_map_key_iterator_t *py_immer_map_key_ite
 
 static void
 py_immer_map_key_iterator_dealloc(py_immer_map_key_iterator_t *py_immer_map_key_iterator) {
+
+  Py_INCREF(py_immer_map_key_iterator->py_immer_map);
   Py_TYPE(py_immer_map_key_iterator)->tp_free(py_immer_map_key_iterator);
 }
 
