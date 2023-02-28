@@ -2,24 +2,24 @@ import pytest
 
 import numpy
 
-import persistent_numpy
+import composit
 
 
 def check_results(function):
     np_array = function(numpy)
-    pnp_array = function(persistent_numpy)
+    pnp_array = function(composit)
 
     assert np_array.shape == pnp_array.shape
-    assert numpy.allclose(np_array, persistent_numpy.evaluate(pnp_array))
+    assert numpy.allclose(np_array, composit.evaluate(pnp_array))
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+@pytest.mark.parametrize("np", [numpy, composit])
 def test_ndarray(np):
     array = np.ndarray((5, 10))
     assert array.shape == (5, 10)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+@pytest.mark.parametrize("np", [numpy, composit])
 def test_named_ndarray(np):
     if not hasattr(np, "named_ndarray"):
         pytest.skip("current np library doesn't have named_ndarray")
@@ -28,13 +28,13 @@ def test_named_ndarray(np):
     assert len(array.graph) == 1
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+@pytest.mark.parametrize("np", [numpy, composit])
 def test_zeros(np):
     array = np.zeros((5, 10))
     assert array.shape == (5, 10)
 
 
-@pytest.mark.parametrize("np", [numpy, persistent_numpy])
+@pytest.mark.parametrize("np", [numpy, composit])
 def test_ones(np):
     array = np.ones((5, 10))
     assert array.shape == (5, 10)
@@ -178,13 +178,13 @@ def test_split():
         return result
 
     np_list = function(numpy)
-    pnp_list = function(persistent_numpy)
+    pnp_list = function(composit)
 
     for np_array, pnp_array in zip(np_list, pnp_list):
         assert np_array.shape == pnp_array.shape
-        assert numpy.allclose(np_array, persistent_numpy.evaluate(pnp_array))
+        assert numpy.allclose(np_array, composit.evaluate(pnp_array))
 
-    for np_array, pnp_array in zip(np_list, persistent_numpy.evaluate(*pnp_list)):
+    for np_array, pnp_array in zip(np_list, composit.evaluate(*pnp_list)):
         assert np_array.shape == pnp_array.shape
         assert numpy.allclose(np_array, pnp_array)
 

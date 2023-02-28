@@ -3,14 +3,14 @@ import pytest
 import numpy as np
 import torch
 
-import persistent_numpy as pnp
-from persistent_numpy.nn.optimizer import apply_gradients, sgd_optimizer
+import composit as cnp
+from composit.nn.optimizer import apply_gradients, sgd_optimizer
 
 
 def pnp_model(input_var, parameter_0, parameter_1, parameter_2):
     matmul_output_var = input_var @ parameter_0
     add_output_var = matmul_output_var + parameter_1
-    output_var = add_output_var + matmul_output_var - pnp.sum(parameter_2, -1, keepdims=True)
+    output_var = add_output_var + matmul_output_var - cnp.sum(parameter_2, -1, keepdims=True)
     return output_var
 
 
@@ -37,10 +37,10 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
     np_parameter_2 = np.random.random(output_shape)
     np_incoming_gradients = [np.random.random(output_shape) for _ in range(num_iterations)]
 
-    input_var = pnp.nn.variable(name="input_var", shape=input_shape)
-    parameter_0 = pnp.nn.variable(name="parameter_0", shape=np_parameter_0.shape)
-    parameter_1 = pnp.nn.variable(name="parameter_1", shape=np_parameter_1.shape)
-    parameter_2 = pnp.nn.variable(name="parameter_2", shape=np_parameter_2.shape)
+    input_var = cnp.nn.variable(name="input_var", shape=input_shape)
+    parameter_0 = cnp.nn.variable(name="parameter_0", shape=np_parameter_0.shape)
+    parameter_1 = cnp.nn.variable(name="parameter_1", shape=np_parameter_1.shape)
+    parameter_2 = cnp.nn.variable(name="parameter_2", shape=np_parameter_2.shape)
     output_var = pnp_model(input_var, parameter_0, parameter_1, parameter_2)
 
     parameters = {
@@ -55,7 +55,7 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
 
     for np_input, np_incoming_gradient in zip(np_inputs, np_incoming_gradients):
 
-        gradients = pnp.nn.differentiate(
+        gradients = cnp.nn.differentiate(
             [output_var],
             [input_var, parameter_0, parameter_1, parameter_2],
             {

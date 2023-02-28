@@ -1,9 +1,9 @@
 import networkx
 from pyrsistent import PClass, field
 
-from persistent_numpy.multidigraph import MultiDiGraph
-from persistent_numpy.multidigraph import topological_traversal
-from persistent_numpy.hash import deterministic_hash
+from composit.multidigraph import MultiDiGraph
+from composit.multidigraph import topological_traversal
+from composit.hash import deterministic_hash
 
 
 class Node(PClass):

@@ -5,10 +5,10 @@ import graphviz
 import numpy as np
 from pyrsistent import PClass, field
 
-import persistent_numpy as pnp
-from persistent_numpy.numpy.core import create_from_numpy_compute_instruction
-from persistent_numpy.persistent_array import PersistentArray, Node
-from persistent_numpy.multidigraph import MultiDiGraph, compose_all, visualize_graph
+import composit as cnp
+from composit.numpy.core import create_from_numpy_compute_instruction
+from composit.persistent_array import PersistentArray, Node
+from composit.multidigraph import MultiDiGraph, compose_all, visualize_graph
 
 DISABLE = False  # Temporary hack until Module is supported in chain_rule
 
@@ -47,7 +47,7 @@ class Module(PClass):
 
     def __call__(self, *input_arrays: list[np.ndarray]):
         inputs = {input_var: input_array for input_var, input_array in zip(self.input_vars, input_arrays)}
-        output = pnp.nn.evaluate(*self.output_vars, inputs=inputs)
+        output = cnp.nn.evaluate(*self.output_vars, inputs=inputs)
         return output
 
 

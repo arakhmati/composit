@@ -6,16 +6,16 @@ import sys
 import numpy as np
 from pyrsistent import PClass, field
 
-from persistent_numpy.numpy.core import (
+from composit.numpy.core import (
     create_ndarray,
     create_from_numpy_compute_instruction,
     create_numpy_compute_function,
     create_numpy_binary_compute_function,
     create_numpy_concatenate_function,
 )
-from persistent_numpy.introspection import get_name_from_args_and_kwargs
-from persistent_numpy.persistent_array import PersistentArray
-from persistent_numpy.string import random_string
+from composit.introspection import get_name_from_args_and_kwargs
+from composit.persistent_array import PersistentArray
+from composit.string import random_string
 
 THIS_MODULE = sys.modules[__name__]
 __all__ = []

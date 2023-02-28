@@ -2,9 +2,9 @@ from pyrsistent import immutable, PClass
 from toolz.functoolz import partial
 
 
-from persistent_numpy.multidigraph import MultiDiGraph
-from persistent_numpy.numpy.core import create_from_numpy_compute_instruction
-from persistent_numpy.persistent_array import PersistentArray, Node
+from composit.multidigraph import MultiDiGraph
+from composit.numpy.core import create_from_numpy_compute_instruction
+from composit.persistent_array import PersistentArray, Node
 
 
 class Variable(PClass):

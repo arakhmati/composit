@@ -4,8 +4,8 @@ import pytest
 import torch
 import transformers
 
-import persistent_numpy as pnp
-from persistent_numpy.nn.module import wrap_module
+import composit as cnp
+from composit.nn.module import wrap_module
 
 
 def create_random_float(shape, minimum=-0.1, maximum=0.1):
@@ -76,8 +76,8 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
 
 @wrap_module
 def functional_softmax(input_tensor, axis):
-    exp_input_tensor = pnp.exp(input_tensor - pnp.max(input_tensor, axis=axis, keepdims=True))
-    return exp_input_tensor / pnp.sum(exp_input_tensor, axis=axis, keepdims=True)
+    exp_input_tensor = cnp.exp(input_tensor - cnp.max(input_tensor, axis=axis, keepdims=True))
+    return exp_input_tensor / cnp.sum(exp_input_tensor, axis=axis, keepdims=True)
 
 
 @wrap_module
@@ -95,18 +95,18 @@ def functional_multi_head_attention(
 
     query = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.query.weight"]
     query = query + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.query.bias"]
-    query = pnp.reshape(query, (batch_size, sequence_size, num_heads, head_size))
-    query = pnp.transpose(query, (0, 2, 1, 3))
+    query = cnp.reshape(query, (batch_size, sequence_size, num_heads, head_size))
+    query = cnp.transpose(query, (0, 2, 1, 3))
 
     key = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.key.weight"]
     key = key + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.key.bias"]
-    key = pnp.reshape(key, (batch_size, sequence_size, num_heads, head_size))
-    key = pnp.transpose(key, (0, 2, 3, 1))
+    key = cnp.reshape(key, (batch_size, sequence_size, num_heads, head_size))
+    key = cnp.transpose(key, (0, 2, 3, 1))
 
     value = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.attention.self.value.weight"]
     value = value + parameters[f"bert.encoder.layer.{encoder_index}.attention.self.value.bias"]
-    value = pnp.reshape(value, (batch_size, sequence_size, num_heads, head_size))
-    value = pnp.transpose(value, (0, 2, 1, 3))
+    value = cnp.reshape(value, (batch_size, sequence_size, num_heads, head_size))
+    value = cnp.transpose(value, (0, 2, 1, 3))
 
     attention_scores = query @ key
 
@@ -118,8 +118,8 @@ def functional_multi_head_attention(
 
     context_layer = attention_probs @ value
 
-    context_layer = pnp.transpose(context_layer, (0, 2, 1, 3))
-    context_layer = pnp.reshape(context_layer, (batch_size, sequence_size, num_heads * head_size))
+    context_layer = cnp.transpose(context_layer, (0, 2, 1, 3))
+    context_layer = cnp.reshape(context_layer, (batch_size, sequence_size, num_heads * head_size))
 
     self_output = context_layer @ parameters[f"bert.encoder.layer.{encoder_index}.attention.output.dense.weight"]
     self_output = self_output + parameters[f"bert.encoder.layer.{encoder_index}.attention.output.dense.bias"]
@@ -129,16 +129,16 @@ def functional_multi_head_attention(
 
 @wrap_module
 def functional_layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
-    mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
+    mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
     input_tensor_minus_mean = input_tensor - mean
-    var = pnp.mean(pnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
-    output = input_tensor_minus_mean / pnp.sqrt(var + epsilon)
+    var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
+    output = input_tensor_minus_mean / cnp.sqrt(var + epsilon)
     output *= weight
     output += bias
     return output
     """
-    mean = pnp.mean(input_tensor, axis=-1, keepdims=True)
-    var = pnp.sqrt(pnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
+    mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
+    var = cnp.sqrt(cnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
     output = (input_tensor - mean) / var
     return output * weight + bias
     """
@@ -148,7 +148,7 @@ def functional_layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
 def functional_feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.intermediate.dense.bias"]
-    hidden_states = pnp.nn.gelu(hidden_states)
+    hidden_states = cnp.nn.gelu(hidden_states)
     hidden_states = hidden_states @ parameters[f"bert.encoder.layer.{encoder_index}.output.dense.weight"]
     hidden_states = hidden_states + parameters[f"bert.encoder.layer.{encoder_index}.output.dense.bias"]
     return hidden_states
@@ -208,8 +208,8 @@ def functional_bert(
     head_size,
 ):
 
-    word_embeddings = pnp.nn.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
-    token_type_embeddings = pnp.nn.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
+    word_embeddings = cnp.nn.embedding(input_ids, parameters["bert.embeddings.word_embeddings.weight"])
+    token_type_embeddings = cnp.nn.embedding(token_type_ids, parameters["bert.embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings
 
     encoder_input = functional_layer_norm(
@@ -323,9 +323,9 @@ def test_functional_bert_vs_transformers_bert(
         # Update parameter names to include "bert." prefix to match the names of parameters in the models with heads
         parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
-    input_ids_var = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
-    token_type_ids_var = pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
-    parameters = {pnp.nn.variable(name=name, shape=value.shape): parameters[name] for name, value in parameters.items()}
+    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
+    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    parameters = {cnp.nn.variable(name=name, shape=value.shape): parameters[name] for name, value in parameters.items()}
 
     model = functional_bert_function(
         input_ids_var,
@@ -352,7 +352,7 @@ def test_functional_bert_vs_transformers_bert(
     pnp_outputs = []
     for model_input in model_inputs:
         input_ids, token_type_ids = model_input
-        output = pnp.nn.evaluate(
+        output = cnp.nn.evaluate(
             model,
             inputs={
                 input_ids_var: input_ids,
@@ -383,7 +383,7 @@ def test_functional_bert_autograd(
     head_size,
     vocab_size,
 ):
-    pnp.nn.module.DISABLE = True
+    cnp.nn.module.DISABLE = True
 
     config = transformers.models.bert.configuration_bert.BertConfig()
     config.hidden_dropout_prob = 0.0  # Disable dropout after the embeddings
@@ -411,10 +411,10 @@ def test_functional_bert_autograd(
         parameters[name] = new_value.numpy()
     parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
-    input_ids_variable = pnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
-    token_type_ids_variable = pnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
-    parameter_variables = {name: pnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
-    model: pnp.PersistentArray = functional_bert(
+    input_ids_variable = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
+    token_type_ids_variable = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
+    model: cnp.PersistentArray = functional_bert(
         input_ids_variable,
         token_type_ids_variable,
         None,
@@ -461,7 +461,7 @@ def test_functional_bert_autograd(
         incoming_gradient = create_random_float((batch_size, sequence_size, num_heads * head_size), -0.001, 0.001)
         torch_loss.backward(torch.from_numpy(incoming_gradient))
 
-        pnp_gradients = pnp.nn.differentiate(
+        pnp_gradients = cnp.nn.differentiate(
             [loss],
             input_vars_to_differentiate,
             {
@@ -490,4 +490,4 @@ def test_functional_bert_autograd(
             all_close = np.allclose(pnp_gradient, torch_gradient, atol=1e-3)
             assert all_close
 
-    pnp.nn.module.DISABLE = False
+    cnp.nn.module.DISABLE = False

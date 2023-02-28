@@ -4,10 +4,10 @@ import networkx as nx
 from pyrsistent import pset
 from toolz import functoolz
 
-from persistent_numpy.numpy.core import get_operands
-from persistent_numpy.multidigraph import topological_traversal, compose_all
-import persistent_numpy.nn as nn
-import persistent_numpy.nn.jacobians as jacobians
+from composit.numpy.core import get_operands
+from composit.multidigraph import topological_traversal, compose_all
+import composit.nn as nn
+import composit.nn.jacobians as jacobians
 
 
 def get_incoming_gradient_name(node_name, output_index):

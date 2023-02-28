@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from persistent_numpy.numpy.core import get_operands
-from persistent_numpy.multidigraph import topological_traversal, compose_all
-from persistent_numpy.persistent_array import PersistentArray
+from composit.numpy.core import get_operands
+from composit.multidigraph import topological_traversal, compose_all
+from composit.persistent_array import PersistentArray
 
 
 def evaluate(*outputs: tuple[PersistentArray]):

@@ -11,13 +11,13 @@ from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
 
-import persistent_numpy as pnp
-from persistent_numpy.hash import deterministic_hash
-from persistent_numpy.tilelab import (
+import composit as cnp
+from composit.hash import deterministic_hash
+from composit.tilelab import (
     TilizationLevel,
     tilize,
 )
-from persistent_numpy.backends.x86.kernels.matmul import generate_kernel, generate_data
+from composit.backends.x86.kernels.matmul import generate_kernel, generate_data
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
@@ -112,8 +112,8 @@ def run_matmul(
     l1_cache_b_shape: tuple[int, ...],
 ):
 
-    input_var_a = pnp.nn.variable(name="input_var_a", shape=input_a_shape)
-    input_var_b = pnp.nn.variable(name="input_var_b", shape=input_b_shape)
+    input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
+    input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
     output_var = input_var_a @ input_var_b
 
     np.random.seed(0)

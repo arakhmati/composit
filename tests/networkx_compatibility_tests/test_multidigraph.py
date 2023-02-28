@@ -10,7 +10,7 @@ from .test_multigraph import BaseMultiGraphTester
 from .test_multigraph import TestEdgeSubgraph as _TestMultiGraphEdgeSubgraph
 from .test_multigraph import TestMultiGraph as _TestMultiGraph
 
-from persistent_numpy import multidigraph
+from composit import multidigraph
 
 
 def networkx_graph(graph):

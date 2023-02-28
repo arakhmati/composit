@@ -7,9 +7,9 @@ import numpy as np
 from pyrsistent import immutable, PClass, field
 from toolz import functoolz
 
-from persistent_numpy.multidigraph import MultiDiGraph, merge_graphs
-from persistent_numpy.persistent_array import PersistentArray, Node
-from persistent_numpy.string import random_string
+from composit.multidigraph import MultiDiGraph, merge_graphs
+from composit.persistent_array import PersistentArray, Node
+from composit.string import random_string
 
 
 def get_operands(graph, node):

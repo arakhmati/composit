@@ -9,10 +9,10 @@ import numpy as np
 from pyrsistent import PClass, field, pmap
 from toolz.itertoolz import first
 
-import persistent_numpy as pnp
-from persistent_numpy.multidigraph import compose_all, topological_traversal
-from persistent_numpy.nn import evaluate
-from persistent_numpy.numpy.core import get_operands
+import composit as cnp
+from composit.multidigraph import compose_all, topological_traversal
+from composit.nn import evaluate
+from composit.numpy.core import get_operands
 
 
 class TilizationLevel(PClass):
@@ -185,7 +185,7 @@ class Tile(PClass):
         return Tile(tile=self.tile @ other.tile)
 
     def sum(self, axis, keepdims):
-        result = pnp.sum(self.tile, axis=axis, keepdims=keepdims)
+        result = cnp.sum(self.tile, axis=axis, keepdims=keepdims)
         """
         To pad, or not to pad, that is the question
         pad_width = [[0, 0] for _ in self.tile.shape]
@@ -226,7 +226,7 @@ def tilize_tensor(
         if remaining_tilization_hierarchy:
             index_to_tile[tile_indices] = tilize_tensor(tile, remaining_tilization_hierarchy)
         else:
-            index_to_tile[tile_indices] = Tile(tile=pnp.asarray(tile))
+            index_to_tile[tile_indices] = Tile(tile=cnp.asarray(tile))
 
     tilized_tensor = TilizedTensor(
         level_name=tilization_level.level_name,
@@ -296,7 +296,7 @@ def concatenate_tensors(tensors, axis):
         )
         return tilized_tensor
     else:
-        tile = pnp.concatenate([tensor.tile for tensor in tensors], axis)
+        tile = cnp.concatenate([tensor.tile for tensor in tensors], axis)
         return Tile(tile=tile)
 
 

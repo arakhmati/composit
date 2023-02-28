@@ -3,11 +3,11 @@
 set -e
 
 # Formatters
-black --check persistent_numpy tests/unit_tests
+black --check composit tests/unit_tests
 
 # Type Checkers
-mypy --config-file mypy.ini persistent_numpy
+mypy --config-file mypy.ini composit
 
 # Linters
-MYPYPATH=/dev/null flake8 --config .flake8 --mypy-config mypy.ini persistent_numpy tests/unit_tests
-pylint --rcfile .pylintrc persistent_numpy tests/unit_tests
+MYPYPATH=/dev/null flake8 --config .flake8 --mypy-config mypy.ini composit tests/unit_tests
+pylint --rcfile .pylintrc composit tests/unit_tests

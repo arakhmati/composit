@@ -1,7 +1,7 @@
 import numpy as np
 
-import persistent_numpy.nn as nn
-from persistent_numpy.nn.chain_rule import get_incoming_gradient_name
+import composit.nn as nn
+from composit.nn.chain_rule import get_incoming_gradient_name
 
 
 def initialize_cache(graph, inputs):

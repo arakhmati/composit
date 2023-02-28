@@ -1,9 +1,9 @@
 import itertools
 import math
 
-import persistent_numpy as pnp
-import persistent_numpy.nn
-from persistent_numpy.tilelab import TilizedTensor
+import composit as cnp
+import composit.nn
+from composit.tilelab import TilizedTensor
 
 
 def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manually: bool):
@@ -198,7 +198,7 @@ def transpose_tiles(tensor, transpose_levels, order):
             yield from transpose_tiles(tensor[tile_indices], transpose_levels, order)
     else:
         if tensor.level_name in transpose_levels:
-            yield pnp.transpose(tensor.tile, order)
+            yield cnp.transpose(tensor.tile, order)
         else:
             yield tensor.tile
 
@@ -214,7 +214,7 @@ def generate_data(path, input_a, input_b, output, evaluate_inputs, *, transpose_
         input_var_1_tiles = list(transpose_tiles(input_b, transpose_b_levels, (1, 0)))
         output_var_tiles = list(output.tiles())
 
-        tiles = pnp.nn.evaluate(*input_var_0_tiles, *input_var_1_tiles, *output_var_tiles, inputs=evaluate_inputs)
+        tiles = cnp.nn.evaluate(*input_var_0_tiles, *input_var_1_tiles, *output_var_tiles, inputs=evaluate_inputs)
 
         offset = 0
         flat_data = [

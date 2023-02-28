@@ -13,9 +13,9 @@ pyimmer = Extension(
 )
 
 setup(
-    name="persistent_numpy",
+    name="composit",
     version="0.0.0",
-    description="Persistent Implementation of NumPy.",
+    description="Compose Computational Graphs of Composite Tensors.",
     packages=find_packages(),
     ext_modules=[pyimmer],
 )

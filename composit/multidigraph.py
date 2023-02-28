@@ -15,7 +15,7 @@ from networkx.classes.reportviews import (
 )
 from toolz import functoolz
 
-from persistent_numpy.string import random_string
+from composit.string import random_string
 
 
 class MultiDiGraph(PClass):

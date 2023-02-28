@@ -1,7 +1,7 @@
 import pygame
 from pygame import QUIT
 
-from persistent_numpy.tilelab import Tile
+from composit.tilelab import Tile
 
 COLORS = (
     (0, 255, 0),

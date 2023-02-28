@@ -1,10 +1,10 @@
 import numpy as np
 
 
-from persistent_numpy.multidigraph import MultiDiGraph
-from persistent_numpy.nn.core import Variable, wrap_as_instruction
-from persistent_numpy.nn.vectorized_functions import cdf
-from persistent_numpy.persistent_array import PersistentArray, Node
+from composit.multidigraph import MultiDiGraph
+from composit.nn.core import Variable, wrap_as_instruction
+from composit.nn.vectorized_functions import cdf
+from composit.persistent_array import PersistentArray, Node
 
 
 def variable(*, name: str, shape: tuple) -> PersistentArray:

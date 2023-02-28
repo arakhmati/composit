@@ -2,8 +2,8 @@ import pytest
 
 import numpy as np
 
-import persistent_numpy as pnp
-from persistent_numpy.tilelab import (
+import composit as cnp
+from composit.tilelab import (
     TilizationLevel,
     tilize_tensor,
     retilize_tensor,
@@ -143,13 +143,13 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
 
     matmul_shape = input_0_shape[:-1] + input_1_shape[-1:]
 
-    input_var_0 = pnp.nn.variable(name="input_var_0", shape=input_0_shape)
-    input_var_1 = pnp.nn.variable(name="input_var_1", shape=input_1_shape)
-    input_var_2 = pnp.nn.variable(name="input_var_2", shape=matmul_shape)
-    input_var_3 = pnp.nn.variable(name="input_var_3", shape=matmul_shape)
+    input_var_0 = cnp.nn.variable(name="input_var_0", shape=input_0_shape)
+    input_var_1 = cnp.nn.variable(name="input_var_1", shape=input_1_shape)
+    input_var_2 = cnp.nn.variable(name="input_var_2", shape=matmul_shape)
+    input_var_3 = cnp.nn.variable(name="input_var_3", shape=matmul_shape)
     matmul_output_var = input_var_0 @ input_var_1
     add_output_var = matmul_output_var + input_var_2
-    output_var = add_output_var + matmul_output_var - pnp.sum(input_var_3, -1, keepdims=True)
+    output_var = add_output_var + matmul_output_var - cnp.sum(input_var_3, -1, keepdims=True)
 
     evaluate_inputs = {
         input_var_0: np.random.uniform(-0.5, 0.5, input_var_0.shape),
@@ -158,7 +158,7 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
         input_var_3: np.random.uniform(-0.5, 0.5, input_var_3.shape),
     }
 
-    output = pnp.nn.evaluate(output_var, inputs=evaluate_inputs)
+    output = cnp.nn.evaluate(output_var, inputs=evaluate_inputs)
 
     input_var_to_scheme = {
         input_var_0: [

@@ -1,7 +1,7 @@
 from pyrsistent import PClass, field
 
-from persistent_numpy.multidigraph import MultiDiGraph, visualize_graph, compose_all
-from persistent_numpy.hash import deterministic_hash
+from composit.multidigraph import MultiDiGraph, visualize_graph, compose_all
+from composit.hash import deterministic_hash
 
 
 class Node(PClass):
