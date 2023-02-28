@@ -2,7 +2,8 @@ from collections import deque
 import math
 
 from loguru import logger
-from pyrsistent import pmap, pvector
+from pyrsistent import pvector
+from pyimmer import pmap
 from toolz import first
 
 from composit.introspection import class_name

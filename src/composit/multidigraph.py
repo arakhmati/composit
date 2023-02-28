@@ -2,7 +2,8 @@ from collections.abc import Iterable
 
 import graphviz
 import networkx
-from pyrsistent import PClass, field, pmap_field, PMap, pmap
+from pyrsistent import PClass, field, pmap_field
+from pyimmer import PMap, pmap
 
 from networkx.classes.coreviews import MultiAdjacencyView
 from networkx.classes.reportviews import (
@@ -112,7 +113,7 @@ class MultiDiGraph(PClass):
             neighbors = node_to_neighbors.get(from_node, pmap())
             edges = neighbors.get(to_node, pmap())
             if edge_key is None:
-                edge_key = max(edges.keys()) + 1 if edges.keys() else 0
+                edge_key = max(edges.keys()) + 1 if edges else 0
             edges = edges.set(edge_key, pmap(kwargs))
             neighbors = neighbors.set(to_node, edges)
             node_to_neighbors = node_to_neighbors.set(from_node, neighbors)

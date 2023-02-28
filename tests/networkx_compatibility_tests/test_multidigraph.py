@@ -17,6 +17,10 @@ def networkx_graph(graph):
     return graph
 
 
+def to_nx_edges(edges):
+    return sorted([(source, sink, {key: value for key, value in iterator.items()}) for source, sink, iterator in edges])
+
+
 class BaseMultiDiGraphTester(BaseMultiGraphTester):
     @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
     def test_edges(self, graph_function):
@@ -30,8 +34,8 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
     def test_edges_data(self, graph_function):
         G = graph_function(self.K3)
         edges = [(0, 1, {}), (0, 2, {}), (1, 0, {}), (1, 2, {}), (2, 0, {}), (2, 1, {})]
-        assert sorted(G.edges(data=True)) == edges
-        assert sorted(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
+        assert to_nx_edges(G.edges(data=True)) == edges
+        assert to_nx_edges(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
         pytest.raises((KeyError, nx.NetworkXError), G.neighbors, -1)
 
     @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
@@ -83,14 +87,14 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
     @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
     def test_out_edges_data(self, graph_function):
         G = graph_function(self.K3)
-        assert sorted(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
+        assert to_nx_edges(G.edges(0, data=True)) == [(0, 1, {}), (0, 2, {})]
         if isinstance(G, nx.MultiDiGraph):
             G.remove_edge(0, 1)
             G.add_edge(0, 1, data=1)
         else:
             G = G.remove_edge(0, 1)
             G = G.add_edge(0, 1, data=1)
-        assert sorted(G.edges(0, data=True)) == [(0, 1, {"data": 1}), (0, 2, {})]
+        assert to_nx_edges(G.edges(0, data=True)) == [(0, 1, {"data": 1}), (0, 2, {})]
         assert sorted(G.edges(0, data="data")) == [(0, 1, 1), (0, 2, None)]
         assert sorted(G.edges(0, data="data", default=-1)) == [(0, 1, 1), (0, 2, -1)]
 
@@ -134,7 +138,7 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
             (2, 1),
         ]
 
-        assert sorted(G.in_edges(data=True, keys=False)) == [
+        assert to_nx_edges(G.in_edges(data=True, keys=False)) == [
             (0, 1, {}),
             (0, 1, {}),
             (0, 2, {}),
@@ -147,14 +151,14 @@ class BaseMultiDiGraphTester(BaseMultiGraphTester):
     @pytest.mark.parametrize("graph_function", [networkx_graph, multidigraph.from_networkx])
     def test_in_edges_data(self, graph_function):
         G = graph_function(self.K3)
-        assert sorted(G.in_edges(0, data=True)) == [(1, 0, {}), (2, 0, {})]
+        assert to_nx_edges(G.in_edges(0, data=True)) == [(1, 0, {}), (2, 0, {})]
         if isinstance(G, nx.MultiDiGraph):
             G.remove_edge(1, 0)
             G.add_edge(1, 0, data=1)
         else:
             G = G.remove_edge(1, 0)
             G = G.add_edge(1, 0, data=1)
-        assert sorted(G.in_edges(0, data=True)) == [(1, 0, {"data": 1}), (2, 0, {})]
+        assert to_nx_edges(G.in_edges(0, data=True)) == [(1, 0, {"data": 1}), (2, 0, {})]
         assert sorted(G.in_edges(0, data="data")) == [(1, 0, 1), (2, 0, None)]
         assert sorted(G.in_edges(0, data="data", default=-1)) == [(1, 0, 1), (2, 0, -1)]
 

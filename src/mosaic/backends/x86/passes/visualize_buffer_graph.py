@@ -1,6 +1,7 @@
 import toolz
 
-from pyrsistent import pmap, pvector
+from pyrsistent import pvector
+from pyimmer import pmap
 from toolz import first
 
 from composit.multidigraph import visualize_graph

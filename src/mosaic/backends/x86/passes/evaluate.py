@@ -3,7 +3,7 @@ from typing import Union
 import math
 
 import numpy as np
-from pyrsistent import pmap
+from pyimmer import pmap
 from toolz import first
 
 from composit.numpy.core import Input

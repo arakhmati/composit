@@ -1,6 +1,6 @@
 from ctypes import cdll
 
-from pyrsistent import pmap
+from pyimmer import pmap
 from toolz import first
 
 import codegen as c

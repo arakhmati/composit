@@ -25,7 +25,7 @@ struct py_immer_map_t {
 namespace pyimmer::map_key_iterator {
 struct py_immer_map_key_iterator_t {
   PyObject_HEAD;
-  pyimmer::map::py_immer_map_t *py_immer_map;
+  py_object_wrapper_t py_immer_map;
   immer_map_t::iterator iterator;
   Py_ssize_t index;
   Py_ssize_t length;
@@ -35,7 +35,7 @@ struct py_immer_map_key_iterator_t {
 namespace pyimmer::map_value_iterator {
 struct py_immer_map_value_iterator_t {
   PyObject_HEAD;
-  pyimmer::map::py_immer_map_t *py_immer_map;
+  py_object_wrapper_t py_immer_map;
   immer_map_t::iterator iterator;
   Py_ssize_t index;
   Py_ssize_t length;
@@ -45,7 +45,7 @@ struct py_immer_map_value_iterator_t {
 namespace pyimmer::map_item_iterator {
 struct py_immer_map_item_iterator_t {
   PyObject_HEAD;
-  pyimmer::map::py_immer_map_t *py_immer_map;
+  py_object_wrapper_t py_immer_map;
   immer_map_t::iterator iterator;
   Py_ssize_t index;
   Py_ssize_t length;

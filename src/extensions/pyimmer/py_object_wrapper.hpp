@@ -16,12 +16,14 @@ public:
   py_object_wrapper_t(PyObject *py_object) : py_object_(py_object) {
     Py_INCREF(this->py_object_);
   }
-  py_object_wrapper_t() { Py_DECREF(this->py_object_); }
+  ~py_object_wrapper_t() { Py_DECREF(this->py_object_); }
 
-  PyObject *get() const {
+  PyObject *own() const {
     Py_INCREF(this->py_object_);
     return this->py_object_;
   }
+
+  PyObject *borrow() const { return this->py_object_; }
 
   friend struct std::hash<py_object_wrapper_t>;
 
@@ -31,12 +33,12 @@ private:
 
 bool operator<(const py_object_wrapper_t &a,
                const py_object_wrapper_t &b) noexcept {
-  return PyObject_RichCompareBool(a.get(), b.get(), Py_LT);
+  return PyObject_RichCompareBool(a.borrow(), b.borrow(), Py_LT);
 }
 
 bool operator==(const py_object_wrapper_t &a,
                 const py_object_wrapper_t &b) noexcept {
-  return PyObject_RichCompareBool(a.get(), b.get(), Py_EQ);
+  return PyObject_RichCompareBool(a.borrow(), b.borrow(), Py_EQ);
 }
 
 } // namespace pyimmer::py_object_wrapper
@@ -44,6 +46,6 @@ bool operator==(const py_object_wrapper_t &a,
 template <> struct std::hash<pyimmer::py_object_wrapper::py_object_wrapper_t> {
   std::size_t operator()(const pyimmer::py_object_wrapper::py_object_wrapper_t
                              &object) const noexcept {
-    return PyObject_Hash(object.get());
+    return PyObject_Hash(object.borrow());
   }
 };

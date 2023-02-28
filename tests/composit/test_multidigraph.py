@@ -36,7 +36,7 @@ def test_nodes_method():
     graph = graph.add_node(node)
     networkx_graph.add_node(node)
 
-    assert graph.nodes() == networkx_graph.nodes()
+    assert list(graph.nodes()) == list(networkx_graph.nodes())
     print(networkx_graph.nodes(data=True, default=0))
     # assert graph.nodes(data=True) == networkx_graph.nodes(data=True, default=pmap)
 

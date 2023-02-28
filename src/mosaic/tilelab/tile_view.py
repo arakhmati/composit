@@ -3,7 +3,8 @@ from __future__ import annotations
 import collections
 import math
 
-from pyrsistent import PClass, field, pmap, pmap_field, PVector
+from pyrsistent import PClass, field, pmap_field, PVector
+from pyimmer import pmap
 
 from composit.introspection import class_name
 from composit.types import LazyTensor
