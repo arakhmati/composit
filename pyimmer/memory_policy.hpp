@@ -1,3 +1,5 @@
+#pragma once
+
 #include <immer/memory_policy.hpp>
 
 #include <Python.h>

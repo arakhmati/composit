@@ -13,7 +13,7 @@ def test_initialize_empty_pmap_from_dict():
     assert len(m) == 0
 
 
-def test_initialize_pmap_from_dict_and_get_first_key_value_pair():
+def test_initialize_pmap_from_dict_and_get_first_item():
     key, value = "key", "value"
     m = pmap({key: value})
     assert len(m) == 1
@@ -21,7 +21,7 @@ def test_initialize_pmap_from_dict_and_get_first_key_value_pair():
     assert value == m[key]
 
 
-def test_initialize_pmap_from_dict_and_get_first_and_second_key_value_pairs():
+def test_initialize_pmap_from_dict_and_get_first_and_second_items():
     key_0, value_0 = "key", "value"
     key_1, value_1 = 123, 456
     m = pmap({key_0: value_0, key_1: value_1})
@@ -76,7 +76,7 @@ def test_initialize_empty_pmap_and_update_it_from_pmap():
     assert value_1 == new_m.get(key_1)
 
 
-def test_initialize_empty_pmap_and_set_key_value_pair():
+def test_initialize_empty_pmap_and_set_item():
     m = pmap()
     assert len(m) == 0
 
@@ -102,3 +102,43 @@ def test_initialize_pmap_from_dict_and_check_that_it_contains_key():
     m = pmap({key: value})
     assert len(m) == 1
     assert key in m
+
+
+def test_initialize_empty_pmap_and_iterate_over_it():
+    m = pmap()
+    assert len(m) == 0
+    for _ in m:
+        ...
+
+
+def test_initialize_pmap_with_one_item_and_iterate_over_it():
+    key, value = "key", "value"
+    m = pmap({key: value})
+    assert len(m) == 1
+    for iterator_key in m:
+        assert key == iterator_key
+
+
+def test_initialize_pmap_with_two_items_and_iterate_over_it():
+    key_0, value_0 = "key", "value"
+    key_1, value_1 = 123, 456
+    m = pmap({key_0: value_0, key_1: value_1})
+
+    assert len(m) == 2
+    keys = [key_0, key_1]
+    for iterator_key in m:
+        assert iterator_key in keys
+        keys.remove(iterator_key)
+
+
+def test_initialize_pmap_with_three_items_and_iterate_over_it():
+    key_0, value_0 = "key", "value"
+    key_1, value_1 = 123, 456
+    key_2, value_2 = 321, 654
+    m = pmap({key_0: value_0, key_1: value_1, key_2: value_2})
+
+    assert len(m) == 3
+    keys = [key_0, key_1, key_2]
+    for iterator_key in m:
+        assert iterator_key in keys
+        keys.remove(iterator_key)
