@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 import pytest
 
 import pathlib
@@ -46,11 +44,14 @@ def run_torch(np_input_a, np_input_b):
     import torch
     import time
 
+    torch.set_num_threads(1)
+
     torch_a = torch.from_numpy(np_input_a)
     torch_b = torch.from_numpy(np_input_b)
 
     # Call once to set up torch data structures
-    output = torch_a @ torch_b
+    for _ in range(10):
+        output = torch_a @ torch_b
 
     execution_times = []
     for i in range(1000):
