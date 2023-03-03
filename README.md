@@ -1,6 +1,13 @@
 # Composit = Compose it + Composite
 Composit composes computational graphs using numpy-like API and then it breaks down composite tensors into tiles
 
+## Installation Instructions
+```bash
+python -m venv venv
+source venv/bin/activate
+./install.sh
+```
+
 ## Tests
 To get familiar with the code, read tests in this order:
 1. tests/unit_tests/numpy/test_functions.py

@@ -24,19 +24,9 @@ jobs:
       with:
         python-version: "3.11"
 
-    - name: Pull and Update Submodules Recursively
+    - name: Install Package with Dependencies
       run: |
-        git submodule update --init --recursive
-        git submodule update --recursive --remote
-
-    - name: Install Python Dependencies
-      run: |
-        pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Install Python Package
-      run: |
-        pip install -e . -v
+        bash install.sh
 
     - name: Test with Pytest
       run: |

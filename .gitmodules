@@ -1,3 +1,0 @@
-[submodule "vendor/immer"]
-	path = vendor/immer
-	url = https://github.com/arximboldi/immer

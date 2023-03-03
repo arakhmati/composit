@@ -17,3 +17,6 @@ wvenv/
 
 # Profiling
 prof/
+
+# vendor
+vendor/immer
