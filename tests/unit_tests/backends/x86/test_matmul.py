@@ -39,7 +39,7 @@ FLAGS = [
 ]
 
 
-def run_torch(np_input_a, np_input_b):
+def run_torch(np_input_a, np_input_b, num_iterations):
     logger.info("Run torch")
     import torch
     import time
@@ -54,7 +54,7 @@ def run_torch(np_input_a, np_input_b):
         output = torch_a @ torch_b
 
     execution_times = []
-    for i in range(1000):
+    for i in range(num_iterations):
         start = time.time_ns()
         output = torch_a @ torch_b
         end = time.time_ns()
@@ -67,7 +67,7 @@ def run_torch(np_input_a, np_input_b):
     return execution_times
 
 
-def run_pnp_kernel(test_output_path):
+def run_pnp_kernel(test_output_path, num_iterations):
     kernel_name = "matmul"
     source_file = str(FILE_DIR / f"{kernel_name}.cpp")
     assembly = test_output_path / f"{kernel_name}.s"
@@ -85,7 +85,6 @@ def run_pnp_kernel(test_output_path):
     assert result.returncode == 0
 
     logger.info("Run kernel")
-    num_iterations = 1000
     execution_times = []
     result = subprocess.run([executable, str(num_iterations)], capture_output=True)
     stdout = result.stdout.decode("utf-8")
@@ -104,6 +103,7 @@ def run_pnp_kernel(test_output_path):
 
 def run_matmul(
     test_output_path,
+    num_iterations: int,
     compare_against_torch: bool,
     transpose_b_levels: list[str],
     use_avx_manually: bool,
@@ -164,10 +164,10 @@ def run_matmul(
 
     fig, ax = plt.subplots()
     if compare_against_torch:
-        torch_execution_times = run_torch(np_input_a, np_input_b)
+        torch_execution_times = run_torch(np_input_a, np_input_b, num_iterations)
         ax.plot(torch_execution_times, color="red")
 
-    pnp_execution_times = run_pnp_kernel(test_output_path)
+    pnp_execution_times = run_pnp_kernel(test_output_path, num_iterations)
 
     ax.plot(pnp_execution_times, color="green")
 
@@ -180,6 +180,7 @@ def run_matmul(
     fig.clf()
 
 
+@pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
 @pytest.mark.parametrize("transpose_b_levels", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
@@ -189,6 +190,7 @@ def run_matmul(
 @pytest.mark.parametrize("l1_cache_b_shape", [(64, 64)])
 def test_matmul(
     request,
+    num_iterations,
     compare_against_torch: bool,
     transpose_b_levels: list[str],
     use_avx_manually: bool,
@@ -202,6 +204,7 @@ def test_matmul(
 
     run_matmul(
         test_output_path,
+        num_iterations,
         compare_against_torch,
         transpose_b_levels,
         use_avx_manually,
@@ -215,6 +218,7 @@ def test_matmul(
 if __name__ == "__main__":
     run_matmul(
         FILE_DIR / "test_output" / "custom",
+        num_iterations=1000,
         compare_against_torch=True,
         transpose_b_levels=["atomic", "l1_cache"],
         use_avx_manually=True,
