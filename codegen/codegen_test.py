@@ -67,7 +67,7 @@ def test_function_that_reduces_array_using_sum():
 float get(const float* __restrict__ array, int index)
 {
     auto result = 0;
-    for (int index = 0; index < 10; index++)
+    for (int index = 0; (index < 10); index++)
     {
         result += array[index];
     }
@@ -267,20 +267,20 @@ static inline float _mm256_reduce_add_ps(__m256 x)
 
 void MatmulKernel(const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_a, const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_b, float* __restrict__ __attribute__((aligned(ALIGNMENT))) output)
 {
-    for (auto b = 0; b < 1; b++)
+    for (auto b = 0; (b < 1); b++)
     {
-        for (auto m = 0; m < 64; m++)
+        for (auto m = 0; (m < 64); m++)
         {
-            for (auto n = 0; n < 64; n++)
+            for (auto n = 0; (n < 64); n++)
             {
                 __m256 output_vector = _mm256_setzero_ps();
-                for (auto k = 0; k < 64; k += AVX_SIZE)
+                for (auto k = 0; (k < 64); k += AVX_SIZE)
                 {
-                    __m256 input_a_vector = _mm256_load_ps(input_a + m * 64 + k);
-                    __m256 input_b_vector = _mm256_load_ps(input_b + n * 64 + k);
+                    __m256 input_a_vector = _mm256_load_ps(((input_a + (m * 64)) + k));
+                    __m256 input_b_vector = _mm256_load_ps(((input_b + (n * 64)) + k));
                     output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);
                 }
-                output[m * 64 + n] += _mm256_reduce_add_ps(output_vector);
+                output[((m * 64) + n)] += _mm256_reduce_add_ps(output_vector);
             }
         }
     }

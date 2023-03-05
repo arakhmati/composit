@@ -1,4 +1,5 @@
 import enum
+import pathlib
 from dataclasses import dataclass, replace
 from typing import Union, Any, Optional
 
@@ -60,7 +61,7 @@ class BinaryOperation:
     def __repr__(self):
         left_side = self.left_side.value
         right_side = self.right_side.value
-        return f"{left_side} {self.operator} {right_side}"
+        return f"({left_side} {self.operator} {right_side})"
 
     @property
     def value(self):
@@ -175,6 +176,9 @@ class Subscript:
     def __iadd__(self, value):
         return AssignUpdate(self, value, UpdateOperator.ADD)
 
+    def __mul__(self, other):
+        return Expression(BinaryOperation(self, other, "*"))
+
 
 @dataclass
 class Statement:
@@ -203,6 +207,10 @@ class Assign:
 
     def __repr__(self):
         return f"{self.left_side.value} = {self.right_side.value}"
+
+
+def assign(*args):
+    return Statement(Assign(*args))
 
 
 @dataclass
@@ -243,7 +251,7 @@ class Block:
     statements: list[Union[Statement, Return, "ForLoop"]]
     indentation_level: Optional[int] = None
     indentation: int = 4
-    
+
     def set_indentation_level(self, indentation_level=0):
         if self.indentation_level is not None:
             return
@@ -251,6 +259,12 @@ class Block:
         for statement in self.statements:
             if isinstance(statement, (ForLoop, Function)):
                 statement.set_indentation_level(indentation_level + 1)
+
+    def __add__(self, other: "Block") -> "Block":
+        return Block(self.statements + other.statements)
+
+    def __iadd__(self, other: "Block") -> "Block":
+        return Block(self.statements + other.statements)
 
     def __repr__(self):
         indentation = self.indentation_level * self.indentation if self.indentation_level is not None else 0
@@ -260,6 +274,10 @@ class Block:
 {indentation_prefix}{{
 {concatenate_as_string(self.statements, delimiter, indentation=indentation + self.indentation)}
 {indentation_prefix}}}"""
+
+
+def block(*statements) -> Block:
+    return Block(statements)
 
 
 @dataclass
@@ -306,6 +324,7 @@ class Function:
             string = f"static {string}"
 
         return string
+
     def inline(self):
         return replace(self, _inline=True)
 
@@ -349,13 +368,25 @@ class NewLine:
 
 
 @dataclass
+class Text:
+    content: str
+
+    def __repr__(self):
+        return self.content
+
+
+@dataclass
 class File:
-    name: str
+    name: Union[str, pathlib.Path]
     objects: list[Union[Include, Variable, Function]]
 
     def __repr__(self):
         delimiter = "\n"
         return f"{concatenate_as_string(self.objects, delimiter)}\n"
+
+    def save(self):
+        with open(self.name, "w") as f:
+            f.write(str(self))
 
 
 __all__ = [
@@ -371,10 +402,12 @@ __all__ = [
     "Statement",
     "Return",
     "Assign",
+    "assign",
     "AssignUpdate",
     "add_in_place",
     "Declare",
     "Block",
+    "block",
     "ForLoop",
     "Function",
     "FunctionCall",
@@ -382,4 +415,5 @@ __all__ = [
     "Include",
     "NewLine",
     "File",
+    "Text",
 ]

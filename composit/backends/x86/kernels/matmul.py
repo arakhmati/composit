@@ -1,22 +1,25 @@
 import itertools
 import math
+from typing import Union
+
+import codegen as c
 
 import composit as cnp
 import composit.nn
 from composit.tilelab import TilizedTensor
+from composit.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
+
+AVX_SIZE = c.variable(c.AUTO.constexpr(), "AVX_SIZE")
+
+OffsetType = Union[c.Variable, c.Expression]
+
+InputType = c.Type("float").const().pointer().restrict().aligned("ALIGNMENT")
+OutputType = c.Type("float").pointer().restrict().aligned("ALIGNMENT")
+Vector256Type = c.Type("__m256")
 
 
-def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manually: bool):
-    if transpose_b_levels is None:
-        transpose_b_levels = set()
-
-    with open(path / "matmul.hpp", "w") as f:
-        f.write(
-            """  
-#include <immintrin.h>
-
-constexpr auto AVX_SIZE = 8;
-
+mm256_reduce_add_ps = c.Text(
+    """ \
 static inline float _mm256_reduce_add_ps(__m256 x) {
     /* ( x3+x7, x2+x6, x1+x5, x0+x4 ) */
     const __m128 x128 = _mm_add_ps(_mm256_extractf128_ps(x, 1), _mm256_castps256_ps128(x));
@@ -27,18 +30,61 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
     /* Conversion to float is a no-op on x86-64 */
     return _mm_cvtss_f32(x32);
 }
-
-void MatmulKernel(const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_a, const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_b, float* __restrict__ __attribute__((aligned(ALIGNMENT))) output) {\n
 """
-        )
-        generate_indices(f, input_a, input_b, transpose_b_levels=transpose_b_levels, use_avx_manually=use_avx_manually)
-        f.write("}\n")
+)
+
+
+def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manually: bool):
+    if transpose_b_levels is None:
+        transpose_b_levels = set()
+
+    input_a_var = c.variable(InputType, "input_a")
+    input_b_var = c.variable(InputType, "input_b")
+    output_var = c.variable(OutputType, "output")
+
+    body = generate_indices(
+        input_a,
+        input_b,
+        c_variables=dict(input_a=input_a_var, input_b=input_b_var, output=output_var),
+        offsets=dict(input_a=c.literal(0), input_b=c.literal(0), output=c.literal(0)),
+        transpose_b_levels=transpose_b_levels,
+        use_avx_manually=use_avx_manually,
+    )
+
+    file = c.File(
+        path / "matmul.hpp",
+        [
+            c.Include("immintrin.h"),
+            c.NewLine(),
+            AVX_SIZE << c.literal(8),
+            c.NewLine(),
+            mm256_reduce_add_ps,
+            c.NewLine(),
+            c.Function(
+                return_type=c.Type("void"),
+                name=c.Identifier("MatmulKernel"),
+                arguments=[input_a_var, input_b_var, output_var],
+                body=body,
+            ),
+        ],
+    )
+    file.save()
 
 
 def generate_indices(
-    f, input_a, input_b, a_offset="0", b_offset="0", output_offset="0", *, transpose_b_levels, use_avx_manually: bool
+    input_a,
+    input_b,
+    c_variables,
+    offsets,
+    *,
+    transpose_b_levels,
+    use_avx_manually: bool,
 ):
     level_name = input_a.level_name
+
+    inner_loop_increment = c.literal(1)
+    outer_loop_body_after = c.block()
+
     if isinstance(input_a, TilizedTensor):
         a_num_tiles_per_axis = input_a.num_tiles_per_axis()
         b_num_tiles_per_axis = input_b.num_tiles_per_axis()
@@ -47,78 +93,59 @@ def generate_indices(
 
         b_size, m_size, k_size, n_size = a_ranges + (n_range,)
 
-        b = f"{level_name}_b"
-        m = f"{level_name}_m"
-        k = f"{level_name}_k"
-        n = f"{level_name}_n"
+        a_tile = input_a[(0, 0, 0)]
+        b_tile = input_b[(0, 0)]
 
-        f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
-        f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
+        b = c.variable(c.AUTO, f"{level_name}_b")
+        m = c.variable(c.AUTO, f"{level_name}_m")
+        n = c.variable(c.AUTO, f"{level_name}_n")
+        k = c.variable(c.AUTO, f"{level_name}_k")
+
+        output_tile_volume = math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])
+
+        next_a_offset = c.variable(c.AUTO, f"{level_name}_next_a_offset")
+        next_b_offset = c.variable(c.AUTO, f"{level_name}_next_b_offset")
+        next_output_offset = c.variable(c.AUTO, f"{level_name}_next_output_offset")
+
+        declare_next_a_offset = next_a_offset << (
+            offsets["input_a"] + ((m * c.literal(k_size) + k) * c.literal(math.prod(input_a.tile_shape)))
+        )
+        declare_next_output_offset = next_output_offset << (
+            offsets["output"] + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
+        )
 
         if level_name in transpose_b_levels:
-            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
-            next_output_offset = f"{level_name}_output_offset"
-            f.write(
-                f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
+            declare_next_b_offset = next_b_offset << (
+                offsets["input_b"] + ((n * c.literal(k_size) + k) * c.literal(math.prod(input_b.tile_shape)))
             )
+            inner_loop_index = k
+            inner_loop_size = c.literal(k_size)
+            outer_loop_index = n
+            outer_loop_size = c.literal(n_size)
 
-            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-
-            next_a_offset = f"{level_name}_a_offset"
-            next_b_offset = f"{level_name}_b_offset"
-
-            f.write(f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n")
-            f.write(f"auto {next_b_offset} = {b_offset} + ({n} * {k_size} + {k}) * {math.prod(input_b.tile_shape)};\n")
-
-            a_tile = input_a[(0, 0, 0)]
-            b_tile = input_b[(0, 0)]
-
-            generate_indices(
-                f,
-                a_tile,
-                b_tile,
-                a_offset=next_a_offset,
-                b_offset=next_b_offset,
-                output_offset=next_output_offset,
-                transpose_b_levels=transpose_b_levels,
-                use_avx_manually=use_avx_manually,
-            )
-
-            f.write("}\n")
-
+            inner_loop_body = c.block(declare_next_a_offset, declare_next_b_offset)
+            outer_loop_body_before = c.block(declare_next_output_offset)
         else:
-            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
-
-            next_a_offset = f"{level_name}_a_offset"
-            next_b_offset = f"{level_name}_b_offset"
-            next_output_offset = f"{level_name}_output_offset"
-
-            f.write(f"auto {next_a_offset} = {a_offset} + ({m} * {k_size} + {k}) * {math.prod(input_a.tile_shape)};\n")
-            f.write(f"auto {next_b_offset} = {b_offset} + ({k} * {n_size} + {n}) * {math.prod(input_b.tile_shape)};\n")
-            f.write(
-                f"auto {next_output_offset} = {output_offset} + ({m} * {n_size} + {n}) * {math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])};\n"
+            declare_next_b_offset = next_b_offset << (
+                offsets["input_b"] + ((k * c.literal(n_size) + n) * c.literal(math.prod(input_b.tile_shape)))
             )
+            inner_loop_index = n
+            inner_loop_size = c.literal(n_size)
+            outer_loop_index = k
+            outer_loop_size = c.literal(k_size)
 
-            a_tile = input_a[(0, 0, 0)]
-            b_tile = input_b[(0, 0)]
+            inner_loop_body = c.block(declare_next_b_offset, declare_next_output_offset)
+            outer_loop_body_before = c.block(declare_next_a_offset)
 
-            generate_indices(
-                f,
-                a_tile,
-                b_tile,
-                a_offset=next_a_offset,
-                b_offset=next_b_offset,
-                output_offset=next_output_offset,
-                transpose_b_levels=transpose_b_levels,
-                use_avx_manually=use_avx_manually,
-            )
+        inner_loop_body += generate_indices(
+            a_tile,
+            b_tile,
+            c_variables=c_variables,
+            offsets=dict(input_a=next_a_offset, input_b=next_b_offset, output=next_output_offset),
+            transpose_b_levels=transpose_b_levels,
+            use_avx_manually=use_avx_manually,
+        )
 
-            f.write("}\n")
-        f.write("}\n")
-        f.write("}\n")
-        f.write("}\n")
     else:
 
         a_ranges = tuple(num_tiles for num_tiles in input_a.shape)
@@ -126,65 +153,128 @@ def generate_indices(
 
         b_size, m_size, k_size, n_size = a_ranges + (n_range,)
 
-        b = f"_b"
-        m = f"_m"
-        k = f"_k"
-        n = f"_n"
-
-        f.write(f"for (auto {b} = 0; {b} < {b_size}; {b}++) {{\n")
-        f.write(f"for (auto {m} = 0; {m} < {m_size}; {m}++) {{\n")
+        b = c.variable(c.AUTO, "b")
+        m = c.variable(c.AUTO, "m")
+        n = c.variable(c.AUTO, "n")
+        k = c.variable(c.AUTO, "k")
 
         if level_name in transpose_b_levels:
-            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
+            inner_loop_index = k
+            inner_loop_size = c.literal(k_size)
+            outer_loop_index = n
+            outer_loop_size = c.literal(n_size)
 
             if use_avx_manually:
-                f.write(f"__m256 output_vector = _mm256_setzero_ps();\n")
+                inner_loop_increment = AVX_SIZE
 
-                f.write(f"for (auto {k} = 0; {k} < {k_size}; {k} += AVX_SIZE) {{\n")
+                input_a_vector = c.variable(Vector256Type, "input_a_vector")
+                input_b_vector = c.variable(Vector256Type, "input_b_vector")
+                output_vector = c.variable(Vector256Type, "output_vector")
 
-                f.write(f"__m256 input_a_vector = _mm256_load_ps(input_a + {a_offset} + {m} * {k_size} + {k});\n")
-                f.write(f"__m256 input_b_vector = _mm256_load_ps(input_b + {b_offset} + {n} * {k_size} + {k});\n")
-                f.write(f"output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);\n")
+                inner_loop_body = c.block(
+                    input_a_vector
+                    << _mm256_load_ps(c_variables["input_a"] + offsets["input_a"] + m * c.literal(64) + k),
+                    input_b_vector
+                    << _mm256_load_ps(c_variables["input_b"] + offsets["input_b"] + n * c.literal(64) + k),
+                    c.assign(
+                        output_vector,
+                        _mm256_fmadd_ps(
+                            input_a_vector,
+                            input_b_vector,
+                            output_vector,
+                        ),
+                    ),
+                )
 
-                f.write("}\n")
+                outer_loop_body_before = c.block(
+                    output_vector << c.invoke(c.Identifier("_mm256_setzero_ps")),
+                )
 
-                f.write(f"output[{output_offset} + {m} * {n_size} + {n}] += _mm256_reduce_add_ps(output_vector);\n")
+                outer_loop_body_after = c.block(
+                    c.Statement(
+                        c.add_in_place(
+                            c_variables["output"][offsets["output"] + m * c.literal(64) + n],
+                            c.invoke(c.Identifier("_mm256_reduce_add_ps"), output_vector),
+                        )
+                    ),
+                )
+
             else:
-                f.write(f"for (auto {k} = 0; {k} < {n_size}; {k}++) {{\n")
+                a_index = c.variable(c.AUTO, "a_index")
+                b_index = c.variable(c.AUTO, "b_index")
+                output_index = c.variable(c.AUTO, "output_index")
 
-                output_index = f"_output_offset"
-                f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
-                a_index = f"_a_offset"
-                b_index = f"_b_offset"
+                declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
+                declare_b_index = b_index << (offsets["input_b"] + (n * c.literal(k_size) + k))
+                declare_output_index = output_index << (offsets["output"] + (m * c.literal(n_size) + n))
 
-                f.write(f"auto {a_index} = {a_offset} + ({m} * {k_size} + {k});\n")
-                f.write(f"auto {b_index} = {b_offset} + ({n} * {k_size} + {k});\n")
-
-                f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
-
-                f.write("}\n")
+                inner_loop_body = c.block(
+                    declare_a_index,
+                    declare_b_index,
+                    c.Statement(
+                        c.add_in_place(
+                            c_variables["output"][output_index],
+                            c_variables["input_a"][a_index] * c_variables["input_b"][b_index],
+                        )
+                    ),
+                )
+                outer_loop_body_before = c.block(declare_output_index)
 
         else:
+            inner_loop_index = n
+            inner_loop_size = c.literal(n_size)
+            outer_loop_index = k
+            outer_loop_size = c.literal(k_size)
 
-            f.write(f"for (auto {k} = 0; {k} < {k_size}; {k}++) {{\n")
-            f.write("#pragma GCC ivdep\n")
-            f.write(f"for (auto {n} = 0; {n} < {n_size}; {n}++) {{\n")
+            a_index = c.variable(c.AUTO, "a_index")
+            b_index = c.variable(c.AUTO, "b_index")
+            output_index = c.variable(c.AUTO, "output_index")
 
-            a_index = f"_a_offset"
-            b_index = f"_b_offset"
-            output_index = f"_output_offset"
+            declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
+            declare_b_index = b_index << (offsets["input_b"] + (k * c.literal(n_size) + n))
+            declare_output_index = output_index << (offsets["output"] + (m * c.literal(n_size) + n))
 
-            f.write(f"auto {a_index} = {a_offset} + ({m} * {k_size} + {k});\n")
-            f.write(f"auto {b_index} = {b_offset} + ({k} * {n_size} + {n});\n")
-            f.write(f"auto {output_index} = {output_offset} + ({m} * {n_size} + {n});\n")
+            inner_loop_body = c.block(
+                declare_b_index,
+                declare_output_index,
+                c.Statement(
+                    c.add_in_place(
+                        c_variables["output"][output_index],
+                        c_variables["input_a"][a_index] * c_variables["input_b"][b_index],
+                    )
+                ),
+            )
+            outer_loop_body_before = c.block(declare_a_index)
 
-            f.write(f"output[{output_index}] += input_a[{a_index}] * input_b[{b_index}];\n")
+    inner_loop = c.ForLoop(
+        c.Declare(inner_loop_index, c.literal(0)),
+        inner_loop_index < c.literal(inner_loop_size),
+        c.add_in_place(inner_loop_index, inner_loop_increment),
+        inner_loop_body,
+    )
 
-            f.write("}\n")
+    outer_loop = c.ForLoop(
+        c.Declare(outer_loop_index, c.literal(0)),
+        outer_loop_index < c.literal(outer_loop_size),
+        c.add_in_place(outer_loop_index, c.literal(1)),
+        outer_loop_body_before + c.block(inner_loop) + outer_loop_body_after,
+    )
 
-        f.write("}\n")
-        f.write("}\n")
-        f.write("}\n")
+    m_loop = c.ForLoop(
+        c.Declare(m, c.literal(0)),
+        m < c.literal(m_size),
+        c.add_in_place(m, c.literal(1)),
+        c.block(outer_loop),
+    )
+
+    b_loop = c.ForLoop(
+        c.Declare(b, c.literal(0)),
+        b < c.literal(b_size),
+        c.add_in_place(b, c.literal(1)),
+        c.block(m_loop),
+    )
+
+    return c.block(b_loop)
 
 
 def transpose_tiles(tensor, transpose_levels, order):
