@@ -5,5 +5,5 @@ include = '(\.pyi?)$'
 exclude = 'vendor|venv|wvenv'
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "pyimmer/tests"]
+testpaths = [ "codegen", "pyimmer/tests","tests"]
 python_files = ["test_*.py", "*_test.py"]
