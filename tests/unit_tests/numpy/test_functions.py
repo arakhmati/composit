@@ -7,10 +7,10 @@ import composit
 
 def check_results(function):
     np_array = function(numpy)
-    pnp_array = function(composit)
+    cnp_array = function(composit)
 
-    assert np_array.shape == pnp_array.shape
-    assert numpy.allclose(np_array, composit.evaluate(pnp_array))
+    assert np_array.shape == cnp_array.shape
+    assert numpy.allclose(np_array, composit.evaluate(cnp_array))
 
 
 @pytest.mark.parametrize("np", [numpy, composit])
@@ -178,15 +178,15 @@ def test_split():
         return result
 
     np_list = function(numpy)
-    pnp_list = function(composit)
+    cnp_list = function(composit)
 
-    for np_array, pnp_array in zip(np_list, pnp_list):
-        assert np_array.shape == pnp_array.shape
-        assert numpy.allclose(np_array, composit.evaluate(pnp_array))
+    for np_array, cnp_array in zip(np_list, cnp_list):
+        assert np_array.shape == cnp_array.shape
+        assert numpy.allclose(np_array, composit.evaluate(cnp_array))
 
-    for np_array, pnp_array in zip(np_list, composit.evaluate(*pnp_list)):
-        assert np_array.shape == pnp_array.shape
-        assert numpy.allclose(np_array, pnp_array)
+    for np_array, cnp_array in zip(np_list, composit.evaluate(*cnp_list)):
+        assert np_array.shape == cnp_array.shape
+        assert numpy.allclose(np_array, cnp_array)
 
 
 def test_concatenate():

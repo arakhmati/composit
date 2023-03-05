@@ -7,7 +7,7 @@ import composit as cnp
 from composit.nn.optimizer import apply_gradients, sgd_optimizer
 
 
-def pnp_model(input_var, parameter_0, parameter_1, parameter_2):
+def cnp_model(input_var, parameter_0, parameter_1, parameter_2):
     matmul_output_var = input_var @ parameter_0
     add_output_var = matmul_output_var + parameter_1
     output_var = add_output_var + matmul_output_var - cnp.sum(parameter_2, -1, keepdims=True)
@@ -41,7 +41,7 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
     parameter_0 = cnp.nn.variable(name="parameter_0", shape=np_parameter_0.shape)
     parameter_1 = cnp.nn.variable(name="parameter_1", shape=np_parameter_1.shape)
     parameter_2 = cnp.nn.variable(name="parameter_2", shape=np_parameter_2.shape)
-    output_var = pnp_model(input_var, parameter_0, parameter_1, parameter_2)
+    output_var = cnp_model(input_var, parameter_0, parameter_1, parameter_2)
 
     parameters = {
         parameter_0: np_parameter_0,

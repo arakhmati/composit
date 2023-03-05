@@ -17,9 +17,9 @@ static struct PyModuleDef pyimmer_module = {
 PyMODINIT_FUNC PyInit_pyimmer(void) {
 
   using pyimmer::map::py_immer_map_type;
+  using pyimmer::map_item_iterator::py_immer_map_item_iterator_type;
   using pyimmer::map_key_iterator::py_immer_map_key_iterator_type;
   using pyimmer::map_value_iterator::py_immer_map_value_iterator_type;
-  using pyimmer::map_item_iterator::py_immer_map_item_iterator_type;
 
   PyObject *module = PyModule_Create(&pyimmer_module);
   if (module == NULL) {

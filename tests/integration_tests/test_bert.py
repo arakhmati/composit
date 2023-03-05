@@ -349,7 +349,7 @@ def test_functional_bert_vs_transformers_bert(
         model_input = [torch.from_numpy(x) for x in model_input]
         transformers_outputs.append(torch_forward(model_input[0]))
 
-    pnp_outputs = []
+    cnp_outputs = []
     for model_input in model_inputs:
         input_ids, token_type_ids = model_input
         output = cnp.nn.evaluate(
@@ -360,9 +360,9 @@ def test_functional_bert_vs_transformers_bert(
                 **parameters,
             },
         )
-        pnp_outputs.append(output)
+        cnp_outputs.append(output)
 
-    for output, transformers_output in zip(pnp_outputs, transformers_outputs):
+    for output, transformers_output in zip(cnp_outputs, transformers_outputs):
         transformers_output = transformers_output.detach().numpy()
         assert np.allclose(output, transformers_output, atol=1e-3)
 
@@ -461,7 +461,7 @@ def test_functional_bert_autograd(
         incoming_gradient = create_random_float((batch_size, sequence_size, num_heads * head_size), -0.001, 0.001)
         torch_loss.backward(torch.from_numpy(incoming_gradient))
 
-        pnp_gradients = cnp.nn.differentiate(
+        cnp_gradients = cnp.nn.differentiate(
             [loss],
             input_vars_to_differentiate,
             {
@@ -471,23 +471,23 @@ def test_functional_bert_autograd(
             },
             {loss: incoming_gradient},
         )
-        assert len(pnp_gradients) == len(input_vars_to_differentiate)
-        pnp_gradients = {var.node.name: value for var, value in pnp_gradients.items()}
+        assert len(cnp_gradients) == len(input_vars_to_differentiate)
+        cnp_gradients = {var.node.name: value for var, value in cnp_gradients.items()}
 
         # Accumulate gradients
-        for key, value in pnp_gradients.items():
+        for key, value in cnp_gradients.items():
             if key in accumulated_gradients:
                 accumulated_gradients[key] += value
             else:
                 accumulated_gradients[key] = value
 
-        for name, pnp_gradient in reversed(accumulated_gradients.items()):
+        for name, cnp_gradient in reversed(accumulated_gradients.items()):
             torch_parameter = transformers_parameters[name.replace("bert.", "")]
             torch_gradient = torch_parameter.grad.numpy()
             if "weight" in name and "embedding" not in name:
                 torch_gradient = torch_gradient.T
 
-            all_close = np.allclose(pnp_gradient, torch_gradient, atol=1e-3)
+            all_close = np.allclose(cnp_gradient, torch_gradient, atol=1e-3)
             assert all_close
 
     cnp.nn.module.DISABLE = False
