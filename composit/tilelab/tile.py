@@ -7,17 +7,30 @@ import operator
 
 import numpy as np
 from pyrsistent import PClass, field, pmap
-from toolz.itertoolz import first
+from toolz import first
 
-import composit as cnp
 from composit.multidigraph import compose_all, topological_traversal
-from composit.nn import evaluate
 from composit.numpy.core import get_operands
+from composit.tilelab.tilization_level import TilizationLevel
 
 
-class TilizationLevel(PClass):
-    level_name = field()
-    tile_shape = field()
+def binary_operation(self, other, operation):
+    ranges = (range(num_tiles) for num_tiles in self.num_tiles_per_axis())
+
+    index_to_tile = {}
+    for index in itertools.product(*ranges):
+        b_index = tuple(i % num_tiles for i, num_tiles in zip(index, other.num_tiles_per_axis()))
+        a_tile = self[index]
+        b_tile = other[b_index]
+        tile = operation(a_tile, b_tile)
+        index_to_tile[index] = tile
+
+    return TilizedTensor(
+        level_name=self.level_name,
+        shape=self.shape,
+        tile_shape=self.tile_shape,
+        index_to_tile=index_to_tile,
+    )
 
 
 class TilizedTensor(PClass):
@@ -27,10 +40,10 @@ class TilizedTensor(PClass):
     index_to_tile = field()
 
     @property
-    def tilization_hierarchy(self):
+    def hierarchy(self):
         return [TilizationLevel(level_name=self.level_name, tile_shape=self.tile_shape)] + first(
             self.index_to_tile.values()
-        ).tilization_hierarchy
+        ).hierarchy
 
     def num_tiles_per_axis(self):
         return tuple(dim // tile_dim for dim, tile_dim in zip(self.shape, self.tile_shape))
@@ -56,29 +69,11 @@ class TilizedTensor(PClass):
             equals &= a_tile == b_tile
         return equals
 
-    def binary_operation(self, other, operation):
-        ranges = (range(num_tiles) for num_tiles in self.num_tiles_per_axis())
+    def __add__(*args):
+        return binary_operation(*args, operator.add)
 
-        index_to_tile = {}
-        for index in itertools.product(*ranges):
-            b_index = tuple(i % num_tiles for i, num_tiles in zip(index, other.num_tiles_per_axis()))
-            a_tile = self[index]
-            b_tile = other[b_index]
-            tile = operation(a_tile, b_tile)
-            index_to_tile[index] = tile
-
-        return TilizedTensor(
-            level_name=self.level_name,
-            shape=self.shape,
-            tile_shape=self.tile_shape,
-            index_to_tile=index_to_tile,
-        )
-
-    def __add__(self, other):
-        return self.binary_operation(other, operator.add)
-
-    def __sub__(self, other):
-        return self.binary_operation(other, operator.sub)
+    def __sub__(*args):
+        return binary_operation(*args, operator.sub)
 
     def __matmul__(self, other):
         a_num_tiles_per_axis = self.num_tiles_per_axis()
@@ -166,14 +161,14 @@ class Tile(PClass):
         return self.tile.shape
 
     @property
-    def tilization_hierarchy(self):
+    def hierarchy(self):
         return []
 
     def __repr__(self):
         return f"{self.__class__.__name__}(shape={self.shape})"
 
     def __eq__(self, other) -> bool:
-        return self.tile.shape == other.tile.shape
+        return np.allclose(self.tile, other.tile)
 
     def __add__(self, other):
         return Tile(tile=self.tile + other.tile)
@@ -185,7 +180,7 @@ class Tile(PClass):
         return Tile(tile=self.tile @ other.tile)
 
     def sum(self, axis, keepdims):
-        result = cnp.sum(self.tile, axis=axis, keepdims=keepdims)
+        result = np.sum(self.tile, axis=axis, keepdims=keepdims)
         """
         To pad, or not to pad, that is the question
         pad_width = [[0, 0] for _ in self.tile.shape]
@@ -194,20 +189,15 @@ class Tile(PClass):
         """
         return Tile(tile=result)
 
-    def evaluate(self, inputs=None):
-        if inputs is None:
-            inputs = {}
-        return evaluate(self.tile, inputs=inputs)
-
     def tiles(self):
         yield self.tile
 
 
 def tilize_tensor(
-    tensor,
-    tilization_hierarchy: list[TilizationLevel],
+    tensor: np.ndarray,
+    hierarchy: list[TilizationLevel],
 ):
-    tilization_level, *remaining_tilization_hierarchy = tilization_hierarchy
+    tilization_level, *remaining_hierarchy = hierarchy
     tile_shape = tilization_level.tile_shape
 
     if len(tensor.shape) != len(tile_shape):
@@ -223,10 +213,10 @@ def tilize_tensor(
         tile_indices = tuple(tensor_index // tile_dim for tensor_index, tile_dim in zip(indices, tile_shape))
         tile = tensor[tile_slices]
 
-        if remaining_tilization_hierarchy:
-            index_to_tile[tile_indices] = tilize_tensor(tile, remaining_tilization_hierarchy)
+        if remaining_hierarchy:
+            index_to_tile[tile_indices] = tilize_tensor(tile, remaining_hierarchy)
         else:
-            index_to_tile[tile_indices] = Tile(tile=cnp.asarray(tile))
+            index_to_tile[tile_indices] = Tile(tile=tile)
 
     tilized_tensor = TilizedTensor(
         level_name=tilization_level.level_name,
@@ -296,7 +286,7 @@ def concatenate_tensors(tensors, axis):
         )
         return tilized_tensor
     else:
-        tile = cnp.concatenate([tensor.tile for tensor in tensors], axis)
+        tile = np.concatenate([tensor.tile for tensor in tensors], axis)
         return Tile(tile=tile)
 
 
@@ -381,56 +371,54 @@ def retilize_tensor(tensor_to_retilize: TilizedTensor, tilization_hierarchy: lis
     return tilized_tensor
 
 
-def initialize_cache(graph, inputs):
+def initialize_cache(inputs, tile_views):
     cache = {}
-    for parray, tilization_levels in inputs.items():
-        cache[(parray.node, parray.output_index)] = tilize_tensor(parray, tilization_levels)
+    for parray, array in inputs.items():
+        tile_view = tile_views[parray]
+        cache[(parray.node, parray.output_index)] = tilize_tensor(array, tile_view.hierarchy)
     return cache
 
 
 def tilize(
     *output_vars,
-    inputs,
+    tile_views,
+    inputs=pmap(),
     initialize_cache_function=initialize_cache,
     return_cache=False,
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
-    cache = initialize_cache_function(graph, inputs)
+    cache = initialize_cache_function(inputs, tile_views)
     for node in topological_traversal(graph):
         if (node, 0) in cache:
             continue
         instruction = graph.nodes[node]["instruction"]
-        input_arrays = [cache[operand] for operand in get_operands(graph, node)]
+        input_tensors = [cache[operand] for operand in get_operands(graph, node)]
 
         if instruction.__class__.__name__ == "matmul":
-            instruction_output = input_arrays[0] @ input_arrays[1]
+            output_tensor = input_tensors[0] @ input_tensors[1]
         elif instruction.__class__.__name__ == "sum":
-            instruction_output = input_arrays[0].sum(axis=instruction.axis, keepdims=instruction.keepdims)
+            output_tensor = input_tensors[0].sum(axis=instruction.axis, keepdims=instruction.keepdims)
         elif instruction.__class__.__name__ == "add":
-            input_0, input_1 = input_arrays
-            if input_0.tilization_hierarchy != input_1.tilization_hierarchy and math.prod(input_0.shape) == math.prod(
-                input_1.shape
-            ):
-                input_1 = retilize_tensor(input_1, input_0.tilization_hierarchy)
-            instruction_output = input_0 + input_1
+            input_0, input_1 = input_tensors
+            if input_0.hierarchy != input_1.hierarchy and math.prod(input_0.shape) == math.prod(input_1.shape):
+                input_1 = retilize_tensor(input_1, input_0.hierarchy)
+            output_tensor = input_0 + input_1
         elif instruction.__class__.__name__ == "subtract":
-            input_0, input_1 = input_arrays
-            if input_0.tilization_hierarchy != input_1.tilization_hierarchy and math.prod(input_0.shape) == math.prod(
-                input_1.shape
-            ):
-                input_1 = retilize_tensor(input_1, input_0.tilization_hierarchy)
-            instruction_output = input_0 - input_1
+            input_0, input_1 = input_tensors
+            if input_0.hierarchy != input_1.hierarchy and math.prod(input_0.shape) == math.prod(input_1.shape):
+                input_1 = retilize_tensor(input_1, input_0.hierarchy)
+            output_tensor = input_0 - input_1
         else:
             raise RuntimeError(f"Unrecognized instruction: {instruction}")
 
-        if isinstance(instruction_output, TilizedTensor):
-            cache[(node, 0)] = instruction_output
-        elif isinstance(instruction_output, collections.abc.Iterable):
-            for output_index, instruction_output in enumerate(instruction_output):
-                cache[(node, output_index)] = instruction_output
+        if isinstance(output_tensor, TilizedTensor):
+            cache[(node, 0)] = output_tensor
+        elif isinstance(output_tensor, collections.abc.Iterable):
+            for output_index, output_tensor in enumerate(output_tensor):
+                cache[(node, output_index)] = output_tensor
         else:
-            raise RuntimeError(f"Unsupported type: {type(instruction_output)}")
+            raise RuntimeError(f"Unsupported type: {type(output_tensor)}")
 
     result = [cache[(output_var.node, output_var.output_index)] for output_var in output_vars]
     if len(result) == 1:

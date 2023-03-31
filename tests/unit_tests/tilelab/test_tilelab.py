@@ -3,12 +3,14 @@ import pytest
 import numpy as np
 
 import composit as cnp
-from composit.tilelab import (
+from composit.tilelab.tile_view import (
     TilizationLevel,
-    tilize_tensor,
-    retilize_tensor,
-    tilize,
+    create_tile_view,
+    retilize_view,
+    propagate_tile_views,
 )
+
+from composit.tilelab.tile import tilize
 
 
 @pytest.mark.parametrize("input_shape", [(4, 32, 32)])
@@ -30,7 +32,7 @@ def test_concatenate(
 
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
-    tilized_input = tilize_tensor(
+    view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
@@ -39,7 +41,7 @@ def test_concatenate(
         ],
     )
 
-    differently_tilized_input = tilize_tensor(
+    different_view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
@@ -48,9 +50,10 @@ def test_concatenate(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
+    retilized_view, steps = retilize_view(view, different_view.hierarchy)
 
-    assert retilized_input == differently_tilized_input
+    assert retilized_view == different_view
+    assert steps is None
 
 
 @pytest.mark.parametrize("input_shape", [(1, 32, 32)])
@@ -72,7 +75,7 @@ def test_slice(
 
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
-    tilized_input = tilize_tensor(
+    view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
@@ -81,7 +84,7 @@ def test_slice(
         ],
     )
 
-    differently_tilized_input = tilize_tensor(
+    different_view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
@@ -90,9 +93,10 @@ def test_slice(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
+    retilized_view, steps = retilize_view(view, different_view.hierarchy)
 
-    assert retilized_input == differently_tilized_input
+    assert retilized_view == different_view
+    assert steps is None
 
 
 @pytest.mark.parametrize("input_shape", [(1, 16, 16)])
@@ -114,7 +118,7 @@ def test_buffer_slice_block_slice_tile_concatenate(
 
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
-    tilized_input = tilize_tensor(
+    view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
@@ -123,7 +127,7 @@ def test_buffer_slice_block_slice_tile_concatenate(
         ],
     )
 
-    differently_tilized_input = tilize_tensor(
+    different_view = create_tile_view(
         np_input,
         [
             TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
@@ -132,9 +136,10 @@ def test_buffer_slice_block_slice_tile_concatenate(
         ],
     )
 
-    retilized_input = retilize_tensor(tilized_input, differently_tilized_input.tilization_hierarchy)
+    retilized_view, steps = retilize_view(view, different_view.hierarchy)
 
-    assert retilized_input == differently_tilized_input
+    assert retilized_view == different_view
+    assert steps is None
 
 
 @pytest.mark.parametrize("input_0_shape", [(1, 32, 64)])
@@ -183,14 +188,22 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
         ],
     }
 
-    tilized_output = tilize(output_var, inputs=input_var_to_scheme)
-    manually_tilized_output = tilize_tensor(output, tilized_output.tilization_hierarchy)
+    tile_views = propagate_tile_views(output_var, inputs=input_var_to_scheme)
 
-    assert manually_tilized_output == tilized_output
-    assert np.allclose(
-        manually_tilized_output.evaluate(),
-        tilized_output.evaluate(inputs=evaluate_inputs),
+    tilized_output = tilize(output_var, tile_views=tile_views, inputs=evaluate_inputs)
+
+    manual_output = cnp.asarray(output)
+    manual_tilized_output = tilize(
+        manual_output, tile_views={manual_output: tile_views[output_var]}, inputs={manual_output: output}
     )
 
     tiles = list(tilized_output.tiles())
-    assert len(tiles) == 32
+    manual_tiles = list(manual_tilized_output.tiles())
+
+    assert len(tiles) == len(manual_tiles)
+
+    for a_tile, b_tile in zip(tiles, manual_tiles):
+        assert np.allclose(
+            a_tile,
+            b_tile,
+        )

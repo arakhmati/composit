@@ -2,11 +2,11 @@ import itertools
 import math
 from typing import Union
 
+import numpy as np
+
 import codegen as c
 
-import composit as cnp
-import composit.nn
-from composit.tilelab import TilizedTensor
+from composit.tilelab.tile import TilizedTensor
 from composit.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 
 AVX_SIZE = c.variable(c.AUTO.constexpr(), "AVX_SIZE")
@@ -288,12 +288,12 @@ def transpose_tiles(tensor, transpose_levels, order):
             yield from transpose_tiles(tensor[tile_indices], transpose_levels, order)
     else:
         if tensor.level_name in transpose_levels:
-            yield cnp.transpose(tensor.tile, order)
+            yield np.transpose(tensor.tile, order)
         else:
             yield tensor.tile
 
 
-def generate_data(path, input_a, input_b, output, evaluate_inputs, *, transpose_b_levels=None):
+def generate_data(path, input_a, input_b, output, *, transpose_b_levels=None):
     if transpose_b_levels is None:
         transpose_b_levels = set()
 
@@ -304,7 +304,7 @@ def generate_data(path, input_a, input_b, output, evaluate_inputs, *, transpose_
         input_var_1_tiles = list(transpose_tiles(input_b, transpose_b_levels, (1, 0)))
         output_var_tiles = list(output.tiles())
 
-        tiles = cnp.nn.evaluate(*input_var_0_tiles, *input_var_1_tiles, *output_var_tiles, inputs=evaluate_inputs)
+        tiles = input_var_0_tiles + input_var_1_tiles + output_var_tiles
 
         offset = 0
         flat_data = [

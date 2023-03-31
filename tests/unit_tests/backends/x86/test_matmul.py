@@ -11,10 +11,9 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from composit.tilelab import (
-    TilizationLevel,
-    tilize,
-)
+from composit.tilelab.tile_view import propagate_tile_views
+from composit.tilelab.tilization_level import TilizationLevel
+from composit.tilelab.tile import tilize
 from composit.backends.x86.kernels.matmul import generate_kernel, generate_data
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
@@ -135,10 +134,8 @@ def run_matmul(
         ],
     }
 
-    try:
-        tilized_output, cache = tilize(output_var, inputs=input_var_to_scheme, return_cache=True)
-    except:
-        pytest.skip(f"Tilization Failed")
+    tile_views = propagate_tile_views(output_var, inputs=input_var_to_scheme)
+    tilized_output, cache = tilize(output_var, tile_views=tile_views, inputs=evaluate_inputs, return_cache=True)
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
@@ -158,7 +155,6 @@ def run_matmul(
         tilized_input_a,
         tilized_input_b,
         tilized_output,
-        evaluate_inputs,
         transpose_b_levels=transpose_b_levels,
     )
 
