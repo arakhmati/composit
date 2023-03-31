@@ -1,8 +1,6 @@
-#include <array>
 #include <cassert>
-#include <chrono>
 #include <cmath>
-#include <iostream>
+#include <cstring>
 #include <stdlib.h>
 
 #include <sched.h>
@@ -10,7 +8,6 @@
 constexpr auto ALIGNMENT = 32;
 
 #include "matmul.hpp"
-#include "matmul_data.hpp"
 
 constexpr auto EPSILON = 1e-5f;
 
@@ -28,7 +25,9 @@ auto CompareArrays(const float *array_a, const float *array_b,
   return true;
 }
 
-int main(int argc, char **argv) {
+extern "C" {
+void run(float *input_0, std::size_t input_0_size, float *input_1,
+         std::size_t input_1_size, float *output, std::size_t output_size) {
 
   constexpr auto core = 0;
   constexpr auto pid = 0;
@@ -37,54 +36,23 @@ int main(int argc, char **argv) {
   CPU_SET(core, &cpu_set);
   sched_setaffinity(pid, sizeof(cpu_set_t), &cpu_set);
 
-  auto count = std::stoi(std::string(argv[1]));
-
   auto memory_pool = static_cast<float *>(std::aligned_alloc(
-      ALIGNMENT,
-      (input_0.size() + input_1.size() + golden_matmul_output.size() * 2) *
-          sizeof(float)));
+      ALIGNMENT, (input_0_size + input_1_size + output_size) * sizeof(float)));
 
   float *pool_input_0 __attribute__((aligned(ALIGNMENT))) = memory_pool;
   float *pool_input_1 __attribute__((aligned(ALIGNMENT))) =
-      memory_pool + (input_0.size() * 1);
+      memory_pool + (input_0_size * 1);
   float *pool_output __attribute__((aligned(ALIGNMENT))) =
-      memory_pool + (input_0.size() + input_1.size());
-  float *pool_golden_matmul_output __attribute__((aligned(ALIGNMENT))) =
-      memory_pool +
-      (input_0.size() + input_1.size() + golden_matmul_output.size());
+      memory_pool + (input_0_size + input_1_size);
 
-  for (auto i = 0lu; i < input_0.size(); i++) {
-    pool_input_0[i] = input_0[i];
-  }
+  memcpy(pool_input_0, input_0, input_0_size * sizeof(float));
+  memcpy(pool_input_1, input_1, input_1_size * sizeof(float));
+  memset(pool_output, 0.0f, output_size * sizeof(float));
 
-  for (auto i = 0lu; i < input_1.size(); i++) {
-    pool_input_1[i] = input_1[i];
-  }
+  MatmulKernel(pool_input_0, pool_input_1, pool_output);
 
-  for (auto i = 0lu; i < golden_matmul_output.size(); i++) {
-    pool_golden_matmul_output[i] = golden_matmul_output[i];
-  }
-
-  for (auto i = 0; i < count; i++) {
-
-    for (auto i = 0lu; i < golden_matmul_output.size(); i++) {
-      pool_output[i] = 0;
-    }
-
-    auto start = std::chrono::steady_clock::now();
-    MatmulKernel(pool_input_0, pool_input_1, pool_output);
-    auto end = std::chrono::steady_clock::now();
-
-    auto nanoseconds =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-            .count();
-    std::cout << "execution time: " << nanoseconds << " nanoseconds\n";
-
-    assert(CompareArrays(pool_golden_matmul_output, pool_output,
-                         golden_matmul_output.size()));
-  }
+  memcpy(output, pool_output, output_size * sizeof(float));
 
   std::free(memory_pool);
-
-  return 0;
+}
 }

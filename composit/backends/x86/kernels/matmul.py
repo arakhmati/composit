@@ -293,39 +293,18 @@ def transpose_tiles(tensor, transpose_levels, order):
             yield tensor.tile
 
 
-def generate_data(path, input_a, input_b, output, *, transpose_b_levels=None):
+def generate_data(input_a, input_b, golden_output, *, transpose_b_levels=None):
     if transpose_b_levels is None:
         transpose_b_levels = set()
 
-    with open(path / "matmul_data.hpp", "w") as f:
-        f.write(f"#include<array>\n\n")
+    input_a_tiles = list(input_a.tiles())
+    input_b_tiles = list(transpose_tiles(input_b, transpose_b_levels, (1, 0)))
+    golden_output_tiles = list(golden_output.tiles())
 
-        input_var_0_tiles = list(input_a.tiles())
-        input_var_1_tiles = list(transpose_tiles(input_b, transpose_b_levels, (1, 0)))
-        output_var_tiles = list(output.tiles())
+    input_a_values = np.concatenate([tile.flatten() for tile in input_a_tiles]).astype(np.float32)
 
-        tiles = input_var_0_tiles + input_var_1_tiles + output_var_tiles
+    input_b_values = np.concatenate([tile.flatten() for tile in input_b_tiles]).astype(np.float32)
 
-        offset = 0
-        flat_data = [
-            float(x) for index in range(len(input_var_0_tiles)) for x in tiles[offset + index].flatten().tolist()
-        ]
-        lhs = f"std::array<float, {len(flat_data)}> input_0"
-        rhs = ",\n".join(f"{x}" for x in flat_data)
-        f.write(f"{lhs} = {{ \n{rhs} }};\n")
+    golden_output_flat_array = np.concatenate([tile.flatten() for tile in golden_output_tiles]).astype(np.float32)
 
-        offset += len(input_var_0_tiles)
-        flat_data = [
-            float(x) for index in range(len(input_var_1_tiles)) for x in (tiles[offset + index]).flatten().tolist()
-        ]
-        lhs = f"std::array<float, {len(flat_data)}> input_1"
-        rhs = ",\n".join(f"{x}" for x in flat_data)
-        f.write(f"{lhs} = {{ \n{rhs} }};\n")
-
-        offset += len(input_var_1_tiles)
-        flat_data = [
-            float(x) for index in range(len(output_var_tiles)) for x in tiles[offset + index].flatten().tolist()
-        ]
-        lhs = f"std::array<float, {len(flat_data)}> golden_matmul_output"
-        rhs = ",\n".join(f"{x}" for x in flat_data)
-        f.write(f"{lhs} = {{ \n{rhs} }};\n")
+    return input_a_values, input_b_values, golden_output_flat_array
