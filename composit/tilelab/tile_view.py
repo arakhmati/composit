@@ -66,11 +66,11 @@ def _sum(view: TileView, axis) -> TileView:
 
 
 def create_tile_view(
-    tensor,
+    shape: tuple[int, ...],
     hierarchy: list[TilizationLevel],
 ):
     return TileView(
-        shape=tensor.shape,
+        shape=shape,
         hierarchy=hierarchy,
     )
 
@@ -108,7 +108,7 @@ class Cache(PClass):
 def initialize_cache(graph, inputs):
     cache = {}
     for parray, tilization_levels in inputs.items():
-        cache[(parray.node, parray.output_index)] = create_tile_view(parray, tilization_levels)
+        cache[(parray.node, parray.output_index)] = create_tile_view(parray.shape, tilization_levels)
     return cache
 
 

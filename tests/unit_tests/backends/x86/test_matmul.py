@@ -41,7 +41,7 @@ FLAGS = [
 ]
 
 
-def run_torch(num_iterations, input_var_a, input_var_b):
+def run_torch(num_iterations, input_a_shape, input_b_shape):
     logger.info("Run torch")
     import torch
 
@@ -50,8 +50,8 @@ def run_torch(num_iterations, input_var_a, input_var_b):
     # Call once to set up torch data structures
     for _ in range(10):
 
-        np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
-        np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+        np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
 
         torch_a = torch.from_numpy(np_input_a)
         torch_b = torch.from_numpy(np_input_b)
@@ -64,18 +64,19 @@ def run_torch(num_iterations, input_var_a, input_var_b):
     for i in range(num_iterations):
         start = time.time_ns()
 
-        np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
-        np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+        np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
 
         torch_a = torch.from_numpy(np_input_a)
         torch_b = torch.from_numpy(np_input_b)
-
         output = torch_a @ torch_b
+
+        output = output.numpy()
 
         end = time.time_ns()
         execution_times.append(end - start)
 
-        assert np.allclose(output.numpy(), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+        assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = np.asarray(execution_times) / 1e6
     logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
@@ -109,8 +110,8 @@ def compile_kernel(test_output_path):
 def run_cnp_kernel(
     num_iterations,
     test_output_path,
-    input_var_a,
-    input_var_b,
+    input_a_shape,
+    input_b_shape,
     l1_cache_a_shape,
     l1_cache_b_shape,
     *,
@@ -118,23 +119,24 @@ def run_cnp_kernel(
     use_avx_manually,
 ):
 
-    np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
-    np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
-    output = np_input_a @ np_input_b
+    logger.info("Creating composit graph")
+    input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
+    input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
+    output_var = input_var_a @ input_var_b
 
     logger.info("Create tile views")
     input_a_tile_view = create_tile_view(
-        np_input_a, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)]
+        input_var_a.shape, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)]
     )
     input_b_tile_view = create_tile_view(
-        np_input_b, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)]
+        input_var_b.shape, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)]
     )
     output_tile_view = input_a_tile_view @ input_b_tile_view
 
     logger.info("Create tile metadata")
-    input_a_tile_metadata = create_tile_metadata(np_input_a.shape, input_a_tile_view.hierarchy)
-    input_b_tile_metadata = create_tile_metadata(np_input_b.shape, input_b_tile_view.hierarchy)
-    output_tile_metadata = create_tile_metadata(output.shape, output_tile_view.hierarchy)
+    input_a_tile_metadata = create_tile_metadata(input_var_a.shape, input_a_tile_view.hierarchy)
+    input_b_tile_metadata = create_tile_metadata(input_var_b.shape, input_b_tile_view.hierarchy)
+    output_tile_metadata = create_tile_metadata(output_var.shape, output_tile_view.hierarchy)
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
@@ -157,7 +159,7 @@ def run_cnp_kernel(
         c_float_p = POINTER(c_float)
         return flat_array.ctypes.data_as(c_float_p)
 
-    output_shape = (input_var_a @ input_var_b).shape
+    output_shape = output_var.shape
 
     logger.info("Run Kernel")
     execution_times = []
@@ -175,17 +177,14 @@ def run_cnp_kernel(
 
         matmul_kernel.run(
             cast_array(input_a_flat_array),
-            len(input_a_flat_array),
             cast_array(input_b_flat_array),
-            len(input_b_flat_array),
             cast_array(output_flat_array),
-            len(output_flat_array),
         )
+
+        output = from_flat_array(output_flat_array, output_tile_metadata)
 
         end = time.time_ns()
         execution_times.append(end - start)
-
-        output = from_flat_array(output_flat_array, output_tile_metadata)
 
         assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
@@ -208,20 +207,16 @@ def run_matmul(
     l1_cache_b_shape: tuple[int, ...],
 ):
 
-    logger.info("Creating composit graph")
-    input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
-    input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
-
     fig, ax = plt.subplots()
     if compare_against_torch:
-        torch_execution_times = run_torch(num_iterations, input_var_a, input_var_b)
+        torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
         ax.plot(torch_execution_times, color="red")
 
     cnp_execution_times = run_cnp_kernel(
         num_iterations,
         test_output_path,
-        input_var_a,
-        input_var_b,
+        input_a_shape,
+        input_b_shape,
         l1_cache_a_shape=l1_cache_a_shape,
         l1_cache_b_shape=l1_cache_b_shape,
         transpose_b_levels=transpose_b_levels,
