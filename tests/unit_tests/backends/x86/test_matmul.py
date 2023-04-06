@@ -14,8 +14,9 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
+from composit.tilelab.tile_view import create_tile_view
 from composit.tilelab.tilization_level import TilizationLevel
-from composit.tilelab.tile import tilize_tensor, to_flat_array, from_flat_array
+from composit.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
 from composit.backends.x86.kernels.matmul import generate_kernel
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
@@ -117,31 +118,31 @@ def run_cnp_kernel(
     use_avx_manually,
 ):
 
-    logger.info("Creating and propagating tile views")
-    input_tile_views = {
-        input_var_a: [
-            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
-        ],
-        input_var_b: [
-            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape),
-        ],
-    }
-
     np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
     np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+    output = np_input_a @ np_input_b
 
-    logger.info("Tilize tensors")
-    tilized_input_a = tilize_tensor(np_input_a, input_tile_views[input_var_a])
-    tilized_input_b = tilize_tensor(np_input_b, input_tile_views[input_var_b])
-    tilized_golden_output = tilized_input_a @ tilized_input_b
+    logger.info("Create tile views")
+    input_a_tile_view = create_tile_view(
+        np_input_a, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)]
+    )
+    input_b_tile_view = create_tile_view(
+        np_input_b, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)]
+    )
+    output_tile_view = input_a_tile_view @ input_b_tile_view
+
+    logger.info("Create tile metadata")
+    input_a_tile_metadata = create_tile_metadata(np_input_a.shape, input_a_tile_view.hierarchy)
+    input_b_tile_metadata = create_tile_metadata(np_input_b.shape, input_b_tile_view.hierarchy)
+    output_tile_metadata = create_tile_metadata(output.shape, output_tile_view.hierarchy)
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generate kernel")
     generate_kernel(
         test_output_path,
-        tilized_input_a,
-        tilized_input_b,
+        input_a_tile_metadata,
+        input_b_tile_metadata,
         transpose_b_levels=transpose_b_levels,
         use_avx_manually=use_avx_manually,
     )
@@ -166,9 +167,9 @@ def run_cnp_kernel(
         np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
         np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
 
-        input_a_flat_array = to_flat_array(np_input_a, input_tile_views[input_var_a])
+        input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
         input_b_flat_array = to_flat_array(
-            np_input_b, input_tile_views[input_var_b], transpose_levels=transpose_b_levels, order=(1, 0)
+            np_input_b, input_b_tile_metadata, transpose_levels=transpose_b_levels, order=(1, 0)
         )
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
 
@@ -181,10 +182,10 @@ def run_cnp_kernel(
             len(output_flat_array),
         )
 
-        output = from_flat_array(output_flat_array, tilized_golden_output)
-
         end = time.time_ns()
         execution_times.append(end - start)
+
+        output = from_flat_array(output_flat_array, output_tile_metadata)
 
         assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 

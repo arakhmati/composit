@@ -3,7 +3,7 @@ from typing import Union
 
 import codegen as c
 
-from composit.tilelab.tile import TilizedTensor
+from composit.tilelab.tile import TileMetadata
 from composit.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 
 AVX_SIZE = c.variable(c.AUTO.constexpr(), "AVX_SIZE")
@@ -82,7 +82,7 @@ def generate_indices(
     inner_loop_increment = c.literal(1)
     outer_loop_body_after = c.block()
 
-    if isinstance(input_a, TilizedTensor):
+    if isinstance(input_a, TileMetadata):
         a_num_tiles_per_axis = input_a.num_tiles_per_axis()
         b_num_tiles_per_axis = input_b.num_tiles_per_axis()
         a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
