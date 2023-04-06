@@ -1,8 +1,5 @@
-import itertools
 import math
 from typing import Union
-
-import numpy as np
 
 import codegen as c
 
@@ -275,36 +272,3 @@ def generate_indices(
     )
 
     return c.block(b_loop)
-
-
-def transpose_tiles(tensor, transpose_levels, order):
-    if isinstance(tensor, TilizedTensor):
-        ranges = tuple(range(num_tiles) for num_tiles in tensor.num_tiles_per_axis())
-        if tensor.level_name in transpose_levels:
-            ranges = [ranges[axis] for axis in order]
-        for tile_indices in itertools.product(*ranges):
-            if tensor.level_name in transpose_levels:
-                tile_indices = tuple([tile_indices[axis] for axis in order])
-            yield from transpose_tiles(tensor[tile_indices], transpose_levels, order)
-    else:
-        if tensor.level_name in transpose_levels:
-            yield np.transpose(tensor.tile, order)
-        else:
-            yield tensor.tile
-
-
-def generate_data(input_a, input_b, golden_output, *, transpose_b_levels=None):
-    if transpose_b_levels is None:
-        transpose_b_levels = set()
-
-    input_a_tiles = list(input_a.tiles())
-    input_b_tiles = list(transpose_tiles(input_b, transpose_b_levels, (1, 0)))
-    golden_output_tiles = list(golden_output.tiles())
-
-    input_a_values = np.concatenate([tile.flatten() for tile in input_a_tiles]).astype(np.float32)
-
-    input_b_values = np.concatenate([tile.flatten() for tile in input_b_tiles]).astype(np.float32)
-
-    golden_output_flat_array = np.concatenate([tile.flatten() for tile in golden_output_tiles]).astype(np.float32)
-
-    return input_a_values, input_b_values, golden_output_flat_array

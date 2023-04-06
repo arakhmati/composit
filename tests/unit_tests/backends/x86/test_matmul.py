@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ctypes import cdll, c_float, POINTER
+import math
 import pathlib
 import time
 import subprocess
@@ -13,10 +14,9 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from composit.tilelab.tile_view import propagate_tile_views
 from composit.tilelab.tilization_level import TilizationLevel
-from composit.tilelab.tile import tilize_tensor
-from composit.backends.x86.kernels.matmul import generate_kernel, generate_data
+from composit.tilelab.tile import tilize_tensor, to_flat_array, from_flat_array
+from composit.backends.x86.kernels.matmul import generate_kernel
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
@@ -40,25 +40,41 @@ FLAGS = [
 ]
 
 
-def run_torch(np_input_a, np_input_b, num_iterations):
+def run_torch(num_iterations, input_var_a, input_var_b):
     logger.info("Run torch")
     import torch
 
     torch.set_num_threads(1)
 
-    torch_a = torch.from_numpy(np_input_a)
-    torch_b = torch.from_numpy(np_input_b)
-
     # Call once to set up torch data structures
     for _ in range(10):
+
+        np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+
+        torch_a = torch.from_numpy(np_input_a)
+        torch_b = torch.from_numpy(np_input_b)
+
         output = torch_a @ torch_b
+
+        assert np.allclose(output.numpy(), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = []
     for i in range(num_iterations):
         start = time.time_ns()
+
+        np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+
+        torch_a = torch.from_numpy(np_input_a)
+        torch_b = torch.from_numpy(np_input_b)
+
         output = torch_a @ torch_b
+
         end = time.time_ns()
         execution_times.append(end - start)
+
+        assert np.allclose(output.numpy(), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = np.asarray(execution_times) / 1e6
     logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
@@ -67,13 +83,7 @@ def run_torch(np_input_a, np_input_b, num_iterations):
     return execution_times
 
 
-def run_pnp_kernel(
-    test_output_path,
-    num_iterations,
-    input_a_flat_array,
-    input_b_flat_array,
-    golden_output_flat_array,
-):
+def compile_kernel(test_output_path):
     kernel_name = "matmul"
     source_file = str(FILE_DIR / f"{kernel_name}.cpp")
     assembly = test_output_path / f"{kernel_name}.s"
@@ -92,21 +102,75 @@ def run_pnp_kernel(
     result = subprocess.run(command)
     assert result.returncode == 0
 
-    logger.info("Run kernel")
-    matmul_kernel = cdll.LoadLibrary(shared_library)
+    return shared_library
 
-    output_flat_array = np.zeros_like(golden_output_flat_array)
+
+def run_cnp_kernel(
+    num_iterations,
+    test_output_path,
+    input_var_a,
+    input_var_b,
+    l1_cache_a_shape,
+    l1_cache_b_shape,
+    *,
+    transpose_b_levels,
+    use_avx_manually,
+):
+
+    logger.info("Creating and propagating tile views")
+    input_tile_views = {
+        input_var_a: [
+            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
+        ],
+        input_var_b: [
+            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape),
+        ],
+    }
+
+    np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
+    np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+
+    logger.info("Tilize tensors")
+    tilized_input_a = tilize_tensor(np_input_a, input_tile_views[input_var_a])
+    tilized_input_b = tilize_tensor(np_input_b, input_tile_views[input_var_b])
+    tilized_golden_output = tilized_input_a @ tilized_input_b
+
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Generate kernel")
+    generate_kernel(
+        test_output_path,
+        tilized_input_a,
+        tilized_input_b,
+        transpose_b_levels=transpose_b_levels,
+        use_avx_manually=use_avx_manually,
+    )
+
+    logger.info("Compile kernel")
+    shared_library = compile_kernel(test_output_path)
+
+    logger.info("Load kernel")
+    matmul_kernel = cdll.LoadLibrary(shared_library)
 
     def cast_array(flat_array):
         c_float_p = POINTER(c_float)
         return flat_array.ctypes.data_as(c_float_p)
 
+    output_shape = (input_var_a @ input_var_b).shape
+
+    logger.info("Run Kernel")
     execution_times = []
     for _ in range(num_iterations):
-
         start = time.time_ns()
 
-        output_flat_array.fill(0.0)
+        np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+
+        input_a_flat_array = to_flat_array(np_input_a, input_tile_views[input_var_a])
+        input_b_flat_array = to_flat_array(
+            np_input_b, input_tile_views[input_var_b], transpose_levels=transpose_b_levels, order=(1, 0)
+        )
+        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
 
         matmul_kernel.run(
             cast_array(input_a_flat_array),
@@ -116,10 +180,13 @@ def run_pnp_kernel(
             cast_array(output_flat_array),
             len(output_flat_array),
         )
+
+        output = from_flat_array(output_flat_array, tilized_golden_output)
+
         end = time.time_ns()
         execution_times.append(end - start)
 
-        assert np.allclose(output_flat_array, golden_output_flat_array, atol=1e-5, rtol=1e-6)
+        assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = np.asarray(execution_times) / 1e6
     logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
@@ -143,62 +210,24 @@ def run_matmul(
     logger.info("Creating composit graph")
     input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
     input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
-    output_var = input_var_a @ input_var_b
 
-    logger.info("Initializing random inputs")
-    np.random.seed(0)
-    np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape)
-    np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape)
+    fig, ax = plt.subplots()
+    if compare_against_torch:
+        torch_execution_times = run_torch(num_iterations, input_var_a, input_var_b)
+        ax.plot(torch_execution_times, color="red")
 
-    logger.info("Creating and propagating tile views")
-    input_var_to_scheme = {
-        input_var_a: [
-            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
-        ],
-        input_var_b: [
-            TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape),
-        ],
-    }
-    tile_views = propagate_tile_views(output_var, inputs=input_var_to_scheme)
-
-    logger.info("Tilizing tensor")
-    tilized_input_a = tilize_tensor(np_input_a, tile_views[input_var_a].hierarchy)
-    tilized_input_b = tilize_tensor(np_input_b, tile_views[input_var_b].hierarchy)
-    tilized_golden_output = tilize_tensor(np_input_a @ np_input_b, tile_views[output_var].hierarchy)
-
-    test_output_path.mkdir(parents=True, exist_ok=True)
-
-    logger.info("Generating kernel")
-    generate_kernel(
+    cnp_execution_times = run_cnp_kernel(
+        num_iterations,
         test_output_path,
-        tilized_input_a,
-        tilized_input_b,
+        input_var_a,
+        input_var_b,
+        l1_cache_a_shape=l1_cache_a_shape,
+        l1_cache_b_shape=l1_cache_b_shape,
         transpose_b_levels=transpose_b_levels,
         use_avx_manually=use_avx_manually,
     )
 
-    logger.info("Generating data")
-    input_a_flat_array, input_b_flat_array, golden_output_flat_array = generate_data(
-        tilized_input_a,
-        tilized_input_b,
-        tilized_golden_output,
-        transpose_b_levels=transpose_b_levels,
-    )
-
-    fig, ax = plt.subplots()
-    if compare_against_torch:
-        torch_execution_times = run_torch(np_input_a, np_input_b, num_iterations)
-        ax.plot(torch_execution_times, color="red")
-
-    pnp_execution_times = run_pnp_kernel(
-        test_output_path,
-        num_iterations,
-        input_a_flat_array,
-        input_b_flat_array,
-        golden_output_flat_array,
-    )
-
-    ax.plot(pnp_execution_times, color="green")
+    ax.plot(cnp_execution_times, color="green")
 
     def center_y_axis(axes):
         y_max = np.abs(axes.get_ylim()).max()
@@ -251,8 +280,8 @@ if __name__ == "__main__":
         compare_against_torch=True,
         transpose_b_levels=["atomic", "l1_cache"],
         use_avx_manually=True,
-        input_a_shape=(1, 2048, 2048),
+        input_a_shape=(1, 128, 128),
         l1_cache_a_shape=(1, 64, 64),
-        input_b_shape=(2048, 2048),
+        input_b_shape=(128, 128),
         l1_cache_b_shape=(64, 64),
     )

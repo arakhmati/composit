@@ -134,22 +134,22 @@ class TilizedTensor(PClass):
             index_to_tile=index_to_tile,
         )
 
-    def evaluate(self, inputs=None):
+    def tiles(self):
+        ranges = (range(num_tiles) for num_tiles in self.num_tiles_per_axis())
+        for tile_indices in itertools.product(*ranges):
+            yield from self[tile_indices].tiles()
+
+    def reconstruct(self, tiles):
         output = np.zeros(self.shape)
         ranges = (range(num_tiles) for num_tiles in self.num_tiles_per_axis())
         for tile_indices in itertools.product(*ranges):
-            tile = self[tile_indices].evaluate(inputs=inputs)
+            tile = self[tile_indices].reconstruct(tiles=tiles)
             tile_slices = tuple(
                 slice(tile_index * tile_dim, (tile_index + 1) * tile_dim)
                 for tile_index, tile_dim in zip(tile_indices, self.tile_shape)
             )
             output[tile_slices] = tile
         return output
-
-    def tiles(self):
-        ranges = (range(num_tiles) for num_tiles in self.num_tiles_per_axis())
-        for tile_indices in itertools.product(*ranges):
-            yield from self[tile_indices].tiles()
 
 
 class Tile(PClass):
@@ -191,6 +191,9 @@ class Tile(PClass):
 
     def tiles(self):
         yield self.tile
+
+    def reconstruct(self, tiles):
+        return next(tiles)
 
 
 def tilize_tensor(
@@ -427,3 +430,40 @@ def tilize(
     if return_cache:
         return result, cache
     return result
+
+
+def transpose_tiles(tensor, transpose_levels, order):
+    if isinstance(tensor, TilizedTensor):
+        ranges = tuple(range(num_tiles) for num_tiles in tensor.num_tiles_per_axis())
+        if tensor.level_name in transpose_levels:
+            ranges = [ranges[axis] for axis in order]
+        for tile_indices in itertools.product(*ranges):
+            if tensor.level_name in transpose_levels:
+                tile_indices = tuple([tile_indices[axis] for axis in order])
+            yield from transpose_tiles(tensor[tile_indices], transpose_levels, order)
+    else:
+        if tensor.level_name in transpose_levels:
+            yield np.transpose(tensor.tile, order)
+        else:
+            yield tensor.tile
+
+
+def to_flat_array(
+    array: np.array, hierarchy: list[TilizationLevel], *, transpose_levels=None, order=None
+) -> np.ndarray:
+    tilized_tensor = tilize_tensor(array, hierarchy)
+
+    if transpose_levels is None:
+        assert order is None
+        tiles = tilized_tensor.tiles()
+    else:
+        tiles = transpose_tiles(tilized_tensor, transpose_levels, order)
+    flat_array = np.concatenate([tile.flatten() for tile in tiles]).astype(np.float32)
+    return flat_array
+
+
+def from_flat_array(flat_array: np.array, tilized_tensor: TilizedTensor) -> np.ndarray:
+    tile_level = tilized_tensor.hierarchy[-1]
+    num_tiles = len(flat_array) / math.prod(tile_level.tile_shape)
+    tiles = (tile.reshape(tile_level.tile_shape) for tile in np.array_split(flat_array, num_tiles))
+    return tilized_tensor.reconstruct(tiles)
