@@ -5,8 +5,8 @@ import pytest
 from ctypes import cdll, c_float, POINTER
 import math
 import pathlib
-import time
 import subprocess
+import time
 
 from loguru import logger
 import matplotlib.pyplot as plt
@@ -118,6 +118,8 @@ def run_cnp_kernel(
     transpose_b_levels,
     use_avx_manually,
 ):
+    cpu_core = 1
+    logger.info(f"Run on core {cpu_core}")
 
     logger.info("Creating composit graph")
     input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
@@ -179,6 +181,7 @@ def run_cnp_kernel(
             cast_array(input_a_flat_array),
             cast_array(input_b_flat_array),
             cast_array(output_flat_array),
+            cpu_core,
         )
 
         output = from_flat_array(output_flat_array, output_tile_metadata)

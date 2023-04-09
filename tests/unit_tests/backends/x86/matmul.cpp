@@ -10,9 +10,8 @@ constexpr auto ALIGNMENT = 32;
 #include "matmul.hpp"
 
 extern "C" {
-void run(const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_a, const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_b, float* __restrict__ __attribute__((aligned(ALIGNMENT))) output) {
+void run(const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_a, const float* __restrict__ __attribute__((aligned(ALIGNMENT))) input_b, float* __restrict__ __attribute__((aligned(ALIGNMENT))) output, const std::size_t core) {
 
-  constexpr auto core = 0;
   constexpr auto pid = 0;
   cpu_set_t cpu_set;
   CPU_ZERO(&cpu_set);
