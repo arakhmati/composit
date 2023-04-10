@@ -69,7 +69,7 @@ def create_tile_metadata(
     for indices in itertools.product(*ranges):
         tile_indices = tuple(tensor_index // tile_dim for tensor_index, tile_dim in zip(indices, tile_shape))
 
-        new_offsets = [offset * tile_dim + index for offset, index, tile_dim in zip(offsets, indices, tile_shape)]
+        new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
         if remaining_hierarchy:
             index_to_tile[tile_indices] = create_tile_metadata(tile_shape, remaining_hierarchy, offsets=new_offsets)

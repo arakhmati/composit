@@ -201,6 +201,5 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
 
     output_tile_metadata = create_tile_metadata(output.shape, tile_views[output_var].hierarchy)
 
-    # TODO: re-enable the code below
-    # output_flat_array = to_flat_array(output, output_tile_metadata)
-    # assert np.allclose(output, from_flat_array(output_flat_array, output_tile_metadata))
+    output_flat_array = to_flat_array(output, output_tile_metadata)
+    assert np.allclose(output, from_flat_array(output_flat_array, output_tile_metadata))
