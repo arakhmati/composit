@@ -31,7 +31,7 @@ def get_operands(graph, node):
 
 @functoolz.memoize
 def instruction_shape(instruction, input_shapes):
-    dummy_input_arrays = [np.zeros(input_shape, dtype=np.int32) for input_shape in input_shapes]
+    dummy_input_arrays = [np.zeros(input_shape, dtype=np.uint8) for input_shape in input_shapes]
     result = instruction(*dummy_input_arrays)
 
     if np.isscalar(result):

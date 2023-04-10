@@ -273,14 +273,24 @@ def test_matmul(
 
 
 if __name__ == "__main__":
+
+    m = 128
+    k = 128
+    n = 128
+
+    batch_size = 1
+    m_tile = 64
+    k_tile = 64
+    n_tile = 64
+
     run_matmul(
         FILE_DIR / "test_output" / "custom",
         num_iterations=25,
         compare_against_torch=True,
         transpose_b_levels=["atomic", "l1_cache"],
         use_avx_manually=True,
-        input_a_shape=(1, 128, 128),
-        l1_cache_a_shape=(1, 64, 64),
-        input_b_shape=(128, 128),
-        l1_cache_b_shape=(64, 64),
+        input_a_shape=(batch_size, m, k),
+        l1_cache_a_shape=(batch_size, m_tile, k_tile),
+        input_b_shape=(k, n),
+        l1_cache_b_shape=(k_tile, n_tile),
     )
