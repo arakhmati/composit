@@ -1,4 +1,6 @@
+import gc
 import pickle
+import platform
 
 import networkx
 import pytest

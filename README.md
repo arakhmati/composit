@@ -3,14 +3,9 @@ Composit composes computational graphs using numpy-like API and then it breaks d
 
 ## Installation Instructions
 ```bash
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt update
-sudo apt install python3.11
-
-curl -sSL https://install.python-poetry.org | python3.11 -
-export PATH=$HOME/.local/bin:$PATH
-poetry shell
-poetry install
+python -m venv venv
+source venv/bin/activate
+./install.sh
 ```
 
 ## Tests
@@ -27,10 +22,3 @@ To get familiar with the code, read tests in this order:
 Each test builds up on the concepts from the previous tests
 
 (TODO: add documentation for all of the concepts)
-
-## Linting
-
-```bash
-poetry shell
-ruff check .
-```

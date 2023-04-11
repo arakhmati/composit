@@ -252,9 +252,7 @@ def test_matmul_kernel_file():
         ],
     )
 
-    
-    # ruff: noqa: E501
-    expected = """\ 
+    expected = """\
 #include <immintrin.h>
 
 constexpr auto AVX_SIZE = 8;
