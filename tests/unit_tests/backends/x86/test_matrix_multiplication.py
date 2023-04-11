@@ -5,7 +5,6 @@ import pytest
 from ctypes import cdll, c_float, POINTER
 import math
 import pathlib
-import subprocess
 import time
 
 from loguru import logger
@@ -17,28 +16,10 @@ from composit.hash import deterministic_hash
 from composit.tilelab.tile_view import create_tile_view
 from composit.tilelab.tilization_level import TilizationLevel
 from composit.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
-from composit.backends.x86.kernels.matmul import generate_kernel
+from composit.backends.x86.kernels import matrix_multiplication
+from composit.backends.x86.compile import compile_shared_library
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
-
-FLAGS = [
-    "-std=c++2a",
-    "-Ofast",
-    "-march=native",
-    "-fno-exceptions",
-    "-mavx2",
-    "-msse4",
-    "-mfma",
-    "-maes",
-    "-shared",
-    "-fPIC",
-    "-Wall",
-    "-Wno-deprecated",
-    "-Wno-unused-function",
-    "-Wno-multichar",
-    "-Wno-subobject-linkage",
-    "-Wno-format",
-]
 
 
 def run_torch(num_iterations, input_a_shape, input_b_shape):
@@ -47,18 +28,15 @@ def run_torch(num_iterations, input_a_shape, input_b_shape):
 
     torch.set_num_threads(1)
 
-    # Call once to set up torch data structures
-    for _ in range(10):
-
-        np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
-        np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
-
+    def run(np_input_a, np_input_b):
         torch_a = torch.from_numpy(np_input_a)
         torch_b = torch.from_numpy(np_input_b)
-
         output = torch_a @ torch_b
+        return output.numpy()
 
-        assert np.allclose(output.numpy(), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+    np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+    np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
+    assert np.allclose(run(np_input_a, np_input_b), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = []
     for i in range(num_iterations):
@@ -66,45 +44,16 @@ def run_torch(num_iterations, input_a_shape, input_b_shape):
 
         np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
         np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
-
-        torch_a = torch.from_numpy(np_input_a)
-        torch_b = torch.from_numpy(np_input_b)
-        output = torch_a @ torch_b
-
-        output = output.numpy()
+        run(np_input_a, np_input_b)
 
         end = time.time_ns()
         execution_times.append(end - start)
-
-        assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = np.asarray(execution_times) / 1e6
     logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
     logger.info(f"Minimum Execution Time: {execution_times.min()} milliseconds")
     logger.info(f"Maximum Execution Time: {execution_times.max()} milliseconds")
     return execution_times
-
-
-def compile_kernel(test_output_path):
-    kernel_name = "matmul"
-    source_file = str(FILE_DIR / f"{kernel_name}.cpp")
-    assembly = test_output_path / f"{kernel_name}.s"
-    assembly.unlink(missing_ok=True)
-    assembly = str(assembly)
-    command = ["g++", source_file, "-I", str(test_output_path), *FLAGS, "-S", "-fverbose-asm", "-o", assembly]
-    logger.info(f"Compile Source Code to Assembly: \"{' '.join(command)}\"")
-    result = subprocess.run(command)
-    assert result.returncode == 0
-
-    shared_library = test_output_path / f"{kernel_name}.so"
-    shared_library.unlink(missing_ok=True)
-    shared_library = str(shared_library)
-    command = ["g++", assembly, "-fPIC", "-shared", "-o", shared_library]
-    logger.info(f"Compile Assembly to Binary: \"{' '.join(command)}\"")
-    result = subprocess.run(command)
-    assert result.returncode == 0
-
-    return shared_library
 
 
 def run_cnp_kernel(
@@ -118,8 +67,6 @@ def run_cnp_kernel(
     transpose_b_levels,
     use_avx_manually,
 ):
-    cpu_core = 1
-    logger.info(f"Run on core {cpu_core}")
 
     logger.info("Creating composit graph")
     input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
@@ -143,7 +90,7 @@ def run_cnp_kernel(
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generate kernel")
-    generate_kernel(
+    matrix_multiplication.generate_kernel(
         test_output_path,
         input_a_tile_metadata,
         input_b_tile_metadata,
@@ -151,11 +98,11 @@ def run_cnp_kernel(
         use_avx_manually=use_avx_manually,
     )
 
-    logger.info("Compile kernel")
-    shared_library = compile_kernel(test_output_path)
+    logger.info("Compile kernel as shared library")
+    shared_library = compile_shared_library(test_output_path, matrix_multiplication)
 
     logger.info("Load kernel")
-    matmul_kernel = cdll.LoadLibrary(shared_library)
+    kernel = cdll.LoadLibrary(shared_library)
 
     def cast_array(flat_array):
         c_float_p = POINTER(c_float)
@@ -163,33 +110,35 @@ def run_cnp_kernel(
 
     output_shape = output_var.shape
 
-    logger.info("Run Kernel")
+    def run(np_input_a, np_input_b):
+        input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
+        input_b_flat_array = to_flat_array(
+            np_input_b, input_b_tile_metadata, transpose_levels=transpose_b_levels, order=(1, 0)
+        )
+        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
+        kernel.run(
+            cast_array(input_a_flat_array),
+            cast_array(input_b_flat_array),
+            cast_array(output_flat_array),
+        )
+        return from_flat_array(output_flat_array, output_tile_metadata)
+
+    logger.info("Run Comparison")
+    np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
+    np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
+    assert np.allclose(run(np_input_a, np_input_b), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+
+    logger.info(f"Run Kernel for {num_iterations} iterations")
     execution_times = []
     for _ in range(num_iterations):
         start = time.time_ns()
 
         np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)
         np_input_b = np.random.uniform(-0.5, 0.5, input_var_b.shape).astype(np.float32)
-
-        input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
-        input_b_flat_array = to_flat_array(
-            np_input_b, input_b_tile_metadata, transpose_levels=transpose_b_levels, order=(1, 0)
-        )
-        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
-
-        matmul_kernel.run(
-            cast_array(input_a_flat_array),
-            cast_array(input_b_flat_array),
-            cast_array(output_flat_array),
-            cpu_core,
-        )
-
-        output = from_flat_array(output_flat_array, output_tile_metadata)
+        run(np_input_a, np_input_b)
 
         end = time.time_ns()
         execution_times.append(end - start)
-
-        assert np.allclose(output, np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
 
     execution_times = np.asarray(execution_times) / 1e6
     logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
@@ -198,7 +147,7 @@ def run_cnp_kernel(
     return execution_times
 
 
-def run_matmul(
+def run_matrix_multiplication(
     test_output_path,
     num_iterations: int,
     compare_against_torch: bool,
@@ -245,7 +194,7 @@ def run_matmul(
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
 @pytest.mark.parametrize("input_b_shape", [(128, 128)])
 @pytest.mark.parametrize("l1_cache_b_shape", [(64, 64)])
-def test_matmul(
+def test_matrix_multiplication(
     request,
     num_iterations,
     compare_against_torch: bool,
@@ -259,7 +208,7 @@ def test_matmul(
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
 
-    run_matmul(
+    run_matrix_multiplication(
         test_output_path,
         num_iterations,
         compare_against_torch,
@@ -283,7 +232,7 @@ if __name__ == "__main__":
     k_tile = 64
     n_tile = 64
 
-    run_matmul(
+    run_matrix_multiplication(
         FILE_DIR / "test_output" / "custom",
         num_iterations=25,
         compare_against_torch=True,

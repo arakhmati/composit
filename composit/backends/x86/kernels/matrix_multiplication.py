@@ -6,7 +6,7 @@ import codegen as c
 from composit.tilelab.tile import TileMetadata
 from composit.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 
-AVX_SIZE = c.variable(c.AUTO.constexpr(), "AVX_SIZE")
+AVX_SIZE = c.variable(c.Type("uint8_t").const(), "AVX_SIZE")
 
 OffsetType = Union[c.Variable, c.Expression]
 
@@ -49,9 +49,11 @@ def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manua
     )
 
     file = c.File(
-        path / "matmul.hpp",
+        path / "matrix_multiplication.c",
         [
             c.Include("immintrin.h"),
+            c.Include("stdint.h"),
+            c.Text("#define ALIGNMENT 32"),
             c.NewLine(),
             AVX_SIZE << c.literal(8),
             c.NewLine(),
@@ -59,7 +61,7 @@ def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manua
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
-                name=c.Identifier("MatmulKernel"),
+                name=c.Identifier("run"),
                 arguments=[input_a_var, input_b_var, output_var],
                 body=body,
             ),
@@ -93,16 +95,16 @@ def generate_indices(
         a_tile = input_a[(0, 0, 0)]
         b_tile = input_b[(0, 0)]
 
-        b = c.variable(c.AUTO, f"{level_name}_b")
-        m = c.variable(c.AUTO, f"{level_name}_m")
-        n = c.variable(c.AUTO, f"{level_name}_n")
-        k = c.variable(c.AUTO, f"{level_name}_k")
+        b = c.variable(c.Type("uint32_t"), f"{level_name}_b")
+        m = c.variable(c.Type("uint32_t"), f"{level_name}_m")
+        n = c.variable(c.Type("uint32_t"), f"{level_name}_n")
+        k = c.variable(c.Type("uint32_t"), f"{level_name}_k")
 
         output_tile_volume = math.prod([*input_a.tile_shape[:-1], input_b.tile_shape[-1]])
 
-        next_a_offset = c.variable(c.AUTO, f"{level_name}_next_a_offset")
-        next_b_offset = c.variable(c.AUTO, f"{level_name}_next_b_offset")
-        next_output_offset = c.variable(c.AUTO, f"{level_name}_next_output_offset")
+        next_a_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_a_offset")
+        next_b_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_b_offset")
+        next_output_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_output_offset")
 
         declare_next_a_offset = next_a_offset << (
             offsets["input_a"] + ((m * c.literal(k_size) + k) * c.literal(math.prod(input_a.tile_shape)))
@@ -150,10 +152,10 @@ def generate_indices(
 
         b_size, m_size, k_size, n_size = a_ranges + (n_range,)
 
-        b = c.variable(c.AUTO, "b")
-        m = c.variable(c.AUTO, "m")
-        n = c.variable(c.AUTO, "n")
-        k = c.variable(c.AUTO, "k")
+        b = c.variable(c.Type("uint32_t"), "b")
+        m = c.variable(c.Type("uint32_t"), "m")
+        n = c.variable(c.Type("uint32_t"), "n")
+        k = c.variable(c.Type("uint32_t"), "k")
 
         if level_name in transpose_b_levels:
             inner_loop_index = k
@@ -197,9 +199,9 @@ def generate_indices(
                 )
 
             else:
-                a_index = c.variable(c.AUTO, "a_index")
-                b_index = c.variable(c.AUTO, "b_index")
-                output_index = c.variable(c.AUTO, "output_index")
+                a_index = c.variable(c.Type("uint32_t"), "a_index")
+                b_index = c.variable(c.Type("uint32_t"), "b_index")
+                output_index = c.variable(c.Type("uint32_t"), "output_index")
 
                 declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
                 declare_b_index = b_index << (offsets["input_b"] + (n * c.literal(k_size) + k))
@@ -223,9 +225,9 @@ def generate_indices(
             outer_loop_index = k
             outer_loop_size = c.literal(k_size)
 
-            a_index = c.variable(c.AUTO, "a_index")
-            b_index = c.variable(c.AUTO, "b_index")
-            output_index = c.variable(c.AUTO, "output_index")
+            a_index = c.variable(c.Type("uint32_t"), "a_index")
+            b_index = c.variable(c.Type("uint32_t"), "b_index")
+            output_index = c.variable(c.Type("uint32_t"), "output_index")
 
             declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
             declare_b_index = b_index << (offsets["input_b"] + (k * c.literal(n_size) + n))
