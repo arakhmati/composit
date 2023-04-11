@@ -1,4 +1,5 @@
 import math
+import pathlib
 from typing import Union
 
 import codegen as c
@@ -39,7 +40,7 @@ def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manua
     input_b_var = c.variable(InputType, "input_b")
     output_var = c.variable(OutputType, "output")
 
-    body = generate_indices(
+    body = generate_body(
         input_a,
         input_b,
         c_variables=dict(input_a=input_a_var, input_b=input_b_var, output=output_var),
@@ -49,7 +50,7 @@ def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manua
     )
 
     file = c.File(
-        path / "matrix_multiplication.c",
+        (path / pathlib.Path(__file__).stem).with_suffix(".c"),
         [
             c.Include("immintrin.h"),
             c.Include("stdint.h"),
@@ -70,7 +71,7 @@ def generate_kernel(path, input_a, input_b, *, transpose_b_levels, use_avx_manua
     file.save()
 
 
-def generate_indices(
+def generate_body(
     input_a,
     input_b,
     c_variables,
@@ -136,7 +137,7 @@ def generate_indices(
             inner_loop_body = c.block(declare_next_b_offset, declare_next_output_offset)
             outer_loop_body_before = c.block(declare_next_a_offset)
 
-        inner_loop_body += generate_indices(
+        inner_loop_body += generate_body(
             a_tile,
             b_tile,
             c_variables=c_variables,

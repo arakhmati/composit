@@ -4,7 +4,7 @@ from loguru import logger
 
 FLAGS = [
     "-std=c17",
-    "-Ofast",
+    "-O3",
     "-march=native",
     "-fno-exceptions",
     "-mavx2",
