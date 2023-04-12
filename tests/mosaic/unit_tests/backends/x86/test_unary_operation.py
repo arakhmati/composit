@@ -71,7 +71,6 @@ def run_cnp_kernel(
     l1_cache_shape,
     operation,
 ):
-
     logger.info("Creating composit graph")
     input_var = cnp.nn.variable(name="input_var_a", shape=input_shape)
     output_shape = input_var.shape
@@ -145,7 +144,6 @@ def run_unary_operation(
     l1_cache_shape: tuple[int, ...],
     operation: str,
 ):
-
     fig, ax = plt.subplots()
     if compare_against_torch:
         torch_execution_times = run_torch(num_iterations, input_shape, operation)
@@ -197,7 +195,6 @@ def test_unary_operation(
 
 
 if __name__ == "__main__":
-
     operation = "exp"
 
     h = 128

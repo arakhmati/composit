@@ -27,7 +27,6 @@ def test_bert(
     head_size,
     vocab_size,
 ):
-
     config = create_bert_config(
         num_encoders=num_encoders,
         num_attention_heads=num_attention_heads,

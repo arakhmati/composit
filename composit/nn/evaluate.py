@@ -44,7 +44,6 @@ def evaluate(
     return_cache: bool = False,
     always_return_tuple: bool = False,
 ):
-
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
     cache = initialize_cache_function(graph, inputs)

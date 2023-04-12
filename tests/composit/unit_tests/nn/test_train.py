@@ -31,7 +31,6 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
     parameter_0_shape: tuple[int, ...],
     learning_rate,
 ):
-
     output_shape = input_shape[:-1] + parameter_0_shape[-1:]
 
     np_inputs = [np.random.random(input_shape) for _ in range(num_iterations)]
@@ -57,7 +56,6 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
         torch_parameter.requires_grad = True
 
     for np_input, np_incoming_gradient in zip(np_inputs, np_incoming_gradients):
-
         gradients = cnp.nn.differentiate(
             [output_var],
             [input_var, parameter_0, parameter_1, parameter_2],

@@ -31,7 +31,6 @@ def get_incoming_gradients(node, backward_graph, node_to_incoming_gradients):
 
 @functoolz.memoize
 def chain_rule(*output_vars, input_vars: list[nn.Variable]):
-
     forward_graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
 
     input_nodes = [input_var.node for input_var in input_vars]

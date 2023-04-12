@@ -29,7 +29,6 @@ def test_concatenate(
     new_block_tile_shape,
     new_tile_shape,
 ):
-
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
     view = create_tile_view(
@@ -72,7 +71,6 @@ def test_slice(
     new_block_tile_shape,
     new_tile_shape,
 ):
-
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
     view = create_tile_view(
@@ -115,7 +113,6 @@ def test_buffer_slice_block_slice_tile_concatenate(
     new_block_tile_shape,
     new_tile_shape,
 ):
-
     np_input = np.random.uniform(-0.5, 0.5, input_shape)
 
     view = create_tile_view(
@@ -145,7 +142,6 @@ def test_buffer_slice_block_slice_tile_concatenate(
 @pytest.mark.parametrize("input_0_shape", [(1, 32, 64)])
 @pytest.mark.parametrize("input_1_shape", [(64, 16)])
 def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
-
     matmul_shape = input_0_shape[:-1] + input_1_shape[-1:]
 
     input_var_0 = cnp.nn.variable(name="input_var_0", shape=input_0_shape)

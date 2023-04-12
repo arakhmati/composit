@@ -37,7 +37,6 @@ def convert_parameters_to_numpy(model):
 
 
 def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answering_labels=None):
-
     intermediate_size = hidden_size * 4
 
     parameters = {
@@ -179,7 +178,6 @@ def functional_bert_encoder(
     num_attention_heads,
     head_size,
 ):
-
     multi_head_attention_output = functional_multi_head_attention(
         hidden_states,
         attention_mask,
@@ -221,7 +219,6 @@ def functional_bert(
     num_attention_heads,
     head_size,
 ):
-
     word_embeddings = cnp.nn.embedding(input_ids, parameters["embeddings.word_embeddings.weight"])
     token_type_embeddings = cnp.nn.embedding(token_type_ids, parameters["embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings

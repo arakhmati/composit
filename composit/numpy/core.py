@@ -68,7 +68,6 @@ def create_from_numpy_compute_instruction(
     instruction,
     dtype_to_override=None,
 ) -> Union[PersistentArray, tuple[PersistentArray]]:
-
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):

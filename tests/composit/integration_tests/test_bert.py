@@ -103,7 +103,6 @@ def test_functional_bert_autograd(
     head_size,
     vocab_size,
 ):
-
     config = create_bert_config(
         num_encoders=num_encoders,
         num_attention_heads=num_attention_heads,

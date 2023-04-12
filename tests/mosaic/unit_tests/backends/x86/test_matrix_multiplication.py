@@ -67,7 +67,6 @@ def run_cnp_kernel(
     transpose_b_levels,
     use_avx_manually,
 ):
-
     logger.info("Creating composit graph")
     input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
     input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
@@ -163,7 +162,6 @@ def run_matrix_multiplication(
     input_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
 ):
-
     fig, ax = plt.subplots()
     if compare_against_torch:
         torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
@@ -227,7 +225,6 @@ def test_matrix_multiplication(
 
 
 if __name__ == "__main__":
-
     m = 128
     k = 128
     n = 128

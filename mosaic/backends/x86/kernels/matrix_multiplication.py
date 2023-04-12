@@ -147,7 +147,6 @@ def generate_body(
         )
 
     else:
-
         a_ranges = tuple(num_tiles for num_tiles in input_a.shape)
         _, n_range = (num_tiles for num_tiles in input_b.shape)
 

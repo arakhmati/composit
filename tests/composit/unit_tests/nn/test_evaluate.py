@@ -10,7 +10,6 @@ import composit.nn
 @pytest.mark.parametrize("input_0_shape", [(5, 25, 15)])
 @pytest.mark.parametrize("input_1_shape", [(15, 30)])
 def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(input_0_shape, input_1_shape):
-
     matmul_shape = input_0_shape[:-1] + input_1_shape[-1:]
 
     np_input_0 = np.random.uniform(-0.5, 0.5, input_0_shape)

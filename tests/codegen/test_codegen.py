@@ -8,7 +8,6 @@ def test_declare_variable():
 
 
 def test_function_that_gets_array_element_at_index():
-
     array = c.variable(c.Type("float").pointer(), "array")
     index = c.variable(c.Type("int"), "index")
     result = c.variable(c.AUTO, "result")
@@ -36,7 +35,6 @@ float get(float* array, int index)
 
 
 def test_function_that_reduces_array_using_sum():
-
     array = c.variable(c.Type("float").pointer().const().restrict(), "array")
     index = c.variable(c.Type("int"), "index")
     result = c.variable(c.AUTO, "result")
@@ -141,7 +139,6 @@ def _mm256_reduce_add_ps():
 
 
 def matmul_kernel(avx_size):
-
     Vector256Type = c.Type("__m256")
     InputType = c.Type("float").const().pointer().restrict().aligned("ALIGNMENT")
     OutputType = c.Type("float").pointer().restrict().aligned("ALIGNMENT")

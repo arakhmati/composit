@@ -220,7 +220,6 @@ class AssignUpdate:
     update_operator: Optional[UpdateOperator] = None
 
     def __repr__(self):
-
         if self.update_operator == UpdateOperator.ADD and self.right_side.value == 1:
             return f"{self.left_side.value}++"
 

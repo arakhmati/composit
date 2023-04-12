@@ -11,7 +11,6 @@ OutputType = c.Type("float").pointer().restrict().aligned("ALIGNMENT")
 
 
 def generate_kernel(path, input_tile_metadata: TileMetadata):
-
     input_var = c.variable(InputType, "input")
     output_var = c.variable(OutputType, "output")
 
@@ -44,7 +43,6 @@ def generate_body(
     input_tile_metadata,
     c_variables,
 ):
-
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_tile_metadata.shape)
 

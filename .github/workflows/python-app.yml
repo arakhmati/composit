@@ -30,5 +30,6 @@ jobs:
         python-version: '3.11'
         cache: 'poetry'
     - run: poetry install
+    - run: poetry run black --check codegen composit model_zoo mosaic pyimmer tests
     - name: Test with Pytest
       run: poetry run pytest

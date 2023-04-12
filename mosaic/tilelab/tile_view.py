@@ -30,7 +30,6 @@ class TileView(PClass):
         return binary_operation(self, other)
 
     def __matmul__(self, other):
-
         shape = self.shape[:-1] + other.shape[-1:]
         hierarchy = []
         for a_level, b_level in zip(self.hierarchy, other.hierarchy):
@@ -52,7 +51,6 @@ def binary_operation(view_a: TileView, _: TileView) -> TileView:
 
 
 def _sum(view: TileView, axis) -> TileView:
-
     shape = list(view.shape)
     shape[axis] = 1
 

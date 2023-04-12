@@ -64,7 +64,6 @@ def flatten_vars(vars, graph=None):
 
     flat_vars = []
     for var in vars:
-
         if var is None:
             continue
 
@@ -91,7 +90,6 @@ def convert_input_vars_to_module_input_vars(input_vars):
 
     module_input_vars = []
     for input_var in input_vars:
-
         if input_var is None:
             module_input_var = None
 
@@ -165,7 +163,6 @@ def visualize_modules(
     level_prefix="",
     render=False,
 ) -> None:
-
     if graphviz_graph is None:
         graphviz_graph = graphviz.Digraph()
 

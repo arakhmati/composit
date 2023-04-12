@@ -99,7 +99,6 @@ class MultiDiGraph(PClass):
         return new_graph
 
     def add_edge(self, source, sink, key=None, **kwargs):
-
         _node = self._node
         if source not in self:
             _node = _node.set(source, pmap(kwargs))
