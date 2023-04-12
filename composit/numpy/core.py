@@ -62,7 +62,9 @@ def create_ndarray(name: str, array: np.ndarray):
 
 
 def create_from_numpy_compute_instruction(
-    *operands, instruction, dtype=None,
+    *operands,
+    instruction,
+    dtype=None,
 ) -> Union[PersistentArray, tuple[PersistentArray]]:
 
     operands = list(operands)

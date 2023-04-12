@@ -10,6 +10,7 @@ def create_bert_config(num_encoders: int, num_attention_heads: int, head_size: i
         num_hidden_layers=num_encoders,
         num_attention_heads=num_attention_heads,
         hidden_size=num_attention_heads * head_size,
+        intermediate_size=num_attention_heads * head_size * 4,
         vocab_size=vocab_size,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -24,6 +25,7 @@ def create_random_float(shape, minimum=-0.1, maximum=0.1):
 def create_random_long(shape, minimum, maximum):
     return np.random.randint(minimum, maximum, shape, dtype=np.int64)
 
+
 def convert_parameters_to_numpy(model):
     parameters = {}
     for name, value in model.named_parameters():
@@ -32,6 +34,7 @@ def convert_parameters_to_numpy(model):
             new_value = new_value.T
         parameters[name] = new_value.detach().numpy()
     return parameters
+
 
 def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answering_labels=None):
 
@@ -63,18 +66,12 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
                     (hidden_size, hidden_size)
                 ),
                 f"encoder.layer.{encoder_index}.attention.output.dense.bias": create_random_float((hidden_size,)),
-                f"encoder.layer.{encoder_index}.attention.output.LayerNorm.weight": create_random_float(
-                    (hidden_size,)
-                ),
-                f"encoder.layer.{encoder_index}.attention.output.LayerNorm.bias": create_random_float(
-                    (hidden_size,)
-                ),
+                f"encoder.layer.{encoder_index}.attention.output.LayerNorm.weight": create_random_float((hidden_size,)),
+                f"encoder.layer.{encoder_index}.attention.output.LayerNorm.bias": create_random_float((hidden_size,)),
                 f"encoder.layer.{encoder_index}.intermediate.dense.weight": create_random_float(
                     (hidden_size, intermediate_size)
                 ),
-                f"encoder.layer.{encoder_index}.intermediate.dense.bias": create_random_float(
-                    (intermediate_size,)
-                ),
+                f"encoder.layer.{encoder_index}.intermediate.dense.bias": create_random_float((intermediate_size,)),
                 f"encoder.layer.{encoder_index}.output.dense.weight": create_random_float(
                     (intermediate_size, hidden_size)
                 ),

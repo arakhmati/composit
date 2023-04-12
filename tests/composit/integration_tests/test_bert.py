@@ -7,8 +7,13 @@ import transformers
 import composit as cnp
 from composit.nn.module import wrap_module
 
-from model_zoo.bert import create_random_float, create_random_long, create_bert_config, functional_bert, \
-    convert_parameters_to_numpy
+from model_zoo.bert import (
+    create_random_float,
+    create_random_long,
+    create_bert_config,
+    functional_bert,
+    convert_parameters_to_numpy,
+)
 
 
 @pytest.mark.parametrize("num_inputs", [4])
@@ -35,7 +40,10 @@ def test_functional_bert_vs_transformers_bert(
 
     input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    parameters = {cnp.nn.variable(name=name, shape=value.shape): value for name, value in convert_parameters_to_numpy(transformers_model).items()}
+    parameters = {
+        cnp.nn.variable(name=name, shape=value.shape): value
+        for name, value in convert_parameters_to_numpy(transformers_model).items()
+    }
 
     model = functional_bert(
         input_ids_var,
@@ -93,7 +101,6 @@ def test_functional_bert_autograd(
     head_size,
     vocab_size,
 ):
-    cnp.nn.module.DISABLE = True
 
     config = create_bert_config(
         num_encoders=num_encoders, num_attention_heads=num_attention_heads, head_size=head_size, vocab_size=vocab_size
@@ -108,16 +115,19 @@ def test_functional_bert_autograd(
     input_ids_variable = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     token_type_ids_variable = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
-    model: cnp.PersistentArray = functional_bert(
-        input_ids_variable,
-        token_type_ids_variable,
-        None,
-        parameter_variables,
-        num_encoders=num_encoders,
-        sequence_size=sequence_size,
-        num_attention_heads=num_attention_heads,
-        head_size=head_size,
-    )
+
+    with cnp.nn.module.disable_modules():
+        model: cnp.PersistentArray = functional_bert(
+            input_ids_variable,
+            token_type_ids_variable,
+            None,
+            parameter_variables,
+            num_encoders=num_encoders,
+            sequence_size=sequence_size,
+            num_attention_heads=num_attention_heads,
+            head_size=head_size,
+        )
+
     loss = model
 
     input_vars_to_differentiate = [
@@ -151,7 +161,9 @@ def test_functional_bert_autograd(
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-        torch_loss = transformers_model(torch.from_numpy(input_ids), torch.from_numpy(token_type_ids))["last_hidden_state"]
+        torch_loss = transformers_model(torch.from_numpy(input_ids), torch.from_numpy(token_type_ids))[
+            "last_hidden_state"
+        ]
 
         incoming_gradient = create_random_float(
             (batch_size, sequence_size, num_attention_heads * head_size), -0.001, 0.001
@@ -186,5 +198,3 @@ def test_functional_bert_autograd(
 
             all_close = np.allclose(cnp_gradient, torch_gradient, atol=1e-3)
             assert all_close
-
-    cnp.nn.module.DISABLE = False

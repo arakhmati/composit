@@ -1,5 +1,6 @@
 import collections
 import inspect
+from contextlib import contextmanager
 
 import graphviz
 import numpy as np
@@ -10,7 +11,7 @@ from composit.numpy.core import create_from_numpy_compute_instruction
 from composit.persistent_array import PersistentArray, Node
 from composit.multidigraph import MultiDiGraph, compose_all, visualize_graph
 
-DISABLE = False  # Temporary hack until Module is supported in chain_rule
+ENABLE = True  # Temporary hack until Module is supported in chain_rule
 
 
 class ModuleInput(PClass):
@@ -123,7 +124,7 @@ def wrap_module(module_function):
     module_function_parameters = inspect.signature(module_function).parameters
 
     def wrapper(*operands, **kwargs):
-        if DISABLE:
+        if not ENABLE:
             return module_function(*operands, **kwargs)
 
         kwargs.update(
@@ -230,6 +231,14 @@ def visualize_modules(
         visualize_edge=visualize_edge,
         render=render and level == 0,
     )
+
+
+@contextmanager
+def disable_modules():
+    global ENABLE
+    ENABLE = False
+    yield
+    ENABLE = True
 
 
 __all__ = ["Module", "wrap_module", "visualize_modules"]
