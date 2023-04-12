@@ -3,14 +3,14 @@ import pytest
 import numpy as np
 
 import composit as cnp
-from composit.tilelab.tile_view import (
+from mosaic.tilelab.tile_view import (
     TilizationLevel,
     create_tile_view,
     retilize_view,
     propagate_tile_views,
 )
 
-from composit.tilelab.tile import to_flat_array, from_flat_array, create_tile_metadata
+from mosaic.tilelab.tile import to_flat_array, from_flat_array, create_tile_metadata
 
 
 @pytest.mark.parametrize("input_shape", [(4, 32, 32)])

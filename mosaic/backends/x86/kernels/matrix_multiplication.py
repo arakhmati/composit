@@ -4,8 +4,8 @@ from typing import Union
 
 import codegen as c
 
-from composit.tilelab.tile import TileMetadata
-from composit.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
+from mosaic.tilelab.tile import TileMetadata
+from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 
 AVX_SIZE = c.variable(c.Type("uint8_t").const(), "AVX_SIZE")
 

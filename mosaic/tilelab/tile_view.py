@@ -10,7 +10,7 @@ from composit.persistent_array import PersistentArray
 from composit.multidigraph import compose_all, topological_traversal
 from composit.nn import evaluate
 from composit.numpy.core import get_operands
-from composit.tilelab.tilization_level import TilizationLevel
+from mosaic.tilelab.tilization_level import TilizationLevel
 
 
 class TileView(PClass):

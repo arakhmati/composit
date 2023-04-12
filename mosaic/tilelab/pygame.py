@@ -1,7 +1,7 @@
 import pygame
 from pygame import QUIT
 
-from composit.tilelab import Tile
+from mosaic.tilelab import Tile
 
 COLORS = (
     (0, 255, 0),

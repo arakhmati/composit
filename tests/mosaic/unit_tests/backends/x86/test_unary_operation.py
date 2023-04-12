@@ -13,11 +13,11 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from composit.tilelab.tile_view import create_tile_view
-from composit.tilelab.tilization_level import TilizationLevel
-from composit.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
-from composit.backends.x86.kernels import unary_operation
-from composit.backends.x86.compile import compile_shared_library
+from mosaic.tilelab.tile_view import create_tile_view
+from mosaic.tilelab.tilization_level import TilizationLevel
+from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
+from mosaic.backends.x86.kernels import unary_operation
+from mosaic.backends.x86.compile import compile_shared_library
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
 

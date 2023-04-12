@@ -7,7 +7,7 @@ import numpy as np
 from pyrsistent import PClass, field, pmap
 from toolz import first
 
-from composit.tilelab.tilization_level import TilizationLevel
+from mosaic.tilelab.tilization_level import TilizationLevel
 
 
 class TileMetadata(PClass):

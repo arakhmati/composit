@@ -3,7 +3,7 @@ import pathlib
 
 import codegen as c
 
-from composit.tilelab.tile import TileMetadata
+from mosaic.tilelab.tile import TileMetadata
 
 
 InputType = c.Type("float").const().pointer().restrict().aligned("ALIGNMENT")
