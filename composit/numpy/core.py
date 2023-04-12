@@ -30,17 +30,17 @@ def get_operands(graph, node):
 
 
 @functoolz.memoize
-def instruction_shape(instruction, input_shapes):
-    dummy_input_arrays = [np.zeros(input_shape, dtype=np.uint8) for input_shape in input_shapes]
+def instruction_shape_and_dtype(instruction, input_shapes_and_dtypes):
+    dummy_input_arrays = [np.zeros(input_shape, dtype=dtype) for input_shape, dtype in input_shapes_and_dtypes]
     result = instruction(*dummy_input_arrays)
 
     if np.isscalar(result):
         result = np.asarray(result)
 
     if isinstance(result, np.ndarray):
-        return (result.shape,)
+        return (result.shape,), (result.dtype,)
     elif isinstance(result, (list, tuple)):
-        return tuple(array.shape for array in result)
+        return tuple(array.shape for array in result), tuple(array.dtype for array in result)
     else:
         raise RuntimeError(f"Unsupported type: {type(result)}")
 
@@ -58,10 +58,12 @@ class NumpyArray(PClass):
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
     graph = MultiDiGraph().add_node(node, instruction=NumpyArray(array=array), shapes=(array.shape,))
-    return PersistentArray(graph=graph, node=node)
+    return PersistentArray(graph=graph, node=node, dtype=array.dtype)
 
 
-def create_from_numpy_compute_instruction(*operands, instruction) -> Union[PersistentArray, tuple[PersistentArray]]:
+def create_from_numpy_compute_instruction(
+    *operands, instruction, dtype=None,
+) -> Union[PersistentArray, tuple[PersistentArray]]:
 
     operands = list(operands)
     for index, operand in enumerate(operands):
@@ -70,9 +72,9 @@ def create_from_numpy_compute_instruction(*operands, instruction) -> Union[Persi
 
     graph = merge_graphs(*tuple((operand.graph, operand.node) for operand in operands))
 
-    shapes = instruction_shape(
+    shapes, inferred_dtypes = instruction_shape_and_dtype(
         instruction,
-        tuple(operand.shape for operand in operands),
+        tuple((operand.shape, operand.dtype) for operand in operands),
     )
 
     name = f"{type(instruction).__name__}-{random_string()}"
@@ -87,7 +89,8 @@ def create_from_numpy_compute_instruction(*operands, instruction) -> Union[Persi
         )
 
     result = tuple(
-        PersistentArray(graph=graph, node=new_node, output_index=output_index) for output_index, _ in enumerate(shapes)
+        PersistentArray(graph=graph, node=new_node, output_index=output_index, dtype=dtype or inferred_dtype)
+        for output_index, inferred_dtype in enumerate(inferred_dtypes)
     )
     if len(result) == 1:
         return result[0]
@@ -137,6 +140,7 @@ def create_numpy_compute_function(function_name):
         operands = [arg for arg in args if isinstance(arg, PersistentArray)]
         return create_from_numpy_compute_instruction(
             *operands,
+            dtype=kwargs.get("dtype", None),
             instruction=create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
@@ -151,6 +155,7 @@ def create_numpy_binary_compute_function(function_name):
         return create_from_numpy_compute_instruction(
             operand_a,
             operand_b,
+            dtype=kwargs.get("dtype", None),
             instruction=create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
@@ -178,6 +183,7 @@ def create_numpy_concatenate_function():
     def function(inputs, *args, **kwargs):
         return create_from_numpy_compute_instruction(
             *inputs,
+            dtype=kwargs.get("dtype", None),
             instruction=create_concatenate_instruction(*args, **kwargs),
         )
 

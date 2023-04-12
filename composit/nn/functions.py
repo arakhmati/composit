@@ -7,10 +7,10 @@ from composit.nn.vectorized_functions import cdf
 from composit.persistent_array import PersistentArray, Node
 
 
-def variable(*, name: str, shape: tuple) -> PersistentArray:
+def variable(*, name: str, shape: tuple, dtype=None) -> PersistentArray:
     node = Node(name=name)
     graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,))
-    return PersistentArray(graph=graph, node=node)
+    return PersistentArray(graph=graph, node=node, dtype=dtype)
 
 
 @wrap_as_instruction()

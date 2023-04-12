@@ -15,6 +15,7 @@ class PersistentArray(PClass):
     graph = field(type=MultiDiGraph)
     node = field(type=Node)
     output_index = field(type=int, initial=0)
+    dtype = field()
 
     @property
     def name(self) -> str:

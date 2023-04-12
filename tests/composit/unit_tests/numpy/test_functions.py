@@ -15,7 +15,7 @@ def check_results(function):
 
 @pytest.mark.parametrize("np", [numpy, composit])
 def test_ndarray(np):
-    array = np.ndarray((5, 10))
+    array = np.ndarray((5, 10), dtype="uint8")
     assert array.shape == (5, 10)
 
 
@@ -30,21 +30,22 @@ def test_named_ndarray(np):
 
 @pytest.mark.parametrize("np", [numpy, composit])
 def test_zeros(np):
-    array = np.zeros((5, 10))
+    array = np.zeros((5, 10), dtype="uint8")
     assert array.shape == (5, 10)
 
 
 @pytest.mark.parametrize("np", [numpy, composit])
 def test_ones(np):
-    array = np.ones((5, 10))
+    array = np.ones((5, 10), dtype="uint8")
     assert array.shape == (5, 10)
 
 
 def test_matmul():
     def function(np):
-        array_a = np.ones((5, 10))
-        array_b = np.ones((10, 3))
-        result = np.matmul(array_a, array_b)
+        array_a = np.ones((5, 10), dtype="uint8")
+        array_b = np.ones((10, 3), dtype="uint8")
+        result = np.matmul(array_a, array_b, dtype="int8")
+        assert result.dtype == "int8"
         return result
 
     check_results(function)
@@ -52,9 +53,10 @@ def test_matmul():
 
 def test_add():
     def function(np):
-        array_a = np.ones((5, 10))
-        array_b = np.ones((10,))
+        array_a = np.ones((5, 10), dtype="uint8")
+        array_b = np.ones((10,), dtype="uint8")
         result = array_a + array_b
+        assert result.dtype == "uint8"
         return result
 
     check_results(function)

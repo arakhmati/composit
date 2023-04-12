@@ -323,8 +323,8 @@ def test_functional_bert_vs_transformers_bert(
         # Update parameter names to include "bert." prefix to match the names of parameters in the models with heads
         parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
-    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
-    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.long)
+    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.long)
     parameters = {cnp.nn.variable(name=name, shape=value.shape): parameters[name] for name, value in parameters.items()}
 
     model = functional_bert_function(
@@ -411,8 +411,8 @@ def test_functional_bert_autograd(
         parameters[name] = new_value.numpy()
     parameters = {f"bert.{name}": value for name, value in parameters.items()}
 
-    input_ids_variable = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size))
-    token_type_ids_variable = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size))
+    input_ids_variable = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.long)
+    token_type_ids_variable = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.long)
     parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
     model: cnp.PersistentArray = functional_bert(
         input_ids_variable,

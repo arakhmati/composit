@@ -136,8 +136,8 @@ def ndarray(*args, **kwargs):
 __all__.append("ndarray")
 
 
-def zeros(*args, **kwargs):
-    array = np.zeros(*args, **kwargs)
+def zeros(*args, dtype=None, **kwargs):
+    array = np.zeros(*args, dtype=dtype, **kwargs)
     name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
     return create_ndarray(name, array)
 
@@ -145,8 +145,8 @@ def zeros(*args, **kwargs):
 __all__.append("zeros")
 
 
-def ones(*args, **kwargs):
-    array = np.ones(*args, **kwargs)
+def ones(*args, dtype=None, **kwargs):
+    array = np.ones(*args, dtype=dtype, **kwargs)
     name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
     return create_ndarray(name, array)
 

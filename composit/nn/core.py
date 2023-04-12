@@ -11,12 +11,6 @@ class Variable(PClass):
     ...
 
 
-def variable(*, name: str, shape: tuple) -> PersistentArray:
-    node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,))
-    return PersistentArray(graph=graph, node=node)
-
-
 def wrap_as_instruction():
     def outer_wrapper(compute_function):
         compute_function = staticmethod(compute_function)

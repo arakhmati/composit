@@ -18,10 +18,10 @@ class ModuleInput(PClass):
         return args
 
 
-def module_input(*, name: str, shape: tuple) -> PersistentArray:
+def module_input(*, name: str, shape: tuple, dtype=None) -> PersistentArray:
     node = Node(name=name)
     graph = MultiDiGraph().add_node(node, instruction=ModuleInput(), shapes=(shape,))
-    return PersistentArray(graph=graph, node=node)
+    return PersistentArray(graph=graph, node=node, dtype=dtype)
 
 
 class ModuleOutput(PClass):
@@ -98,7 +98,7 @@ def convert_input_vars_to_module_input_vars(input_vars):
             name = input_var.node.name
             if input_var.output_index > 0:
                 name = f"{name}_{input_var.output_index}"
-            module_input_var = module_input(name=name, shape=input_var.shape)
+            module_input_var = module_input(name=name, shape=input_var.shape, dtype=input_var.dtype)
 
         elif isinstance(input_var, dict):
             old_dict = input_var
