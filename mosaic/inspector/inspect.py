@@ -57,3 +57,8 @@ def inspect(*outputs):
 
     total_memory_used_without_reuse = dataframe["memory_in_bytes"].sum()
     logger.info(f"total_memory_used_without_reuse = {format_bytes(total_memory_used_without_reuse)}")
+
+    unique_ops = (
+        dataframe[["shape", "type_name", "dtype"]].drop_duplicates().reset_index(drop=True).sort_values("type_name")
+    )
+    logger.info(f"\n{unique_ops}")

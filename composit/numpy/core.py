@@ -45,7 +45,7 @@ def instruction_shape_and_dtype(instruction, input_shapes_and_dtypes):
         raise RuntimeError(f"Unsupported type: {type(result)}")
 
 
-class NumpyArray(PClass):
+class Constant(PClass):
     array = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
@@ -58,9 +58,9 @@ class NumpyArray(PClass):
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
     graph = MultiDiGraph().add_node(
-        node, instruction=NumpyArray(array=array), shapes=(array.shape,), dtypes=(array.dtype,)
+        node, instruction=Constant(array=array), shapes=(array.shape,), dtypes=(np.dtype(array.dtype),)
     )
-    return PersistentArray(graph=graph, node=node, dtype=array.dtype)
+    return PersistentArray(graph=graph, node=node)
 
 
 def create_from_numpy_compute_instruction(
@@ -95,7 +95,7 @@ def create_from_numpy_compute_instruction(
         )
 
     result = tuple(
-        PersistentArray(graph=graph, node=new_node, output_index=output_index, dtype=dtype)
+        PersistentArray(graph=graph, node=new_node, output_index=output_index)
         for output_index, dtype in enumerate(dtypes)
     )
     if len(result) == 1:
