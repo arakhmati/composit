@@ -68,6 +68,7 @@ def run_cnp_kernel(
     l1_cache_b_layout,
     scalar_b_layout,
     use_avx_manually,
+    enable_profiling,
 ):
     test_output_path.mkdir(parents=True, exist_ok=True)
 
@@ -101,10 +102,11 @@ def run_cnp_kernel(
         input_b_array_tile_config,
         output_array_tile_config,
         use_avx_manually=use_avx_manually,
+        enable_tracy=enable_profiling,
     )
 
     logger.info("Compile kernel as shared library")
-    shared_library_file = compile_shared_library(test_output_path, kernel_name)
+    shared_library_file = compile_shared_library(test_output_path, kernel_name, enable_tracy=enable_profiling)
 
     logger.info("Load kernel")
     shared_library = cdll.LoadLibrary(shared_library_file)
@@ -159,6 +161,7 @@ def run_matrix_multiplication(
     l1_cache_b_shape: tuple[int, ...],
     l1_cache_b_layout,
     scalar_b_layout,
+    enable_profiling=False,
 ):
     fig, ax = plt.subplots()
     if compare_against_torch:
@@ -175,6 +178,7 @@ def run_matrix_multiplication(
         l1_cache_b_layout=l1_cache_b_layout,
         scalar_b_layout=scalar_b_layout,
         use_avx_manually=use_avx_manually,
+        enable_profiling=enable_profiling,
     )
 
     ax.plot(cnp_execution_times, color="green")
@@ -292,4 +296,5 @@ if __name__ == "__main__":
         l1_cache_b_shape=(batch_size, sequence_size, tile_k_size, tile_n_size),
         l1_cache_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
         scalar_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
+        enable_profiling=True,
     )

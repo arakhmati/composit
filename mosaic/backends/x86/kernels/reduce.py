@@ -47,7 +47,7 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     )
 
     file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".c"),
+        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
         [
             c.Include("math.h"),
             c.Include("stdint.h"),
@@ -55,12 +55,14 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
             c.NewLine(),
             c.Text(max_function),
             c.NewLine(),
+            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
             ),
+            c.Text("}"),
         ],
     )
     file.save()

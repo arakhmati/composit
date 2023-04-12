@@ -40,6 +40,7 @@ def generate_kernel(
     output_array_tile_config,
     *,
     use_avx_manually: bool,
+    enable_tracy: bool = False,
 ):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
@@ -60,23 +61,31 @@ def generate_kernel(
         arguments=[input_a_var, input_b_var, output_var],
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
         use_avx_manually=use_avx_manually,
+        enable_tracy=enable_tracy,
     )
+    includes = [
+        c.Include("immintrin.h"),
+        c.Include("stdint.h"),
+    ]
+    if enable_tracy:
+        includes.append(c.Include("tracy/Tracy.hpp"))
 
     file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".c"),
+        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
         [
-            c.Include("immintrin.h"),
-            c.Include("stdint.h"),
+            *includes,
             c.NewLine(),
             c.NewLine(),
             mm256_reduce_add_ps,
             c.NewLine(),
+            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_a_var, input_b_var, output_var],
                 body=body,
             ),
+            c.Text("}"),
         ],
     )
     file.save()
@@ -116,6 +125,7 @@ def generate_body(
     offsets,
     *,
     use_avx_manually: bool,
+    enable_tracy: bool = False,
 ):
     input_a_var, input_b_var, output_var = arguments
 
@@ -331,18 +341,34 @@ def generate_body(
         outer_loop_body_before + c.block(inner_loop) + outer_loop_body_after,
     )
 
+    m_loop_body = [outer_loop]
+    if level_name == "l1_cache" and enable_tracy:
+        mark_m_loop_zone = c.Statement(c.Text('ZoneScopedNS("l1_cache_m_loop", 4)'))
+        m_loop_body.insert(0, mark_m_loop_zone)
+
     m_loop = c.ForLoop(
         c.Declare(m, c.literal(0)),
         m < c.literal(m_size),
         c.add_in_place(m, c.literal(1)),
-        c.block(outer_loop),
+        c.block(*m_loop_body),
     )
+
+    b_loop_body = [m_loop]
+    if level_name == "l1_cache" and enable_tracy:
+        mark_b_loop_zone = c.Statement(c.Text('ZoneScopedNS("l1_cache_b_loop", 4)'))
+        b_loop_body.insert(0, mark_b_loop_zone)
 
     b_loop = c.ForLoop(
         c.Declare(b, c.literal(0)),
         b < c.literal(b_size),
         c.add_in_place(b, c.literal(1)),
-        c.block(m_loop),
+        c.block(*b_loop_body),
     )
 
-    return c.block(b_loop)
+    main_block = [b_loop]
+
+    if enable_tracy:
+        mark_frame = c.Statement(c.Text("FrameMark"))
+        main_block.append(mark_frame)
+
+    return c.block(*main_block)
