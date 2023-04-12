@@ -52,7 +52,7 @@ def generate_body(
         c.Declare(index, c.literal(0)),
         index < c.literal(num_iterations),
         c.add_in_place(index, c.literal(1)),
-        c.block(c.assign(c_variables["output_var"][index], c.invoke("exp", c_variables["input_var"][index]))),
+        c.block(c.assign(c_variables["output_var"][index], c.invoke("expf", c_variables["input_var"][index]))),
     )
 
     return c.block(b_loop)

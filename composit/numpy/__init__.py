@@ -1,3 +1,4 @@
+# ruff: noqa: F401
 from .functions import *
 
 import composit.numpy.core

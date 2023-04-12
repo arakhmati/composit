@@ -2,6 +2,12 @@
 line-length = 120
 ignore = ["F403"]
 
+[tool.black]
+target-version = ['py311']
+line-length = 120
+include = '(\.pyi?)$'
+exclude = 'vendor|venv|wvenv'
+
 [tool.pytest.ini_options]
 testpaths = [ "codegen", "pyimmer/tests","tests"]
 python_files = ["test_*.py", "*_test.py"]
@@ -10,7 +16,7 @@ python_files = ["test_*.py", "*_test.py"]
 name = "composit"
 version = "0.1.0"
 description = "Used to create Baby AGI"
-authors = ["typon <hfarooq@protonmail.com>"]
+authors = ["typon <hfarooq@protonmail.com>", "arakhmati <akhmed.rakhmati@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -21,6 +27,7 @@ toolz = "^0.12.0"
 graphviz = "^0.20.1"
 networkx = "^3.1"
 loguru = "^0.7.0"
+pandas = "^2.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

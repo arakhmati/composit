@@ -5,7 +5,6 @@ import torch
 import transformers
 
 import composit as cnp
-from composit.nn.module import wrap_module
 
 from model_zoo.bert import (
     create_random_float,
@@ -33,7 +32,10 @@ def test_functional_bert_vs_transformers_bert(
     vocab_size,
 ):
     config = create_bert_config(
-        num_encoders=num_encoders, num_attention_heads=num_attention_heads, head_size=head_size, vocab_size=vocab_size
+        num_encoders=num_encoders,
+        num_attention_heads=num_attention_heads,
+        head_size=head_size,
+        vocab_size=vocab_size,
     )
 
     transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
@@ -103,7 +105,10 @@ def test_functional_bert_autograd(
 ):
 
     config = create_bert_config(
-        num_encoders=num_encoders, num_attention_heads=num_attention_heads, head_size=head_size, vocab_size=vocab_size
+        num_encoders=num_encoders,
+        num_attention_heads=num_attention_heads,
+        head_size=head_size,
+        vocab_size=vocab_size,
     )
 
     transformers_model = transformers.models.bert.modeling_bert.BertModel(config)

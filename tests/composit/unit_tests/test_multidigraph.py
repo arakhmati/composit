@@ -27,11 +27,6 @@ def test_add_node_method():
     assert new_graph == another_new_graph
 
 
-def test_adj_method():
-    graph = MultiDiGraph()
-    nodes = graph.adj
-
-
 def test_nodes_method():
     graph = MultiDiGraph()
     networkx_graph = networkx.MultiDiGraph()

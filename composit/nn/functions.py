@@ -9,7 +9,7 @@ from composit.persistent_array import PersistentArray, Node
 
 def variable(*, name: str, shape: tuple, dtype=None) -> PersistentArray:
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,))
+    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,), dtypes=(dtype,))
     return PersistentArray(graph=graph, node=node, dtype=dtype)
 
 

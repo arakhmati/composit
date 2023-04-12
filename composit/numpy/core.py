@@ -57,14 +57,16 @@ class NumpyArray(PClass):
 
 def create_ndarray(name: str, array: np.ndarray):
     node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=NumpyArray(array=array), shapes=(array.shape,))
+    graph = MultiDiGraph().add_node(
+        node, instruction=NumpyArray(array=array), shapes=(array.shape,), dtypes=(array.dtype,)
+    )
     return PersistentArray(graph=graph, node=node, dtype=array.dtype)
 
 
 def create_from_numpy_compute_instruction(
     *operands,
     instruction,
-    dtype=None,
+    dtype_to_override=None,
 ) -> Union[PersistentArray, tuple[PersistentArray]]:
 
     operands = list(operands)
@@ -78,10 +80,11 @@ def create_from_numpy_compute_instruction(
         instruction,
         tuple((operand.shape, operand.dtype) for operand in operands),
     )
+    dtypes = tuple(dtype_to_override or inferred_dtype for inferred_dtype in inferred_dtypes)
 
     name = f"{type(instruction).__name__}-{random_string()}"
     new_node = Node(name=name)
-    graph = graph.add_node(new_node, instruction=instruction, shapes=shapes)
+    graph = graph.add_node(new_node, instruction=instruction, shapes=shapes, dtypes=dtypes)
     for index, operand in enumerate(operands):
         graph = graph.add_edge(
             operand.node,
@@ -91,8 +94,8 @@ def create_from_numpy_compute_instruction(
         )
 
     result = tuple(
-        PersistentArray(graph=graph, node=new_node, output_index=output_index, dtype=dtype or inferred_dtype)
-        for output_index, inferred_dtype in enumerate(inferred_dtypes)
+        PersistentArray(graph=graph, node=new_node, output_index=output_index, dtype=dtype)
+        for output_index, dtype in enumerate(dtypes)
     )
     if len(result) == 1:
         return result[0]
@@ -142,7 +145,7 @@ def create_numpy_compute_function(function_name):
         operands = [arg for arg in args if isinstance(arg, PersistentArray)]
         return create_from_numpy_compute_instruction(
             *operands,
-            dtype=kwargs.get("dtype", None),
+            dtype_to_override=kwargs.get("dtype", None),
             instruction=create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
@@ -157,7 +160,7 @@ def create_numpy_binary_compute_function(function_name):
         return create_from_numpy_compute_instruction(
             operand_a,
             operand_b,
-            dtype=kwargs.get("dtype", None),
+            dtype_to_override=kwargs.get("dtype", None),
             instruction=create_numpy_compute_instruction(function_name, *args, **kwargs),
         )
 
@@ -185,7 +188,7 @@ def create_numpy_concatenate_function():
     def function(inputs, *args, **kwargs):
         return create_from_numpy_compute_instruction(
             *inputs,
-            dtype=kwargs.get("dtype", None),
+            dtype_to_override=kwargs.get("dtype", None),
             instruction=create_concatenate_instruction(*args, **kwargs),
         )
 

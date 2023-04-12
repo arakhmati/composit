@@ -32,7 +32,10 @@ class TileMetadata(PClass):
         return self.index_to_tile[index]
 
     def __repr__(self):
-        result = f"{self.__class__.__name__}(level_name={self.level_name}, shape={self.shape}, tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
+        result = (
+            f"{self.__class__.__name__}(level_name={self.level_name}, shape={self.shape}, "
+            f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
+        )
         return f"{result}\n{first(self.index_to_tile.values())}"
 
 

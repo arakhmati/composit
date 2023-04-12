@@ -26,7 +26,10 @@ def torch_model(torch_input, torch_parameter_0, torch_parameter_1, torch_paramet
 @pytest.mark.parametrize("parameter_0_shape", [(15, 30)])
 @pytest.mark.parametrize("learning_rate", [0.001])
 def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
-    num_iterations, input_shape: tuple[int, ...], parameter_0_shape: tuple[int, ...], learning_rate
+    num_iterations,
+    input_shape: tuple[int, ...],
+    parameter_0_shape: tuple[int, ...],
+    learning_rate,
 ):
 
     output_shape = input_shape[:-1] + parameter_0_shape[-1:]

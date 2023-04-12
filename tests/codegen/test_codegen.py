@@ -97,7 +97,11 @@ def _mm256_reduce_add_ps():
                             x128,
                             c.invoke(
                                 c.Identifier("_mm_add_ps"),
-                                c.invoke(c.Identifier("_mm256_extractf128_ps"), x, c.literal(1)),
+                                c.invoke(
+                                    c.Identifier("_mm256_extractf128_ps"),
+                                    x,
+                                    c.literal(1),
+                                ),
                                 c.invoke(c.Identifier("_mm256_castps256_ps128"), x),
                             ),
                         )
@@ -118,7 +122,12 @@ def _mm256_reduce_add_ps():
                             c.invoke(
                                 c.Identifier("_mm_add_ss"),
                                 x64,
-                                c.invoke(c.Identifier("_mm_shuffle_ps"), x64, x64, c.literal("0x55")),
+                                c.invoke(
+                                    c.Identifier("_mm_shuffle_ps"),
+                                    x64,
+                                    x64,
+                                    c.literal("0x55"),
+                                ),
                             ),
                         )
                     ),
@@ -252,7 +261,6 @@ def test_matmul_kernel_file():
         ],
     )
 
-    
     # ruff: noqa: E501
     expected = """\
 #include <immintrin.h>

@@ -8,7 +8,6 @@ from pyrsistent import PClass, field, pmap, pmap_field
 import composit as cnp
 from composit.persistent_array import PersistentArray
 from composit.multidigraph import compose_all, topological_traversal
-from composit.nn import evaluate
 from composit.numpy.core import get_operands
 from mosaic.tilelab.tilization_level import TilizationLevel
 
@@ -37,7 +36,8 @@ class TileView(PClass):
         for a_level, b_level in zip(self.hierarchy, other.hierarchy):
             hierarchy.append(
                 TilizationLevel(
-                    level_name=a_level.level_name, tile_shape=a_level.tile_shape[:-1] + b_level.tile_shape[-1:]
+                    level_name=a_level.level_name,
+                    tile_shape=a_level.tile_shape[:-1] + b_level.tile_shape[-1:],
                 )
             )
 

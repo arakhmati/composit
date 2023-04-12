@@ -3,7 +3,7 @@ import subprocess
 from loguru import logger
 
 FLAGS = [
-    "-std=c17",
+    "-std=c2x",
     "-O3",
     "-march=native",
     "-fno-exceptions",
@@ -27,7 +27,17 @@ def compile_shared_library(test_output_path, module):
     assembly = test_output_path / f"{kernel_name}.s"
     assembly.unlink(missing_ok=True)
     assembly = str(assembly)
-    command = ["gcc", source_file, "-I", str(test_output_path), *FLAGS, "-S", "-fverbose-asm", "-o", assembly]
+    command = [
+        "gcc",
+        source_file,
+        "-I",
+        str(test_output_path),
+        *FLAGS,
+        "-S",
+        "-fverbose-asm",
+        "-o",
+        assembly,
+    ]
     logger.info(f"Compile Source Code to Assembly: \"{' '.join(command)}\"")
     result = subprocess.run(command)
     assert result.returncode == 0

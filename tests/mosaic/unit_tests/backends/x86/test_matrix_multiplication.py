@@ -75,10 +75,12 @@ def run_cnp_kernel(
 
     logger.info("Create tile views")
     input_a_tile_view = create_tile_view(
-        input_var_a.shape, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)]
+        input_var_a.shape,
+        [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
     )
     input_b_tile_view = create_tile_view(
-        input_var_b.shape, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)]
+        input_var_b.shape,
+        [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
     )
     output_tile_view = input_a_tile_view @ input_b_tile_view
 
@@ -113,7 +115,10 @@ def run_cnp_kernel(
     def run(np_input_a, np_input_b):
         input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
         input_b_flat_array = to_flat_array(
-            np_input_b, input_b_tile_metadata, transpose_levels=transpose_b_levels, order=(1, 0)
+            np_input_b,
+            input_b_tile_metadata,
+            transpose_levels=transpose_b_levels,
+            order=(1, 0),
         )
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
         kernel.run(

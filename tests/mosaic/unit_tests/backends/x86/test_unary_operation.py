@@ -78,7 +78,8 @@ def run_cnp_kernel(
 
     logger.info("Create tile views")
     input_tile_view = create_tile_view(
-        input_var.shape, [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_shape)]
+        input_var.shape,
+        [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_shape)],
     )
     output_tile_view = input_tile_view
 

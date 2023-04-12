@@ -28,7 +28,10 @@ def test_matmul_autograd():
     gradients = cnp.nn.differentiate(
         [output_var],
         [input_var_0],
-        {input_var_0: torch_input_0.detach().numpy(), input_var_1: torch_input_1.detach().numpy()},
+        {
+            input_var_0: torch_input_0.detach().numpy(),
+            input_var_1: torch_input_1.detach().numpy(),
+        },
         {output_var: torch_incoming_gradient.numpy()},
     )
 
@@ -54,7 +57,10 @@ def test_elementwise_binary_autograd(operation, input_0_shape, input_1_shape):
     gradients = cnp.nn.differentiate(
         [output_var],
         [input_var_0, input_var_1],
-        {input_var_0: torch_input_0.detach().numpy(), input_var_1: torch_input_1.detach().numpy()},
+        {
+            input_var_0: torch_input_0.detach().numpy(),
+            input_var_1: torch_input_1.detach().numpy(),
+        },
         {output_var: torch_incoming_gradient.numpy()},
     )
 
@@ -142,7 +148,10 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(input_0_shape,
     assert np.allclose(gradients[input_var_3], torch_input_3.grad.numpy())
 
 
-@pytest.mark.parametrize("input_shape,order", [[(5, 25, 15, 3), (0, 3, 1, 2)], [(19, 1, 15, 3, 8), (1, 3, 0, 4, 2)]])
+@pytest.mark.parametrize(
+    "input_shape,order",
+    [[(5, 25, 15, 3), (0, 3, 1, 2)], [(19, 1, 15, 3, 8), (1, 3, 0, 4, 2)]],
+)
 def test_transpose(input_shape, order):
 
     torch_input = torch.rand(input_shape, requires_grad=True)
@@ -165,7 +174,10 @@ def test_transpose(input_shape, order):
     assert np.allclose(gradients[input_var], torch_outgoing_gradient)
 
 
-@pytest.mark.parametrize("input_shape,target_shape", [[(5, 25, 15, 3), (125, 45)], [(18, 1, 15, 3, 8), (6, 90, 12)]])
+@pytest.mark.parametrize(
+    "input_shape,target_shape",
+    [[(5, 25, 15, 3), (125, 45)], [(18, 1, 15, 3, 8), (6, 90, 12)]],
+)
 def test_reshape(input_shape, target_shape):
 
     torch_input = torch.rand(input_shape, requires_grad=True)
