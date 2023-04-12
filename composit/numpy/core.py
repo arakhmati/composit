@@ -71,7 +71,9 @@ def create_from_numpy_compute_instruction(
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
-            operands[index] = create_ndarray(f"Scalar({operands[index]})", np.asarray(operands[index]))
+            operands[index] = create_ndarray(
+                f"Scalar({operands[index]})", np.asarray(operands[index], operands[0].dtype)
+            )
 
     graph = merge_graphs(*tuple((operand.graph, operand.node) for operand in operands))
 
@@ -154,8 +156,6 @@ def create_numpy_compute_function(function_name):
 def create_numpy_binary_compute_function(function_name):
     def function(*args, **kwargs):
         operand_a, operand_b, *args = args
-        if not isinstance(operand_b, PersistentArray):
-            operand_b = create_ndarray(f"Scalar({operand_b})", np.asarray(operand_b))
         return create_from_numpy_compute_instruction(
             operand_a,
             operand_b,

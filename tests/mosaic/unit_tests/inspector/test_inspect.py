@@ -39,7 +39,7 @@ def test_bert(
     input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     parameters = {
-        cnp.nn.variable(name=name, shape=value.shape): value
+        cnp.nn.variable(name=name, shape=value.shape, dtype=np.float16): value
         for name, value in convert_parameters_to_numpy(transformers_model).items()
     }
 

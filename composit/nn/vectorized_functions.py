@@ -8,8 +8,8 @@ def erf(input_tensor):
 
 
 def cdf(input_tensor):
-    return 0.5 * (1 + erf(input_tensor / np.sqrt(2)))
+    return (0.5 * (1 + erf(input_tensor / np.sqrt(2)))).astype(input_tensor.dtype)
 
 
 def pdf(input_tensor):
-    return 0.3989422804014327 * np.exp(input_tensor * input_tensor * -0.5)
+    return (0.3989422804014327 * np.exp(input_tensor * input_tensor * -0.5)).astype(input_tensor.dtype)

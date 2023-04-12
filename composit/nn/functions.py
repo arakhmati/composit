@@ -16,7 +16,7 @@ def variable(*, name: str, shape: tuple, dtype=None) -> PersistentArray:
 @wrap_as_instruction()
 def embedding(input_tensor, weights):
     batch_size, sequence_size = input_tensor.shape
-    result = np.zeros((batch_size, sequence_size, weights.shape[1]))
+    result = np.zeros((batch_size, sequence_size, weights.shape[1]), dtype=weights.dtype)
     for batch_index in range(batch_size):
         for sequence_index in range(sequence_size):
             result[batch_index, sequence_index] = weights[input_tensor[batch_index, sequence_index]]
