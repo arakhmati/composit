@@ -1,9 +1,35 @@
-[tool.black]
-target-version = ['py37', 'py38']
+[tool.ruff]
 line-length = 120
-include = '(\.pyi?)$'
-exclude = 'vendor|venv|wvenv'
+ignore = ["F403"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "pyimmer"]
+testpaths = [ "codegen", "pyimmer/tests","tests"]
 python_files = ["test_*.py", "*_test.py"]
+
+[tool.poetry]
+name = "composit"
+version = "0.1.0"
+description = "Used to create Baby AGI"
+authors = ["typon <hfarooq@protonmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+numpy = "^1.24.2"
+pyrsistent = "^0.19.3"
+toolz = "^0.12.0"
+graphviz = "^0.20.1"
+networkx = "^3.1"
+loguru = "^0.7.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.0"
+ruff = "^0.0.261"
+matplotlib = "^3.7.1"
+torch = "^2.0.0"
+transformers = "^4.27.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

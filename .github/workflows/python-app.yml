@@ -19,15 +19,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
+    - name: Install native dependencies
+      run: |
+        bash install_native_deps.sh
+    - name: Install poetry
+      run: pipx install poetry
+    - uses: actions/setup-python@v4
+      name: Install python dependencies
       with:
-        python-version: "3.11"
-
-    - name: Install Package with Dependencies
-      run: |
-        bash install.sh
-
+        python-version: '3.11'
+        cache: 'poetry'
+    - run: poetry install
     - name: Test with Pytest
-      run: |
-        pytest
+      run: poetry run pytest

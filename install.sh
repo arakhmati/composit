@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 
-# TODO: this should be part of a build system
-
 set -e
 set -x
 
-pip install -r requirements.txt
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.11
 
-mkdir vendor -p
-cd vendor
-if [ ! -d "immer" ] ; then
-  git clone https://github.com/arximboldi/immer.git
-fi
-cd immer
-git checkout 9dad616455aee3cf847ec349c6b5d98ca90b403b
-cd ..
-cd ..
+curl -sSL https://install.python-poetry.org | python3.11 -
+export PATH=$HOME/.local/bin:$PATH
+poetry shell
+poetry install
 
-pip install -e . -v
+bash install_native_deps.sh

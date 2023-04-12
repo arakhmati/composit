@@ -252,6 +252,8 @@ def test_matmul_kernel_file():
         ],
     )
 
+    
+    # ruff: noqa: E501
     expected = """\
 #include <immintrin.h>
 
