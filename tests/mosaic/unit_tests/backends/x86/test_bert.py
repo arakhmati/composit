@@ -72,39 +72,7 @@ def propagate_buffer_down(graph, node, node_to_users, node_to_buffer):
     return propagate_buffer_down(graph, successor, node_to_users, node_to_buffer)
 
 
-def analyze_buffer_reuse(*outputs):
-    graph = compose_all(*(output.graph for output in outputs))
-
-    buffers_queue = deque(maxlen=None)
-
-    node_to_users = pmap()
-    node_to_buffer = pmap()
-
-    for node in graph:
-        node_to_users = node_to_users.set(node, graph.out_degree(node))
-
-    for node in topological_traversal(graph):
-        if node in node_to_buffer:
-            node_to_users = try_returning_buffer_to_queue(graph, node, node_to_users, node_to_buffer, buffers_queue)
-            continue
-
-        instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, (Constant, Variable)):
-            continue
-
-        if not buffers_queue:
-            buffer = Buffer()
-        else:
-            buffer = buffers_queue.popleft()
-
-        node_to_buffer = node_to_buffer.set(node, buffer)
-        buffer.current = node
-        node_to_users, node_to_buffer = propagate_buffer_down(graph, node, node_to_users, node_to_buffer)
-        node_to_users = try_returning_buffer_to_queue(graph, node, node_to_users, node_to_buffer, buffers_queue)
-
-    buffers_set = {buffer for buffer in node_to_buffer.values()}
-    logger.info(len(buffers_set))
-
+def visualize_node(node_to_buffer):
     def visualize_node(graphviz_graph, graph, node):
         colors = [
             "red",
@@ -125,7 +93,44 @@ def analyze_buffer_reuse(*outputs):
         fontcolor = {"yellow": "black"}.get(color, "white")
         graphviz_graph.node(node.name, label=f"{node}", color=color, style=style, fontcolor=fontcolor)
 
-    visualize_graph(graph, visualize_node=visualize_node, render=False)
+    return visualize_node
+
+
+def analyze_buffer_reuse(*outputs):
+    buffers_queue = deque(maxlen=None)
+    node_to_users = pmap()
+    node_to_buffer = pmap()
+
+    graph = compose_all(*(output.graph for output in outputs))
+    for node in graph:
+        node_to_users = node_to_users.set(node, graph.out_degree(node))
+
+    for node in topological_traversal(graph):
+        if node in node_to_buffer:
+            node_to_users = try_returning_buffer_to_queue(graph, node, node_to_users, node_to_buffer, buffers_queue)
+            continue
+
+        instruction = graph.nodes[node]["instruction"]
+        if isinstance(instruction, (Constant, Variable)):
+            continue
+
+        if not buffers_queue:
+            buffer = Buffer()
+        else:
+            buffer = buffers_queue.pop()
+
+        node_to_buffer = node_to_buffer.set(node, buffer)
+        buffer.current = node
+        node_to_users, node_to_buffer = propagate_buffer_down(graph, node, node_to_users, node_to_buffer)
+        node_to_users = try_returning_buffer_to_queue(graph, node, node_to_users, node_to_buffer, buffers_queue)
+
+    visualize_graph(graph, visualize_node=visualize_node(node_to_buffer))
+
+    buffer_to_nodes = {}
+    for node, buffer in node_to_buffer.items():
+        nodes = buffer_to_nodes.setdefault(buffer.index, [])
+        nodes.append(node)
+    return pmap(buffer_to_nodes)
 
 
 @pytest.mark.parametrize("batch_size", [1])
