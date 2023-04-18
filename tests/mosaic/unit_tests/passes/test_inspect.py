@@ -10,7 +10,7 @@ from model_zoo.bert import (
     functional_bert,
     convert_parameters_to_numpy,
 )
-from mosaic.inspector import inspect
+from mosaic.passes import inspect
 
 
 @pytest.mark.parametrize("batch_size", [1])

@@ -124,7 +124,7 @@ def from_tiles(tiles, arg):
         return next(tiles)
 
 
-def aligned_array(shape, dtype, align=32):
+def create_aligned_array(shape, dtype, align=32):
     size = np.prod(shape) * np.dtype(dtype).itemsize
     buffer = np.empty(size + align, dtype=np.uint8)
     offset = buffer.ctypes.data % align
@@ -142,7 +142,7 @@ def to_flat_array(array: np.array, tile_metadata: TileMetadata, *, transpose_lev
     start = 0
     end = tile_size
 
-    flat_array = aligned_array((math.prod(array.shape),), array.dtype)
+    flat_array = create_aligned_array((math.prod(array.shape),), array.dtype)
     for tile in tiles:
         flat_array[start:end] = tile.flatten()
         start = end

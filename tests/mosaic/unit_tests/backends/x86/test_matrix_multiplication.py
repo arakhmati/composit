@@ -13,6 +13,7 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
+from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import create_tile_view
 from mosaic.tilelab.tilization_level import TilizationLevel
 from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
@@ -105,10 +106,6 @@ def run_cnp_kernel(
     logger.info("Load kernel")
     kernel = cdll.LoadLibrary(shared_library)
 
-    def cast_array(flat_array):
-        c_float_p = POINTER(c_float)
-        return flat_array.ctypes.data_as(c_float_p)
-
     output_shape = output_var.shape
 
     def run(np_input_a, np_input_b):
@@ -121,9 +118,9 @@ def run_cnp_kernel(
         )
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
         kernel.run(
-            cast_array(input_a_flat_array),
-            cast_array(input_b_flat_array),
-            cast_array(output_flat_array),
+            cast_numpy_array_to_pointer(input_a_flat_array),
+            cast_numpy_array_to_pointer(input_b_flat_array),
+            cast_numpy_array_to_pointer(output_flat_array),
         )
         return from_flat_array(output_flat_array, output_tile_metadata)
 
