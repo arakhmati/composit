@@ -4,7 +4,7 @@ import numpy as np
 
 import composit as cnp
 from mosaic.tilelab.tile_view import (
-    TilizationLevel,
+    TileLevel,
     create_tile_view,
     retilize_view,
     propagate_tile_views,
@@ -34,18 +34,18 @@ def test_concatenate(
     view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=tile_shape),
+            TileLevel(level_name="buffer", tile_shape=buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=tile_shape),
         ],
     )
 
     different_view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=new_block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=new_tile_shape),
+            TileLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=new_block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=new_tile_shape),
         ],
     )
 
@@ -76,18 +76,18 @@ def test_slice(
     view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=tile_shape),
+            TileLevel(level_name="buffer", tile_shape=buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=tile_shape),
         ],
     )
 
     different_view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=new_block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=new_tile_shape),
+            TileLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=new_block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=new_tile_shape),
         ],
     )
 
@@ -118,18 +118,18 @@ def test_buffer_slice_block_slice_tile_concatenate(
     view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=tile_shape),
+            TileLevel(level_name="buffer", tile_shape=buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=tile_shape),
         ],
     )
 
     different_view = create_tile_view(
         np_input.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
-            TilizationLevel(level_name="block", tile_shape=new_block_tile_shape),
-            TilizationLevel(level_name="tile", tile_shape=new_tile_shape),
+            TileLevel(level_name="buffer", tile_shape=new_buffer_tile_shape),
+            TileLevel(level_name="block", tile_shape=new_block_tile_shape),
+            TileLevel(level_name="tile", tile_shape=new_tile_shape),
         ],
     )
 
@@ -163,24 +163,24 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
 
     input_var_to_scheme = {
         input_var_0: [
-            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
-            TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
+            TileLevel(level_name="buffer", tile_shape=(1, 16, 16)),
+            TileLevel(level_name="block", tile_shape=(1, 8, 8)),
+            TileLevel(level_name="tile", tile_shape=(1, 4, 4)),
         ],
         input_var_1: [
-            TilizationLevel(level_name="buffer", tile_shape=(16, 8)),
-            TilizationLevel(level_name="block", tile_shape=(8, 4)),
-            TilizationLevel(level_name="tile", tile_shape=(4, 4)),
+            TileLevel(level_name="buffer", tile_shape=(16, 8)),
+            TileLevel(level_name="block", tile_shape=(8, 4)),
+            TileLevel(level_name="tile", tile_shape=(4, 4)),
         ],
         input_var_2: [
-            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
-            TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 2)),
+            TileLevel(level_name="buffer", tile_shape=(1, 16, 16)),
+            TileLevel(level_name="block", tile_shape=(1, 8, 8)),
+            TileLevel(level_name="tile", tile_shape=(1, 4, 2)),
         ],
         input_var_3: [
-            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 16)),
-            TilizationLevel(level_name="block", tile_shape=(1, 8, 8)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 2)),
+            TileLevel(level_name="buffer", tile_shape=(1, 16, 16)),
+            TileLevel(level_name="block", tile_shape=(1, 8, 8)),
+            TileLevel(level_name="tile", tile_shape=(1, 4, 2)),
         ],
     }
 
@@ -189,9 +189,9 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     assert tile_views[output_var] == create_tile_view(
         output.shape,
         [
-            TilizationLevel(level_name="buffer", tile_shape=(1, 16, 8)),
-            TilizationLevel(level_name="block", tile_shape=(1, 8, 4)),
-            TilizationLevel(level_name="tile", tile_shape=(1, 4, 4)),
+            TileLevel(level_name="buffer", tile_shape=(1, 16, 8)),
+            TileLevel(level_name="block", tile_shape=(1, 8, 4)),
+            TileLevel(level_name="tile", tile_shape=(1, 4, 4)),
         ],
     )
 

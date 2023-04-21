@@ -3,18 +3,22 @@ from __future__ import annotations
 import collections
 import math
 
-from pyrsistent import PClass, field, pmap, pmap_field
+from pyrsistent import PClass, field, pmap, pmap_field, PVector
 
 import composit as cnp
 from composit.persistent_array import PersistentArray
 from composit.multidigraph import compose_all, topological_traversal
 from composit.numpy.core import get_operands
-from mosaic.tilelab.tilization_level import TilizationLevel
+
+
+class TileLevel(PClass):
+    level_name = field()
+    tile_shape = field()
 
 
 class TileView(PClass):
     shape = field()
-    hierarchy = field()
+    hierarchy: PVector[TileLevel] = field()
 
     @property
     def num_levels(self):
@@ -34,7 +38,7 @@ class TileView(PClass):
         hierarchy = []
         for a_level, b_level in zip(self.hierarchy, other.hierarchy):
             hierarchy.append(
-                TilizationLevel(
+                TileLevel(
                     level_name=a_level.level_name,
                     tile_shape=a_level.tile_shape[:-1] + b_level.tile_shape[-1:],
                 )
@@ -58,14 +62,14 @@ def _sum(view: TileView, axis) -> TileView:
     for level in view.hierarchy:
         tile_shape = list(level.tile_shape)
         tile_shape[axis] = 1
-        hierarchy.append(TilizationLevel(level_name=level.level_name, tile_shape=tile_shape))
+        hierarchy.append(TileLevel(level_name=level.level_name, tile_shape=tile_shape))
 
     return TileView(shape=shape, hierarchy=hierarchy)
 
 
 def create_tile_view(
     shape: tuple[int, ...],
-    hierarchy: list[TilizationLevel],
+    hierarchy: list[TileLevel],
 ):
     return TileView(
         shape=shape,
@@ -73,7 +77,7 @@ def create_tile_view(
     )
 
 
-def retilize_view(old_view: TileView, hierarchy: list[TilizationLevel]):
+def retilize_view(old_view: TileView, hierarchy: list[TileLevel]):
     new_view = TileView(
         shape=old_view.shape,
         hierarchy=hierarchy,
@@ -105,8 +109,8 @@ class Cache(PClass):
 
 def initialize_cache(graph, inputs):
     cache = {}
-    for parray, tilization_levels in inputs.items():
-        cache[(parray.node, parray.output_index)] = create_tile_view(parray.shape, tilization_levels)
+    for parray, tile_levels in inputs.items():
+        cache[(parray.node, parray.output_index)] = create_tile_view(parray.shape, tile_levels)
     return cache
 
 

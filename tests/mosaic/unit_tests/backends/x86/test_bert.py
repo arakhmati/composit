@@ -23,8 +23,6 @@ from model_zoo.bert import (
     convert_parameters_to_numpy,
 )
 from mosaic.tilelab.tile import create_aligned_array
-from mosaic.tilelab.tile_view import propagate_tile_views
-from mosaic.tilelab.tilization_level import TilizationLevel
 
 
 class BufferType(enum.Enum):

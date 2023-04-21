@@ -7,8 +7,7 @@ import numpy as np
 from pyrsistent import PClass, field, pmap
 from toolz import first
 
-from mosaic.tilelab.tile_view import TileView
-from mosaic.tilelab.tilization_level import TilizationLevel
+from mosaic.tilelab.tile_view import TileLevel, TileView
 
 
 class TileMetadata(PClass):
@@ -18,7 +17,7 @@ class TileMetadata(PClass):
 
     @property
     def hierarchy(self):
-        return [TilizationLevel(level_name=self.level_name, tile_shape=self.tile_shape)] + first(
+        return [TileLevel(level_name=self.level_name, tile_shape=self.tile_shape)] + first(
             self.index_to_tile.values()
         ).hierarchy
 
@@ -63,8 +62,8 @@ def create_tile_metadata(
     if offsets is None:
         offsets = tuple(0 for _ in shape)
 
-    tilization_level, *remaining_hierarchy = hierarchy
-    tile_shape = tilization_level.tile_shape
+    tile_level, *remaining_hierarchy = hierarchy
+    tile_shape = tile_level.tile_shape
 
     if len(shape) != len(tile_shape):
         raise RuntimeError("Shapes must have the same rank")
@@ -78,13 +77,15 @@ def create_tile_metadata(
         new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
         if remaining_hierarchy:
-            index_to_tile[tile_indices] = create_tile_metadata(TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets)
+            index_to_tile[tile_indices] = create_tile_metadata(
+                TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets
+            )
         else:
             tile_slices = tuple(slice(index, index + tile_dim) for index, tile_dim in zip(new_offsets, tile_shape))
             index_to_tile[tile_indices] = SliceMetadata(shape=tile_shape, slices=tile_slices)
 
     tile_metadata = TileMetadata(
-        level_name=tilization_level.level_name,
+        level_name=tile_level.level_name,
         shape=shape,
         index_to_tile=pmap(index_to_tile),
     )

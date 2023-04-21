@@ -14,8 +14,7 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.tilelab.tile_view import create_tile_view
-from mosaic.tilelab.tilization_level import TilizationLevel
+from mosaic.tilelab.tile_view import TileLevel, create_tile_view
 from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import matrix_multiplication
 from mosaic.backends.x86.compile import compile_shared_library
@@ -76,11 +75,11 @@ def run_cnp_kernel(
     logger.info("Create tile views")
     input_a_tile_view = create_tile_view(
         input_var_a.shape,
-        [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
+        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
     )
     input_b_tile_view = create_tile_view(
         input_var_b.shape,
-        [TilizationLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
+        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
     )
     output_tile_view = input_a_tile_view @ input_b_tile_view
 
