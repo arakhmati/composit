@@ -184,7 +184,7 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
         ],
     }
 
-    tile_views = propagate_tile_views(output_var, inputs=input_var_to_scheme)
+    tile_views = propagate_tile_views(output_var.graph, inputs=input_var_to_scheme)
 
     assert tile_views[output_var] == create_tile_view(
         output.shape,

@@ -14,7 +14,7 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.tilelab.tile_view import TileLevel, create_tile_view
+from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
 from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import matrix_multiplication
 from mosaic.backends.x86.compile import compile_shared_library
@@ -72,21 +72,17 @@ def run_cnp_kernel(
     input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
     output_var = input_var_a @ input_var_b
 
-    logger.info("Create tile views")
-    input_a_tile_view = create_tile_view(
-        input_var_a.shape,
-        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
+    logger.info("Propagate tile views and create tile metadatas")
+    tile_views = propagate_tile_views(
+        output_var.graph,
+        inputs={
+            input_var_a: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
+            input_var_b: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
+        },
     )
-    input_b_tile_view = create_tile_view(
-        input_var_b.shape,
-        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
-    )
-    output_tile_view = input_a_tile_view @ input_b_tile_view
-
-    logger.info("Create tile metadata")
-    input_a_tile_metadata = create_tile_metadata(input_a_tile_view)
-    input_b_tile_metadata = create_tile_metadata(input_b_tile_view)
-    output_tile_metadata = create_tile_metadata(output_tile_view)
+    input_a_tile_metadata = create_tile_metadata(tile_views[input_var_a])
+    input_b_tile_metadata = create_tile_metadata(tile_views[input_var_b])
+    output_tile_metadata = create_tile_metadata(tile_views[output_var])
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 

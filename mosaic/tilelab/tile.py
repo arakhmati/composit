@@ -36,7 +36,13 @@ class TileMetadata(PClass):
             f"{self.__class__.__name__}(level_name={self.level_name}, shape={self.shape}, "
             f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
         )
-        return f"{result}\n{first(self.index_to_tile.values())}"
+        first_child = first(self.index_to_tile.values())
+        if isinstance(first_child, TileMetadata):
+            first_child_repr = f"\n{first_child}"
+        else:
+            first_child_repr = ""
+
+        return f"{result}{first_child_repr}"
 
 
 class SliceMetadata(PClass):
@@ -66,7 +72,7 @@ def create_tile_metadata(
     tile_shape = tile_level.tile_shape
 
     if len(shape) != len(tile_shape):
-        raise RuntimeError("Shapes must have the same rank")
+        raise RuntimeError(f"Shapes must have the same rank: {shape} != {tile_shape}")
 
     ranges = (range(0, tensor_dim, tile_dim) for tensor_dim, tile_dim in zip(shape, tile_shape))
 
