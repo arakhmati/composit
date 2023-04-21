@@ -4,6 +4,7 @@ import networkx as nx
 from pyrsistent import pset
 from toolz import functoolz
 
+from composit.introspection import class_name
 from composit.numpy.core import get_operands
 from composit.multidigraph import topological_traversal, compose_all
 import composit.nn as nn
@@ -60,7 +61,7 @@ def chain_rule(*output_vars, input_vars: list[nn.Variable]):
             for (node, output_index) in forward_operands
         )
 
-        create_outgoing_gradients = getattr(jacobians, f"{forward_instruction.__class__.__name__}_jacobian")
+        create_outgoing_gradients = getattr(jacobians, f"{class_name(forward_instruction)}_jacobian")
         incoming_gradients = get_incoming_gradients(node, reversed_forward_subgraph, node_to_incoming_gradients)
         outgoing_gradients = create_outgoing_gradients(forward_instruction, incoming_gradients, forward_input_vars)
 

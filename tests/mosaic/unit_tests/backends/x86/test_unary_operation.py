@@ -23,6 +23,7 @@ FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
 operation_to_np_function = {
     "exp": np.exp,
+    "sqrt": np.sqrt,
 }
 
 
@@ -34,6 +35,7 @@ def run_torch(num_iterations, input_shape, operation: str):
 
     operation_to_torch_function = {
         "exp": torch.exp,
+        "sqrt": torch.sqrt,
     }
     torch_function = operation_to_torch_function[operation]
 
@@ -44,14 +46,14 @@ def run_torch(num_iterations, input_shape, operation: str):
         output = torch_function(torch_input)
         return output.numpy()
 
-    np_input = np.random.uniform(-0.5, 0.5, input_shape).astype(np.float32)
+    np_input = np.random.uniform(0.0, 0.5, input_shape).astype(np.float32)
     assert np.allclose(run(np_input), np_function(np_input), atol=1e-5, rtol=1e-6)
 
     execution_times = []
     for i in range(num_iterations):
         start = time.time_ns()
 
-        np_input = np.random.uniform(-0.5, 0.5, input_shape).astype(np.float32)
+        np_input = np.random.uniform(0.0, 0.5, input_shape).astype(np.float32)
         run(np_input)
 
         end = time.time_ns()
@@ -91,6 +93,7 @@ def run_cnp_kernel(
     kernel_name = unary_operation.generate_kernel(
         test_output_path,
         input_array_tile_config,
+        operation,
     )
 
     logger.info("Compile kernel as shared library")
@@ -111,7 +114,7 @@ def run_cnp_kernel(
 
     logger.info("Run Comparison")
     np_function = operation_to_np_function[operation]
-    np_input = np.random.uniform(-0.5, 0.5, input_var.shape).astype(np.float32)
+    np_input = np.random.uniform(0.0, 0.5, input_var.shape).astype(np.float32)
     assert np.allclose(run(np_input), np_function(np_input), atol=1e-5, rtol=1e-6)
 
     logger.info(f"Run Kernel for {num_iterations} iterations")
@@ -119,7 +122,7 @@ def run_cnp_kernel(
     for _ in range(num_iterations):
         start = time.time_ns()
 
-        np_input = np.random.uniform(-0.5, 0.5, input_var.shape).astype(np.float32)
+        np_input = np.random.uniform(0.0, 0.5, input_var.shape).astype(np.float32)
         run(np_input)
 
         end = time.time_ns()
@@ -168,7 +171,7 @@ def run_unary_operation(
 @pytest.mark.parametrize("compare_against_torch", [False])
 @pytest.mark.parametrize("input_shape", [(1, 128, 128)])
 @pytest.mark.parametrize("l1_cache_shape", [(1, 64, 64)])
-@pytest.mark.parametrize("operation", ["exp"])
+@pytest.mark.parametrize("operation", ["exp", "sqrt"])
 def test_unary_operation(
     request,
     num_iterations,

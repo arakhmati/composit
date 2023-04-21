@@ -12,10 +12,11 @@ InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMEN
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
+def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_config,
+        operation,
     )
 
     input_var = c.variable(InputType, "input_var")
@@ -24,6 +25,7 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
     body = generate_body(
         input_array_tile_config,
         c_variables=dict(input_var=input_var, output_var=output_var),
+        operation=operation,
     )
 
     file = c.File(
@@ -49,7 +51,13 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
 def generate_body(
     input_array_tile_config,
     c_variables,
+    operation,
 ):
+    operation_to_c_function = {
+        "exp": "expf",
+        "sqrt": "sqrtf",
+    }
+
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_array_tile_config.shape)
 
@@ -57,7 +65,12 @@ def generate_body(
         c.Declare(index, c.literal(0)),
         index < c.literal(num_iterations),
         c.add_in_place(index, c.literal(1)),
-        c.block(c.assign(c_variables["output_var"][index], c.invoke("expf", c_variables["input_var"][index]))),
+        c.block(
+            c.assign(
+                c_variables["output_var"][index],
+                c.invoke(operation_to_c_function[operation], c_variables["input_var"][index]),
+            )
+        ),
     )
 
     return c.block(b_loop)

@@ -7,6 +7,7 @@ import numpy as np
 from pyrsistent import PClass, field, pmap
 from toolz import first
 
+from composit.introspection import class_name
 from mosaic.tilelab.tile_view import TileLevel, TileView
 
 
@@ -33,7 +34,7 @@ class ArrayTileConfig(PClass):
 
     def __repr__(self):
         result = (
-            f"{self.__class__.__name__}(level_name={self.level_name}, shape={self.shape}, "
+            f"{class_name(self)}(level_name={self.level_name}, shape={self.shape}, "
             f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
         )
         first_child = first(self.index_to_tile.values())
@@ -55,7 +56,7 @@ class AtomicTileConfig(PClass):
         return []
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(shape={self.shape}, slices={self.slices})"
+        return f"{class_name(self)}(shape={self.shape}, slices={self.slices})"
 
 
 def create_array_tile_config(

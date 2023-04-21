@@ -5,7 +5,7 @@ from typing import Union
 
 import numpy as np
 from pyrsistent import immutable, PClass, field
-from toolz import functoolz
+from toolz import functoolz, memoize
 
 from composit.multidigraph import MultiDiGraph, merge_graphs
 from composit.persistent_array import PersistentArray, Node
@@ -103,6 +103,7 @@ def create_from_numpy_compute_instruction(
     return result
 
 
+@memoize
 def create_numpy_compute_instruction(function_name, *args, **kwargs):
     numpy_function = getattr(np, function_name)
     if isinstance(numpy_function, np.ufunc):
@@ -167,6 +168,7 @@ def create_numpy_binary_compute_function(function_name):
 
 
 def create_numpy_concatenate_function():
+    @memoize
     def create_concatenate_instruction(axis=0, out=None, dtype=None, casting="same_kind"):
         klass_kwargs = {
             "axis": axis,

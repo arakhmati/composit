@@ -5,6 +5,7 @@ import math
 
 from pyrsistent import PClass, field, pmap, pmap_field, PVector
 
+from composit.introspection import class_name
 from composit.persistent_array import PersistentArray
 from composit.multidigraph import topological_traversal
 from composit.numpy.core import get_operands
@@ -24,7 +25,7 @@ class TileView(PClass):
         return len(self.hierarchy)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(shape={self.shape}, hierarchy={self.hierarchy})"
+        return f"{class_name(self)}(shape={self.shape}, hierarchy={self.hierarchy})"
 
 
 def _matmul(self, other):
@@ -141,29 +142,30 @@ def propagate_tile_views(
         if (node, 0) in cache:
             continue
         instruction = graph.nodes[node]["instruction"]
+        instruction_class_name = class_name(instruction)
         input_tile_views = [cache[operand] for operand in get_operands(graph, node)]
 
-        if instruction.__class__.__name__ == "Constant":
+        if instruction_class_name == "Constant":
             tile_view = create_tile_view((), [TileLevel(level_name="tile", tile_shape=())])
-        elif instruction.__class__.__name__ == "embedding":
+        elif instruction_class_name == "embedding":
             tile_view = create_tile_view(
                 graph.nodes[node]["shapes"][0], [TileLevel(level_name="tile", tile_shape=(1, 32, 32))]
             )
-        elif instruction.__class__.__name__ == "matmul":
+        elif instruction_class_name == "matmul":
             tile_view = _matmul(input_tile_views[0], input_tile_views[1])
-        elif instruction.__class__.__name__ in {"sum", "mean", "max"}:
+        elif instruction_class_name in {"sum", "mean", "max"}:
             tile_view = _reduce(input_tile_views[0], axis=instruction.axis)
-        elif instruction.__class__.__name__ in {"add", "subtract", "multiply", "divide"}:
+        elif instruction_class_name in {"add", "subtract", "multiply", "divide"}:
             if input_tile_views[0].hierarchy != input_tile_views[1].hierarchy and math.prod(
                 input_tile_views[0].shape
             ) == math.prod(input_tile_views[1].shape):
                 input_tile_views[1], _ = retilize_view(input_tile_views[1], input_tile_views[0].hierarchy)
             tile_view = _binary_operation(input_tile_views[0], input_tile_views[1])
-        elif instruction.__class__.__name__ in {"sqrt", "exp", "gelu"}:
+        elif instruction_class_name in {"sqrt", "exp", "gelu"}:
             (tile_view,) = input_tile_views
-        elif instruction.__class__.__name__ == "reshape":
+        elif instruction_class_name == "reshape":
             tile_view = _reshape(input_tile_views[0], instruction.newshape)
-        elif instruction.__class__.__name__ == "transpose":
+        elif instruction_class_name == "transpose":
             tile_view = _transpose(input_tile_views[0], instruction.axes)
         else:
             raise RuntimeError(f"Unrecognized instruction: {instruction}")

@@ -7,3 +7,7 @@ def get_name_from_args_and_kwargs(function_name, *args, **kwargs):
     else:
         result = f"{result})"
     return result
+
+
+def class_name(instance):
+    return instance.__class__.__name__

@@ -1,6 +1,7 @@
-import enum
 from collections import deque
+import enum
 import math
+import pathlib
 
 import numpy as np
 import pytest
@@ -11,18 +12,25 @@ from loguru import logger
 from pyrsistent import pmap, pvector, PClass, field, pset
 
 import composit as cnp
+from composit.hash import deterministic_hash
+from composit.introspection import class_name
 from composit.multidigraph import compose_all, topological_traversal
 from composit.nn import Variable
-from composit.numpy.core import Constant
+from composit.numpy.core import Constant, get_operands
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.passes.inspect import format_bytes
+from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config
+from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
+
 
 from model_zoo.bert import (
     create_bert_config,
     functional_bert,
     convert_parameters_to_numpy,
 )
-from mosaic.tilelab.tile import create_aligned_array
+
+FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
 
 class BufferType(enum.Enum):
@@ -182,7 +190,6 @@ def allocate_buffers(graph):
     buffer_to_size = size_buffers(graph)
     buffer_to_memory = {}
     for buffer, size in buffer_to_size.items():
-        logger.info(f"{buffer} : {size}")
         array = create_aligned_array((size,), dtype=np.uint8)
         array[:] = 0
         memory = cast_numpy_array_to_pointer(array)
@@ -247,13 +254,64 @@ def visualize_node(graphviz_graph, graph, node):
     graphviz_graph.node(node.name, label=f"{node}", color=color, style=style, fontcolor=fontcolor)
 
 
+def create_tile_shape(shape):
+    if len(shape) == 3:
+        return (1, 32, 32)
+    elif len(shape) == 2:
+        return min(shape[0], 32), min(shape[1], 32)
+    elif len(shape) == 1:
+        return (min(shape[0], 32),)
+    else:
+        logger.info(f"Scalar: {shape}")
+        return ()
+
+
+def propagate_array_tile_config(graph, input_var_to_scheme):
+    tile_views = propagate_tile_views(graph, inputs=input_var_to_scheme)
+
+    node_output_to_array_tile_config = {
+        node_output: create_array_tile_config(tile_view) for node_output, tile_view in tile_views
+    }
+    return node_output_to_array_tile_config
+
+
+def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
+    nodes = filter(lambda node: graph.in_degree(node) > 0, graph)
+
+    unimplemented = set()
+
+    node_to_kernel_name = {}
+    for node in nodes:
+        instruction = graph.nodes[node]["instruction"]
+        instruction_class_name = class_name(instruction)
+
+        input_array_tile_configs = [
+            node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(graph, node)
+        ]
+
+        if instruction_class_name == "matmul":
+            node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
+                test_output_path, *input_array_tile_configs, input_b_levels_to_transpose=None, use_avx_manually=True
+            )
+        elif instruction_class_name in {"exp", "sqrt"}:
+            node_to_kernel_name[node] = unary_operation.generate_kernel(
+                test_output_path, input_array_tile_configs[0], instruction_class_name
+            )
+        else:
+            unimplemented.add(instruction_class_name)
+    logger.info(sorted(unimplemented))
+
+    return pmap(node_to_kernel_name)
+
+
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [3])
 @pytest.mark.parametrize("sequence_size", [32])
 @pytest.mark.parametrize("num_attention_heads", [4])
-@pytest.mark.parametrize("head_size", [48])
+@pytest.mark.parametrize("head_size", [32])
 @pytest.mark.parametrize("vocab_size", [16])
 def test_bert(
+    request,
     batch_size,
     num_encoders,
     sequence_size,
@@ -261,6 +319,10 @@ def test_bert(
     head_size,
     vocab_size,
 ):
+    test_name = request.node.name
+    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
     config = create_bert_config(
         num_encoders=num_encoders,
         num_attention_heads=num_attention_heads,
@@ -290,9 +352,26 @@ def test_bert(
         )
 
     graph = create_buffer_graph(model)
-    buffer_to_memory = allocate_buffers(graph)
 
-    for node in graph:
-        input_pointers = [buffer_to_memory[graph.nodes[input_node]["buffer"]] for input_node, _ in graph.in_edges(node)]
-        output_pointer = buffer_to_memory[graph.nodes[node]["buffer"]]
-        logger.info(f"node={node}, num_inputs={len(input_pointers)}")
+    input_var_to_scheme = {
+        var: [
+            TileLevel(level_name="tile", tile_shape=create_tile_shape(var.shape)),
+        ]
+        for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
+    }
+    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
+
+    # visualize_graph(graph, visualize_node=visualize_node)
+
+    node_to_kernel_name = generate_kernels(test_output_path, graph, node_output_to_array_tile_config)
+
+    nodes_with_kernels = filter(
+        lambda node: class_name(graph.nodes[node]["instruction"]) in {"matmul", "exp", "sqrt"}, graph
+    )
+    assert len(node_to_kernel_name) == toolz.count(nodes_with_kernels)
+
+    # buffer_to_memory = allocate_buffers(graph)
+    # for node in graph:
+    #     input_pointers = [buffer_to_memory[graph.nodes[input_node]["buffer"]] for input_node, _ in get_operands(node)]
+    #     output_pointer = buffer_to_memory[graph.nodes[node]["buffer"]]
+    #     logger.info(f"node={node}, num_inputs={len(input_pointers)}")
