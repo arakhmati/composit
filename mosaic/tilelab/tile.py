@@ -7,6 +7,7 @@ import numpy as np
 from pyrsistent import PClass, field, pmap
 from toolz import first
 
+from mosaic.tilelab.tile_view import TileView
 from mosaic.tilelab.tilization_level import TilizationLevel
 
 
@@ -53,10 +54,12 @@ class SliceMetadata(PClass):
 
 
 def create_tile_metadata(
-    shape: tuple[int, ...],
-    hierarchy: list[TilizationLevel],
+    tile_view: TileView,
     offsets=None,
 ) -> TileMetadata:
+    shape = tile_view.shape
+    hierarchy = tile_view.hierarchy
+
     if offsets is None:
         offsets = tuple(0 for _ in shape)
 
@@ -75,7 +78,7 @@ def create_tile_metadata(
         new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
         if remaining_hierarchy:
-            index_to_tile[tile_indices] = create_tile_metadata(tile_shape, remaining_hierarchy, offsets=new_offsets)
+            index_to_tile[tile_indices] = create_tile_metadata(TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets)
         else:
             tile_slices = tuple(slice(index, index + tile_dim) for index, tile_dim in zip(new_offsets, tile_shape))
             index_to_tile[tile_indices] = SliceMetadata(shape=tile_shape, slices=tile_slices)

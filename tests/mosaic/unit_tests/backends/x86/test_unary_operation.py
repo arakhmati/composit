@@ -83,8 +83,8 @@ def run_cnp_kernel(
     output_tile_view = input_tile_view
 
     logger.info("Create tile metadata")
-    input_tile_metadata = create_tile_metadata(input_var.shape, input_tile_view.hierarchy)
-    output_tile_metadata = create_tile_metadata(output_shape, output_tile_view.hierarchy)
+    input_tile_metadata = create_tile_metadata(input_tile_view)
+    output_tile_metadata = create_tile_metadata(output_tile_view)
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
