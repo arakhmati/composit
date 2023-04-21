@@ -21,12 +21,11 @@ FLAGS = [
 ]
 
 
-def compile_shared_library(test_output_path, module):
-    kernel_name = module.__name__.split(".")[-1]
+def compile_shared_library(test_output_path, kernel_name):
     source_file = str(test_output_path / f"{kernel_name}.c")
-    assembly = test_output_path / f"{kernel_name}.s"
-    assembly.unlink(missing_ok=True)
-    assembly = str(assembly)
+    assembly_file = test_output_path / f"{kernel_name}.s"
+    assembly_file.unlink(missing_ok=True)
+    assembly_file = str(assembly_file)
     command = [
         "gcc",
         source_file,
@@ -36,18 +35,18 @@ def compile_shared_library(test_output_path, module):
         "-S",
         "-fverbose-asm",
         "-o",
-        assembly,
+        assembly_file,
     ]
     logger.info(f"Compile Source Code to Assembly: \"{' '.join(command)}\"")
     result = subprocess.run(command)
     assert result.returncode == 0
 
-    shared_library = test_output_path / f"{kernel_name}.so"
-    shared_library.unlink(missing_ok=True)
-    shared_library = str(shared_library)
-    command = ["gcc", assembly, "-fPIC", "-shared", "-o", shared_library]
+    shared_library_file = test_output_path / f"{kernel_name}.so"
+    shared_library_file.unlink(missing_ok=True)
+    shared_library_file = str(shared_library_file)
+    command = ["gcc", assembly_file, "-fPIC", "-shared", "-o", shared_library_file]
     logger.info(f"Compile Assembly to Binary: \"{' '.join(command)}\"")
     result = subprocess.run(command)
     assert result.returncode == 0
 
-    return shared_library
+    return shared_library_file

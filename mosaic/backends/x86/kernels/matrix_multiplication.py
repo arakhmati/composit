@@ -7,6 +7,7 @@ import codegen as c
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 from mosaic.backends.x86.constants import AVX_SIZE, MEMORY_ALIGNMENT
+from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
 
 OffsetType = Union[c.Variable, c.Expression]
 
@@ -37,6 +38,14 @@ def generate_kernel(
     if input_b_levels_to_transpose is None:
         input_b_levels_to_transpose = set()
 
+    kernel_name = create_kernel_name(
+        pathlib.Path(__file__).stem,
+        input_a_array_tile_config,
+        input_b_array_tile_config,
+        input_b_levels_to_transpose,
+        use_avx_manually,
+    )
+
     input_a_var = c.variable(InputType, "input_a_var")
     input_b_var = c.variable(InputType, "input_b_var")
     output_var = c.variable(OutputType, "output_var")
@@ -51,7 +60,7 @@ def generate_kernel(
     )
 
     file = c.File(
-        (path / pathlib.Path(__file__).stem).with_suffix(".c"),
+        (path / pathlib.Path(kernel_name)).with_suffix(".c"),
         [
             c.Include("immintrin.h"),
             c.Include("stdint.h"),
@@ -61,13 +70,14 @@ def generate_kernel(
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
-                name=c.Identifier("run"),
+                name=c.Identifier(kernel_name),
                 arguments=[input_a_var, input_b_var, output_var],
                 body=body,
             ),
         ],
     )
     file.save()
+    return kernel_name
 
 
 def generate_body(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ctypes import cdll, c_float, POINTER
+from ctypes import cdll
 import math
 import pathlib
 import time
@@ -13,6 +13,7 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
+from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, create_tile_view
 from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import unary_operation
@@ -70,45 +71,41 @@ def run_cnp_kernel(
     l1_cache_shape,
     operation,
 ):
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
     logger.info("Creating composit graph")
     input_var = cnp.nn.variable(name="input_var_a", shape=input_shape)
     output_shape = input_var.shape
 
     logger.info("Create tile views")
-    input_tile_view = create_tile_view(
+    tile_view = create_tile_view(
         input_var.shape,
         [TileLevel(level_name="l1_cache", tile_shape=l1_cache_shape)],
     )
-    output_tile_view = input_tile_view
 
     logger.info("Create tile metadata")
-    input_array_tile_config = create_array_tile_config(input_tile_view)
-    output_array_tile_config = create_array_tile_config(output_tile_view)
-
-    test_output_path.mkdir(parents=True, exist_ok=True)
+    input_array_tile_config = create_array_tile_config(tile_view)
+    output_array_tile_config = create_array_tile_config(tile_view)
 
     logger.info("Generate kernel")
-    unary_operation.generate_kernel(
+    kernel_name = unary_operation.generate_kernel(
         test_output_path,
         input_array_tile_config,
     )
 
     logger.info("Compile kernel as shared library")
-    shared_library = compile_shared_library(test_output_path, unary_operation)
+    shared_library_file = compile_shared_library(test_output_path, kernel_name)
 
     logger.info("Load kernel")
-    kernel = cdll.LoadLibrary(shared_library)
-
-    def cast_array(flat_array):
-        c_float_p = POINTER(c_float)
-        return flat_array.ctypes.data_as(c_float_p)
+    shared_library = cdll.LoadLibrary(shared_library_file)
+    run_kernel = getattr(shared_library, kernel_name)
 
     def run(np_input):
         input_flat_array = to_flat_array(np_input, input_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_flat_array.dtype)
-        kernel.run(
-            cast_array(input_flat_array),
-            cast_array(output_flat_array),
+        run_kernel(
+            cast_numpy_array_to_pointer(input_flat_array),
+            cast_numpy_array_to_pointer(output_flat_array),
         )
         return from_flat_array(output_flat_array, output_array_tile_config)
 

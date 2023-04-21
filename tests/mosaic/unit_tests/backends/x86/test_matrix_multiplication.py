@@ -67,6 +67,8 @@ def run_cnp_kernel(
     input_b_levels_to_transpose,
     use_avx_manually,
 ):
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
     logger.info("Creating composit graph")
     input_var_a = cnp.nn.variable(name="input_var_a", shape=input_a_shape)
     input_var_b = cnp.nn.variable(name="input_var_b", shape=input_b_shape)
@@ -84,10 +86,8 @@ def run_cnp_kernel(
     input_b_array_tile_config = create_array_tile_config(tile_views[input_var_b])
     output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
-    test_output_path.mkdir(parents=True, exist_ok=True)
-
     logger.info("Generate kernel")
-    matrix_multiplication.generate_kernel(
+    kernel_name = matrix_multiplication.generate_kernel(
         test_output_path,
         input_a_array_tile_config,
         input_b_array_tile_config,
@@ -96,12 +96,11 @@ def run_cnp_kernel(
     )
 
     logger.info("Compile kernel as shared library")
-    shared_library = compile_shared_library(test_output_path, matrix_multiplication)
+    shared_library_file = compile_shared_library(test_output_path, kernel_name)
 
     logger.info("Load kernel")
-    kernel = cdll.LoadLibrary(shared_library)
-
-    output_shape = output_var.shape
+    shared_library = cdll.LoadLibrary(shared_library_file)
+    run_kernel = getattr(shared_library, kernel_name)
 
     transpose_order = list(range(len(input_var_b.shape)))
     transpose_order[-2:] = reversed(transpose_order[-2:])
@@ -114,8 +113,8 @@ def run_cnp_kernel(
             transpose_levels=input_b_levels_to_transpose,
             order=transpose_order,
         )
-        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
-        kernel.run(
+        output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_a_flat_array.dtype)
+        run_kernel(
             cast_numpy_array_to_pointer(input_a_flat_array),
             cast_numpy_array_to_pointer(input_b_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),

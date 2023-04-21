@@ -5,6 +5,7 @@ import codegen as c
 
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
+from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
 
 
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
@@ -12,8 +13,13 @@ OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
 def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
-    input_var = c.variable(InputType, "input")
-    output_var = c.variable(OutputType, "output")
+    kernel_name = create_kernel_name(
+        pathlib.Path(__file__).stem,
+        input_array_tile_config,
+    )
+
+    input_var = c.variable(InputType, "input_var")
+    output_var = c.variable(OutputType, "output_var")
 
     body = generate_body(
         input_array_tile_config,
@@ -21,7 +27,7 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
     )
 
     file = c.File(
-        (path / pathlib.Path(__file__).stem).with_suffix(".c"),
+        (path / pathlib.Path(kernel_name)).with_suffix(".c"),
         [
             c.Include("math.h"),
             c.Include("stdint.h"),
@@ -30,13 +36,14 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
-                name=c.Identifier("run"),
+                name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
             ),
         ],
     )
     file.save()
+    return kernel_name
 
 
 def generate_body(
