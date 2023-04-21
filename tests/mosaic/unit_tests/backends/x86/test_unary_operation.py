@@ -14,7 +14,7 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.tilelab.tile_view import TileLevel, create_tile_view
-from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
+from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import unary_operation
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -82,15 +82,15 @@ def run_cnp_kernel(
     output_tile_view = input_tile_view
 
     logger.info("Create tile metadata")
-    input_tile_metadata = create_tile_metadata(input_tile_view)
-    output_tile_metadata = create_tile_metadata(output_tile_view)
+    input_array_tile_config = create_array_tile_config(input_tile_view)
+    output_array_tile_config = create_array_tile_config(output_tile_view)
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generate kernel")
     unary_operation.generate_kernel(
         test_output_path,
-        input_tile_metadata,
+        input_array_tile_config,
     )
 
     logger.info("Compile kernel as shared library")
@@ -104,13 +104,13 @@ def run_cnp_kernel(
         return flat_array.ctypes.data_as(c_float_p)
 
     def run(np_input):
-        input_flat_array = to_flat_array(np_input, input_tile_metadata)
+        input_flat_array = to_flat_array(np_input, input_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_flat_array.dtype)
         kernel.run(
             cast_array(input_flat_array),
             cast_array(output_flat_array),
         )
-        return from_flat_array(output_flat_array, output_tile_metadata)
+        return from_flat_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")
     np_function = operation_to_np_function[operation]

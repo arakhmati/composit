@@ -3,19 +3,19 @@ import pathlib
 
 import codegen as c
 
-from mosaic.tilelab.tile import TileMetadata
+from mosaic.tilelab.tile import ArrayTileConfig
 
 
 InputType = c.Type("float").const().pointer().restrict().aligned("ALIGNMENT")
 OutputType = c.Type("float").pointer().restrict().aligned("ALIGNMENT")
 
 
-def generate_kernel(path, input_tile_metadata: TileMetadata):
+def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
     input_var = c.variable(InputType, "input")
     output_var = c.variable(OutputType, "output")
 
     body = generate_body(
-        input_tile_metadata,
+        input_array_tile_config,
         c_variables=dict(input_var=input_var, output_var=output_var),
     )
 
@@ -40,11 +40,11 @@ def generate_kernel(path, input_tile_metadata: TileMetadata):
 
 
 def generate_body(
-    input_tile_metadata,
+    input_array_tile_config,
     c_variables,
 ):
     index = c.variable(c.Type("uint32_t"), "index")
-    num_iterations = math.prod(input_tile_metadata.shape)
+    num_iterations = math.prod(input_array_tile_config.shape)
 
     b_loop = c.ForLoop(
         c.Declare(index, c.literal(0)),

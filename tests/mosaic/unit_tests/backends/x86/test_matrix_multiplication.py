@@ -15,7 +15,7 @@ import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
-from mosaic.tilelab.tile import create_tile_metadata, to_flat_array, from_flat_array
+from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import matrix_multiplication
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -80,17 +80,17 @@ def run_cnp_kernel(
             input_var_b: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
         },
     )
-    input_a_tile_metadata = create_tile_metadata(tile_views[input_var_a])
-    input_b_tile_metadata = create_tile_metadata(tile_views[input_var_b])
-    output_tile_metadata = create_tile_metadata(tile_views[output_var])
+    input_a_array_tile_config = create_array_tile_config(tile_views[input_var_a])
+    input_b_array_tile_config = create_array_tile_config(tile_views[input_var_b])
+    output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generate kernel")
     matrix_multiplication.generate_kernel(
         test_output_path,
-        input_a_tile_metadata,
-        input_b_tile_metadata,
+        input_a_array_tile_config,
+        input_b_array_tile_config,
         transpose_b_levels=transpose_b_levels,
         use_avx_manually=use_avx_manually,
     )
@@ -107,10 +107,10 @@ def run_cnp_kernel(
     transpose_order[-2:] = reversed(transpose_order[-2:])
 
     def run(np_input_a, np_input_b):
-        input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
+        input_a_flat_array = to_flat_array(np_input_a, input_a_array_tile_config)
         input_b_flat_array = to_flat_array(
             np_input_b,
-            input_b_tile_metadata,
+            input_b_array_tile_config,
             transpose_levels=transpose_b_levels,
             order=transpose_order,
         )
@@ -120,7 +120,7 @@ def run_cnp_kernel(
             cast_numpy_array_to_pointer(input_b_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),
         )
-        return from_flat_array(output_flat_array, output_tile_metadata)
+        return from_flat_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")
     np_input_a = np.random.uniform(-0.5, 0.5, input_var_a.shape).astype(np.float32)

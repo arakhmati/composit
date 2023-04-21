@@ -10,7 +10,7 @@ from toolz import first
 from mosaic.tilelab.tile_view import TileLevel, TileView
 
 
-class TileMetadata(PClass):
+class ArrayTileConfig(PClass):
     level_name = field()
     shape = field()
     index_to_tile = field()
@@ -37,7 +37,7 @@ class TileMetadata(PClass):
             f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
         )
         first_child = first(self.index_to_tile.values())
-        if isinstance(first_child, TileMetadata):
+        if isinstance(first_child, ArrayTileConfig):
             first_child_repr = f"\n{first_child}"
         else:
             first_child_repr = ""
@@ -45,7 +45,7 @@ class TileMetadata(PClass):
         return f"{result}{first_child_repr}"
 
 
-class SliceMetadata(PClass):
+class AtomicTileConfig(PClass):
     level_name = field(initial="atomic")
     shape = field()
     slices = field()
@@ -58,10 +58,10 @@ class SliceMetadata(PClass):
         return f"{self.__class__.__name__}(shape={self.shape}, slices={self.slices})"
 
 
-def create_tile_metadata(
+def create_array_tile_config(
     tile_view: TileView,
     offsets=None,
-) -> TileMetadata:
+) -> ArrayTileConfig:
     shape = tile_view.shape
     hierarchy = tile_view.hierarchy
 
@@ -83,32 +83,32 @@ def create_tile_metadata(
         new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
         if remaining_hierarchy:
-            index_to_tile[tile_indices] = create_tile_metadata(
+            index_to_tile[tile_indices] = create_array_tile_config(
                 TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets
             )
         else:
             tile_slices = tuple(slice(index, index + tile_dim) for index, tile_dim in zip(new_offsets, tile_shape))
-            index_to_tile[tile_indices] = SliceMetadata(shape=tile_shape, slices=tile_slices)
+            index_to_tile[tile_indices] = AtomicTileConfig(shape=tile_shape, slices=tile_slices)
 
-    tile_metadata = TileMetadata(
+    array_tile_config = ArrayTileConfig(
         level_name=tile_level.level_name,
         shape=shape,
         index_to_tile=pmap(index_to_tile),
     )
 
-    return tile_metadata
+    return array_tile_config
 
 
 def to_tiles(tensor, arg, transpose_levels, order):
-    if isinstance(arg, TileMetadata):
-        tile_metadata = arg
-        ranges = tuple(range(num_tiles) for num_tiles in tile_metadata.num_tiles_per_axis())
-        if tile_metadata.level_name in transpose_levels:
+    if isinstance(arg, ArrayTileConfig):
+        array_tile_config = arg
+        ranges = tuple(range(num_tiles) for num_tiles in array_tile_config.num_tiles_per_axis())
+        if array_tile_config.level_name in transpose_levels:
             ranges = [ranges[axis] for axis in order]
         for tile_indices in itertools.product(*ranges):
-            if tile_metadata.level_name in transpose_levels:
+            if array_tile_config.level_name in transpose_levels:
                 tile_indices = tuple([tile_indices[axis] for axis in order])
-            yield from to_tiles(tensor, tile_metadata[tile_indices], transpose_levels, order)
+            yield from to_tiles(tensor, array_tile_config[tile_indices], transpose_levels, order)
     else:
         slice_metadata = arg
         tensor = tensor[slice_metadata.slices]
@@ -118,15 +118,15 @@ def to_tiles(tensor, arg, transpose_levels, order):
 
 
 def from_tiles(tiles, arg):
-    if isinstance(arg, TileMetadata):
-        tile_metadata = arg
-        output = np.zeros(tile_metadata.shape)
-        ranges = (range(num_tiles) for num_tiles in tile_metadata.num_tiles_per_axis())
+    if isinstance(arg, ArrayTileConfig):
+        array_tile_config = arg
+        output = np.zeros(array_tile_config.shape)
+        ranges = (range(num_tiles) for num_tiles in array_tile_config.num_tiles_per_axis())
         for tile_indices in itertools.product(*ranges):
-            tile = from_tiles(tiles, tile_metadata[tile_indices])
+            tile = from_tiles(tiles, array_tile_config[tile_indices])
             tile_slices = tuple(
                 slice(tile_index * tile_dim, (tile_index + 1) * tile_dim)
-                for tile_index, tile_dim in zip(tile_indices, tile_metadata.tile_shape)
+                for tile_index, tile_dim in zip(tile_indices, array_tile_config.tile_shape)
             )
             output[tile_slices] = tile
         return output
@@ -142,13 +142,15 @@ def create_aligned_array(shape, dtype, align=32):
     return array
 
 
-def to_flat_array(array: np.array, tile_metadata: TileMetadata, *, transpose_levels=None, order=None) -> np.ndarray:
+def to_flat_array(
+    array: np.array, array_tile_config: ArrayTileConfig, *, transpose_levels=None, order=None
+) -> np.ndarray:
     if transpose_levels is None:
         transpose_levels = set()
 
-    tiles = to_tiles(array, tile_metadata, transpose_levels, order)
+    tiles = to_tiles(array, array_tile_config, transpose_levels, order)
 
-    tile_size = math.prod(tile_metadata.hierarchy[-1].tile_shape)
+    tile_size = math.prod(array_tile_config.hierarchy[-1].tile_shape)
     start = 0
     end = tile_size
 
@@ -160,8 +162,8 @@ def to_flat_array(array: np.array, tile_metadata: TileMetadata, *, transpose_lev
     return flat_array
 
 
-def from_flat_array(flat_array: np.array, tile_metadata: TileMetadata) -> np.ndarray:
-    tile_level = tile_metadata.hierarchy[-1]
+def from_flat_array(flat_array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
+    tile_level = array_tile_config.hierarchy[-1]
     num_tiles = len(flat_array) / math.prod(tile_level.tile_shape)
     tiles = (tile.reshape(tile_level.tile_shape) for tile in np.array_split(flat_array, num_tiles))
-    return from_tiles(tiles, tile_metadata)
+    return from_tiles(tiles, array_tile_config)
