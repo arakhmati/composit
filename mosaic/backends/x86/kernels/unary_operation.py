@@ -4,10 +4,11 @@ import pathlib
 import codegen as c
 
 from mosaic.tilelab.tile import ArrayTileConfig
+from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 
 
-InputType = c.Type("float").const().pointer().restrict().aligned("ALIGNMENT")
-OutputType = c.Type("float").pointer().restrict().aligned("ALIGNMENT")
+InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
+OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
 def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
@@ -25,7 +26,6 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig):
             c.Include("math.h"),
             c.Include("stdint.h"),
             c.NewLine(),
-            c.Text("#define ALIGNMENT 32"),
             c.NewLine(),
             c.NewLine(),
             c.Function(
