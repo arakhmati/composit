@@ -32,10 +32,10 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
 
 
 def generate_kernel(
-    path, input_a_array_tile_config, input_b_array_tile_config, *, transpose_b_levels, use_avx_manually: bool
+    path, input_a_array_tile_config, input_b_array_tile_config, *, input_b_levels_to_transpose, use_avx_manually: bool
 ):
-    if transpose_b_levels is None:
-        transpose_b_levels = set()
+    if input_b_levels_to_transpose is None:
+        input_b_levels_to_transpose = set()
 
     input_a_var = c.variable(InputType, "input_a_var")
     input_b_var = c.variable(InputType, "input_b_var")
@@ -46,7 +46,7 @@ def generate_kernel(
         input_b_array_tile_config,
         c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
-        transpose_b_levels=transpose_b_levels,
+        input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )
 
@@ -76,7 +76,7 @@ def generate_body(
     c_variables,
     offsets,
     *,
-    transpose_b_levels,
+    input_b_levels_to_transpose,
     use_avx_manually: bool,
 ):
     level_name = input_a_array_tile_config.level_name
@@ -117,7 +117,7 @@ def generate_body(
             offsets["output_var"] + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
         )
 
-        if level_name in transpose_b_levels:
+        if level_name in input_b_levels_to_transpose:
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
                 + ((n * c.literal(k_size) + k) * c.literal(math.prod(input_b_array_tile_config.tile_shape)))
@@ -147,7 +147,7 @@ def generate_body(
             b_tile,
             c_variables=c_variables,
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
-            transpose_b_levels=transpose_b_levels,
+            input_b_levels_to_transpose=input_b_levels_to_transpose,
             use_avx_manually=use_avx_manually,
         )
 
@@ -163,7 +163,7 @@ def generate_body(
         n = c.variable(c.Type("uint32_t"), "n")
         k = c.variable(c.Type("uint32_t"), "k")
 
-        if level_name in transpose_b_levels:
+        if level_name in input_b_levels_to_transpose:
             inner_loop_index = k
             inner_loop_size = c.literal(k_size)
             outer_loop_index = n

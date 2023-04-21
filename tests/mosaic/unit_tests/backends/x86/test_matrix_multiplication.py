@@ -64,7 +64,7 @@ def run_cnp_kernel(
     l1_cache_a_shape,
     l1_cache_b_shape,
     *,
-    transpose_b_levels,
+    input_b_levels_to_transpose,
     use_avx_manually,
 ):
     logger.info("Creating composit graph")
@@ -91,7 +91,7 @@ def run_cnp_kernel(
         test_output_path,
         input_a_array_tile_config,
         input_b_array_tile_config,
-        transpose_b_levels=transpose_b_levels,
+        input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )
 
@@ -111,7 +111,7 @@ def run_cnp_kernel(
         input_b_flat_array = to_flat_array(
             np_input_b,
             input_b_array_tile_config,
-            transpose_levels=transpose_b_levels,
+            transpose_levels=input_b_levels_to_transpose,
             order=transpose_order,
         )
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
@@ -150,7 +150,7 @@ def run_matrix_multiplication(
     test_output_path,
     num_iterations: int,
     compare_against_torch: bool,
-    transpose_b_levels: list[str],
+    input_b_levels_to_transpose: list[str],
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
@@ -169,7 +169,7 @@ def run_matrix_multiplication(
         input_b_shape,
         l1_cache_a_shape=l1_cache_a_shape,
         l1_cache_b_shape=l1_cache_b_shape,
-        transpose_b_levels=transpose_b_levels,
+        input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )
 
@@ -186,7 +186,7 @@ def run_matrix_multiplication(
 
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
-@pytest.mark.parametrize("transpose_b_levels", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
+@pytest.mark.parametrize("input_b_levels_to_transpose", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
@@ -196,7 +196,7 @@ def test_matrix_multiplication(
     request,
     num_iterations,
     compare_against_torch: bool,
-    transpose_b_levels: list[str],
+    input_b_levels_to_transpose: list[str],
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
@@ -210,7 +210,7 @@ def test_matrix_multiplication(
         test_output_path,
         num_iterations,
         compare_against_torch,
-        transpose_b_levels,
+        input_b_levels_to_transpose,
         use_avx_manually,
         input_a_shape,
         l1_cache_a_shape,
@@ -236,7 +236,7 @@ if __name__ == "__main__":
         FILE_DIR / "test_output" / "custom",
         num_iterations=25,
         compare_against_torch=True,
-        transpose_b_levels=["atomic", "l1_cache"],
+        input_b_levels_to_transpose=["atomic", "l1_cache"],
         use_avx_manually=True,
         input_a_shape=(batch_size, sequence_size, m_size, k_size),
         l1_cache_a_shape=(batch_size, sequence_size, tile_m_size, tile_k_size),
