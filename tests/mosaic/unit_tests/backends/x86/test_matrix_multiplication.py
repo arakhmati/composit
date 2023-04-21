@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ctypes import cdll, c_float, POINTER
+from ctypes import cdll
 import math
 import pathlib
 import time
@@ -108,13 +108,16 @@ def run_cnp_kernel(
 
     output_shape = output_var.shape
 
+    transpose_order = list(range(len(input_var_b.shape)))
+    transpose_order[-2:] = reversed(transpose_order[-2:])
+
     def run(np_input_a, np_input_b):
         input_a_flat_array = to_flat_array(np_input_a, input_a_tile_metadata)
         input_b_flat_array = to_flat_array(
             np_input_b,
             input_b_tile_metadata,
             transpose_levels=transpose_b_levels,
-            order=(1, 0),
+            order=transpose_order,
         )
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
         kernel.run(
@@ -222,14 +225,17 @@ def test_matrix_multiplication(
 
 
 if __name__ == "__main__":
-    m = 128
-    k = 128
-    n = 128
+    batch_size = 3
+    sequence_size = 4
+    m_size = 128
+    k_size = 128
+    n_size = 128
 
-    batch_size = 1
-    m_tile = 64
-    k_tile = 64
-    n_tile = 64
+    tile_batch_size = 1
+    tile_sequence_size = 1
+    tile_m_size = 64
+    tile_k_size = 64
+    tile_n_size = 64
 
     run_matrix_multiplication(
         FILE_DIR / "test_output" / "custom",
@@ -237,8 +243,8 @@ if __name__ == "__main__":
         compare_against_torch=True,
         transpose_b_levels=["atomic", "l1_cache"],
         use_avx_manually=True,
-        input_a_shape=(batch_size, m, k),
-        l1_cache_a_shape=(batch_size, m_tile, k_tile),
-        input_b_shape=(k, n),
-        l1_cache_b_shape=(k_tile, n_tile),
+        input_a_shape=(batch_size, sequence_size, m_size, k_size),
+        l1_cache_a_shape=(batch_size, sequence_size, tile_m_size, tile_k_size),
+        input_b_shape=(batch_size, sequence_size, k_size, n_size),
+        l1_cache_b_shape=(batch_size, sequence_size, tile_k_size, tile_n_size),
     )

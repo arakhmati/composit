@@ -89,12 +89,13 @@ def generate_body(
         a_num_tiles_per_axis = input_a.num_tiles_per_axis()
         b_num_tiles_per_axis = input_b.num_tiles_per_axis()
         a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
-        _, n_range = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
+        *_, n_range = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
 
-        b_size, m_size, k_size, n_size = a_ranges + (n_range,)
+        *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
+        b_size = math.prod(b_sizes)
 
-        a_tile = input_a[(0, 0, 0)]
-        b_tile = input_b[(0, 0)]
+        a_tile = input_a[tuple(0 for _ in range(len(a_num_tiles_per_axis)))]
+        b_tile = input_b[tuple(0 for _ in range(len(b_num_tiles_per_axis)))]
 
         b = c.variable(c.Type("uint32_t"), f"{level_name}_b")
         m = c.variable(c.Type("uint32_t"), f"{level_name}_m")
@@ -148,9 +149,10 @@ def generate_body(
 
     else:
         a_ranges = tuple(num_tiles for num_tiles in input_a.shape)
-        _, n_range = (num_tiles for num_tiles in input_b.shape)
+        *_, n_range = (num_tiles for num_tiles in input_b.shape)
 
-        b_size, m_size, k_size, n_size = a_ranges + (n_range,)
+        *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
+        b_size = math.prod(b_sizes)
 
         b = c.variable(c.Type("uint32_t"), "b")
         m = c.variable(c.Type("uint32_t"), "m")
@@ -172,9 +174,21 @@ def generate_body(
 
                 inner_loop_body = c.block(
                     input_a_vector
-                    << _mm256_load_ps(c_variables["input_a"] + offsets["input_a"] + m * c.literal(64) + k),
+                    << _mm256_load_ps(
+                        c_variables["input_a"]
+                        + offsets["input_a"]
+                        + b * c.literal(m_size) * c.literal(k_size)
+                        + m * c.literal(k_size)
+                        + k
+                    ),
                     input_b_vector
-                    << _mm256_load_ps(c_variables["input_b"] + offsets["input_b"] + n * c.literal(64) + k),
+                    << _mm256_load_ps(
+                        c_variables["input_b"]
+                        + offsets["input_b"]
+                        + b * c.literal(n_size) * c.literal(k_size)
+                        + n * c.literal(k_size)
+                        + k
+                    ),
                     c.assign(
                         output_vector,
                         _mm256_fmadd_ps(
@@ -192,7 +206,12 @@ def generate_body(
                 outer_loop_body_after = c.block(
                     c.Statement(
                         c.add_in_place(
-                            c_variables["output"][offsets["output"] + m * c.literal(64) + n],
+                            c_variables["output"][
+                                offsets["output"]
+                                + b * c.literal(m_size) * c.literal(n_size)
+                                + m * c.literal(n_size)
+                                + n
+                            ],
                             c.invoke(c.Identifier("_mm256_reduce_add_ps"), output_vector),
                         )
                     ),
@@ -203,10 +222,15 @@ def generate_body(
                 b_index = c.variable(c.Type("uint32_t"), "b_index")
                 output_index = c.variable(c.Type("uint32_t"), "output_index")
 
-                declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
-                declare_b_index = b_index << (offsets["input_b"] + (n * c.literal(k_size) + k))
-                declare_output_index = output_index << (offsets["output"] + (m * c.literal(n_size) + n))
-
+                declare_a_index = a_index << (
+                    offsets["input_a"] + (b * c.literal(m_size) * c.literal(k_size)) + (m * c.literal(k_size) + k)
+                )
+                declare_b_index = b_index << (
+                    offsets["input_b"] + (b * c.literal(n_size) * c.literal(k_size)) + (n * c.literal(k_size) + k)
+                )
+                declare_output_index = output_index << (
+                    offsets["output"] + (b * c.literal(m_size) * c.literal(n_size)) + (m * c.literal(n_size) + n)
+                )
                 inner_loop_body = c.block(
                     declare_a_index,
                     declare_b_index,
@@ -229,9 +253,15 @@ def generate_body(
             b_index = c.variable(c.Type("uint32_t"), "b_index")
             output_index = c.variable(c.Type("uint32_t"), "output_index")
 
-            declare_a_index = a_index << (offsets["input_a"] + (m * c.literal(k_size) + k))
-            declare_b_index = b_index << (offsets["input_b"] + (k * c.literal(n_size) + n))
-            declare_output_index = output_index << (offsets["output"] + (m * c.literal(n_size) + n))
+            declare_a_index = a_index << (
+                offsets["input_a"] + (b * c.literal(m_size) * c.literal(k_size)) + (m * c.literal(k_size) + k)
+            )
+            declare_b_index = b_index << (
+                offsets["input_b"] + (b * c.literal(k_size) * c.literal(n_size)) + (k * c.literal(n_size) + n)
+            )
+            declare_output_index = output_index << (
+                offsets["output"] + (b * c.literal(m_size) * c.literal(n_size)) + (m * c.literal(n_size) + n)
+            )
 
             inner_loop_body = c.block(
                 declare_b_index,
