@@ -117,8 +117,6 @@ def run_cnp_kernel(
     def run(np_input):
         input_flat_array = to_flat_array(np_input, input_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_flat_array.dtype)
-        if operation == "max":
-            output_flat_array[:] = -np.inf
         run_kernel(
             cast_numpy_array_to_pointer(input_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),

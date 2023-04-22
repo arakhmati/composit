@@ -41,7 +41,14 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     input_var = c.variable(InputType, "input_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = generate_body(
+    body = c.block()
+    if operation == "max":
+        body = initialize_output(
+            output_array_tile_config,
+            c_variables=dict(input_var=input_var, output_var=output_var),
+        )
+
+    body += generate_body(
         input_array_tile_config,
         output_array_tile_config,
         operation=operation,
@@ -70,6 +77,32 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     )
     file.save()
     return kernel_name
+
+
+def initialize_output(output_array_tile_config, c_variables):
+    index = c.variable(c.Type("uint32_t"), "index")
+    num_iterations = math.prod(output_array_tile_config.shape)
+
+    input_var = c_variables["input_var"]
+    output_var = c_variables["output_var"]
+
+    loop = c.block(
+        c.ForLoop(
+            c.Declare(index, c.literal(0)),
+            index < c.literal(num_iterations),
+            c.add_in_place(index, c.literal(1)),
+            c.block(
+                c.assign(
+                    c_variables["output_var"][index],
+                    c.literal("-INFINITY"),
+                )
+            ),
+        )
+    )
+
+    body = c.If(c.not_equals(input_var, output_var), loop)
+
+    return c.block(body)
 
 
 def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
