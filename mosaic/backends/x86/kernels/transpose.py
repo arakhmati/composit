@@ -16,7 +16,6 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_config,
-        output_array_tile_config,
         axes,
     )
 

@@ -22,7 +22,13 @@ from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
-from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation, binary_operation, reduce_operation
+from mosaic.backends.x86.kernels import (
+    matrix_multiplication,
+    unary_operation,
+    binary_operation,
+    reduce,
+    transpose,
+)
 from mosaic.passes.inspect import format_bytes
 from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
@@ -348,7 +354,7 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
         elif instruction_class_name in {"reshape"}:
             node_to_kernel_name[node] = None
         elif instruction_class_name in {"sum", "mean", "max"}:
-            node_to_kernel_name[node] = reduce_operation.generate_kernel(
+            node_to_kernel_name[node] = reduce.generate_kernel(
                 test_output_path,
                 *input_array_tile_configs,
                 output_array_tile_config,
@@ -357,7 +363,12 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
         elif instruction_class_name in {"embedding"}:
             node_to_kernel_name[node] = None
         elif instruction_class_name in {"transpose"}:
-            node_to_kernel_name[node] = None
+            node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel(
+                test_output_path,
+                *input_array_tile_configs,
+                output_array_tile_config,
+                instruction.axes,
+            )
         else:
             raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
 
