@@ -147,11 +147,9 @@ def generate_body(
             inner_loop_body = c.block(declare_next_b_offset, declare_next_output_offset)
             outer_loop_body_before = c.block(declare_next_a_offset)
 
-        a_tile = input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))]
-        b_tile = input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))]
         inner_loop_body += generate_body(
-            a_tile,
-            b_tile,
+            input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
+            input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
             c_variables=c_variables,
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
             input_b_levels_to_transpose=input_b_levels_to_transpose,
@@ -171,6 +169,10 @@ def generate_body(
                 input_a_vector = c.variable(Vector256Type, "input_a_vector")
                 input_b_vector = c.variable(Vector256Type, "input_b_vector")
                 output_vector = c.variable(Vector256Type, "output_vector")
+
+                outer_loop_body_before = c.block(
+                    output_vector << c.invoke(c.Identifier("_mm256_setzero_ps")),
+                )
 
                 inner_loop_body = c.block(
                     input_a_vector
@@ -197,10 +199,6 @@ def generate_body(
                             output_vector,
                         ),
                     ),
-                )
-
-                outer_loop_body_before = c.block(
-                    output_vector << c.invoke(c.Identifier("_mm256_setzero_ps")),
                 )
 
                 outer_loop_body_after = c.block(

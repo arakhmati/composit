@@ -33,8 +33,8 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
 
     body = generate_body(
         input_array_tile_config,
-        c_variables=dict(input_var=input_var, output_var=output_var),
         operation=operation,
+        c_variables=dict(input_var=input_var, output_var=output_var),
     )
 
     file = c.File(
@@ -60,8 +60,8 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
 
 def generate_body(
     input_array_tile_config,
-    c_variables,
     operation,
+    c_variables,
 ):
     operation_to_c_function = {
         "exp": "expf",

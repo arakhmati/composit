@@ -271,7 +271,7 @@ class Block:
             return
         self.indentation_level = indentation_level
         for statement in self.statements:
-            if isinstance(statement, (ForLoop, Function)):
+            if isinstance(statement, (ForLoop, Function, Block)):
                 statement.set_indentation_level(indentation_level + 1)
 
     def __add__(self, other: "Block") -> "Block":

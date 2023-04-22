@@ -12,6 +12,13 @@ from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
+operation_to_python_operator = {
+    "add": operator.add,
+    "subtract": operator.sub,
+    "multiply": operator.mul,
+    "divide": operator.truediv,
+}
+
 
 def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
@@ -28,8 +35,9 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
     body = generate_body(
         input_a_array_tile_config,
         input_b_array_tile_config,
-        c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
         operation=operation,
+        c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+        offsets=dict(a=c.literal(0), b=c.literal(0)),
     )
 
     file = c.File(
@@ -52,33 +60,77 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
     return kernel_name
 
 
-def generate_body(
-    input_a_array_tile_config,
-    input_b_array_tile_config,
-    c_variables,
-    operation,
-):
-    operation_to_python_operator = {
-        "add": operator.add,
-        "subtract": operator.sub,
-        "multiply": operator.mul,
-        "divide": operator.truediv,
-    }
-    python_operator = operation_to_python_operator[operation]
+def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
+    for axis, index in enumerate(indices):
+        offset = offset + index * c.literal(math.prod(num_tiles_per_axis[axis + 1 :]))
+    offset = offset * c.literal(next_level_volume)
+    return offset
 
-    index = c.variable(c.Type("uint32_t"), "index")
-    num_iterations = math.prod(input_a_array_tile_config.shape)
 
-    b_loop = c.ForLoop(
-        c.Declare(index, c.literal(0)),
-        index < c.literal(num_iterations),
-        c.add_in_place(index, c.literal(1)),
-        c.block(
-            c.assign(
-                c_variables["output_var"][index],
-                python_operator(c_variables["input_a_var"][index], c_variables["input_b_var"][index]),
+def generate_body(input_a_array_tile_config, input_b_array_tile_config, operation, c_variables, offsets):
+    level_name = input_a_array_tile_config.level_name
+
+    a_num_tiles_per_axis = input_a_array_tile_config.num_tiles_per_axis()
+    b_num_tiles_per_axis = input_b_array_tile_config.num_tiles_per_axis()
+
+    a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
+    b_ranges = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
+
+    a_indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_a_{axis}") for axis, _ in enumerate(a_ranges)]
+    b_indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_b_{axis}") for axis, _ in enumerate(b_ranges)]
+
+    if isinstance(input_a_array_tile_config, ArrayTileConfig):
+        next_a_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_a_offset")
+        next_b_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_b_offset")
+
+        declare_next_a_offset = next_a_offset << (
+            compute_offset(
+                offsets["a"], a_indices, a_num_tiles_per_axis, math.prod(input_a_array_tile_config.tile_shape)
             )
-        ),
-    )
+        )
 
-    return c.block(b_loop)
+        declare_next_b_offset = next_b_offset << (
+            compute_offset(
+                offsets["b"], b_indices, b_num_tiles_per_axis, math.prod(input_b_array_tile_config.tile_shape)
+            )
+        )
+
+        inner_loop_body = c.block(declare_next_a_offset, declare_next_b_offset)
+        inner_loop_body += generate_body(
+            input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
+            input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
+            operation=operation,
+            c_variables=c_variables,
+            offsets=dict(a=next_a_offset, b=next_b_offset),
+        )
+    else:
+        a_index = c.variable(c.Type("uint32_t"), "a_index")
+        b_index = c.variable(c.Type("uint32_t"), "b_index")
+
+        declare_index = a_index << (compute_offset(offsets["a"], a_indices, a_num_tiles_per_axis, 1))
+        declare_b_index = b_index << (compute_offset(offsets["b"], b_indices, b_num_tiles_per_axis, 1))
+
+        inner_loop_body = c.block(
+            declare_index,
+            declare_b_index,
+            c.assign(
+                c_variables["output_var"][a_index],
+                operation_to_python_operator[operation](
+                    c_variables["input_a_var"][a_index], c_variables["input_b_var"][b_index]
+                ),
+            ),
+        )
+
+    loop = inner_loop_body
+    for a_index, b_index, num_a_iterations, num_b_iterations in zip(
+        reversed(a_indices), reversed(b_indices), reversed(a_ranges), reversed(b_ranges)
+    ):
+        declare_b_index = b_index << (a_index if num_a_iterations == num_b_iterations else c.literal(0))
+        loop = c.ForLoop(
+            c.Declare(a_index, c.literal(0)),
+            a_index < c.literal(num_a_iterations),
+            c.add_in_place(a_index, c.literal(1)),
+            c.block(declare_b_index, loop),
+        )
+
+    return c.block(loop)

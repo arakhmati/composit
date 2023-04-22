@@ -14,7 +14,8 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.tilelab.tile_view import TileLevel, create_tile_view
+from mosaic.backends.x86.kernels.binary_operation import operation_to_python_operator
+from mosaic.tilelab.tile_view import TileLevel, create_tile_view, propagate_tile_views
 from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.backends.x86.kernels import binary_operation
 from mosaic.backends.x86.compile import compile_shared_library
@@ -78,7 +79,7 @@ def run_cnp_kernel(
     test_output_path,
     input_a_shape,
     input_b_shape,
-    l1_cache_shape,
+    l1_cache_a_shape,
     operation,
 ):
     test_output_path.mkdir(parents=True, exist_ok=True)
@@ -86,18 +87,23 @@ def run_cnp_kernel(
     logger.info("Creating composit graph")
     input_a_var = cnp.nn.variable(name="input_a_var", shape=input_a_shape)
     input_b_var = cnp.nn.variable(name="input_b_var", shape=input_b_shape)
-    output_shape = input_a_var.shape
+    output_var = operation_to_python_operator[operation](input_a_var, input_b_var)
 
-    logger.info("Create tile views")
-    tile_view = create_tile_view(
-        input_a_var.shape,
-        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_shape)],
+    logger.info("Propagate tile views and create tile metadatas")
+    l1_cache_b_shape = [
+        input_a_tile_dim if input_a_dim == input_b_dim else 1
+        for input_a_dim, input_b_dim, input_a_tile_dim in zip(input_a_shape, input_b_shape, l1_cache_a_shape)
+    ]
+    tile_views = propagate_tile_views(
+        output_var.graph,
+        inputs={
+            input_a_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
+            input_b_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
+        },
     )
-
-    logger.info("Create tile metadata")
-    input_a_array_tile_config = create_array_tile_config(tile_view)
-    input_b_array_tile_config = create_array_tile_config(tile_view)
-    output_array_tile_config = create_array_tile_config(tile_view)
+    input_a_array_tile_config = create_array_tile_config(tile_views[input_a_var])
+    input_b_array_tile_config = create_array_tile_config(tile_views[input_b_var])
+    output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
     logger.info("Generate kernel")
     kernel_name = binary_operation.generate_kernel(
@@ -117,7 +123,7 @@ def run_cnp_kernel(
     def run(np_input_a, np_input_b):
         input_a_flat_array = to_flat_array(np_input_a, input_a_array_tile_config)
         input_b_flat_array = to_flat_array(np_input_b, input_b_array_tile_config)
-        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
+        output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_a_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_a_flat_array),
             cast_numpy_array_to_pointer(input_b_flat_array),
@@ -156,7 +162,7 @@ def run_binary_operation(
     compare_against_torch: bool,
     input_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l1_cache_shape: tuple[int, ...],
+    l1_cache_a_shape: tuple[int, ...],
     operation: str,
 ):
     fig, ax = plt.subplots()
@@ -169,7 +175,7 @@ def run_binary_operation(
         test_output_path,
         input_a_shape,
         input_b_shape,
-        l1_cache_shape=l1_cache_shape,
+        l1_cache_a_shape=l1_cache_a_shape,
         operation=operation,
     )
 
@@ -187,8 +193,8 @@ def run_binary_operation(
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
-@pytest.mark.parametrize("input_b_shape", [(1, 128, 128)])
-@pytest.mark.parametrize("l1_cache_shape", [(1, 64, 64)])
+@pytest.mark.parametrize("input_b_shape", [(1, 128, 128), (1, 1, 1), (1, 128, 1)])
+@pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
 @pytest.mark.parametrize("operation", ["add", "subtract", "multiply", "divide"])
 def test_binary_operation(
     request,
@@ -196,9 +202,11 @@ def test_binary_operation(
     compare_against_torch: bool,
     input_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l1_cache_shape: tuple[int, ...],
+    l1_cache_a_shape: tuple[int, ...],
     operation: str,
 ):
+    np.random.seed(0)
+
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
 
@@ -208,6 +216,6 @@ def test_binary_operation(
         compare_against_torch,
         input_a_shape,
         input_b_shape,
-        l1_cache_shape,
+        l1_cache_a_shape,
         operation,
     )
