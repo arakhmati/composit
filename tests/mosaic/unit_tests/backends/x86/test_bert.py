@@ -12,6 +12,7 @@ import torch
 import transformers
 from loguru import logger
 from pyrsistent import pmap, pvector, PClass, field, pset
+from toolz import first
 
 import composit as cnp
 from composit.hash import deterministic_hash
@@ -115,6 +116,10 @@ def try_returning_buffer_descriptor_to_queue(
     return node_to_users
 
 
+def is_instruction_a_no_operation(instruction):
+    return class_name(instruction) in {"reshape"}
+
+
 def can_instruction_reuse_buffer(instruction):
     return class_name(instruction) not in {"matmul"}
 
@@ -157,6 +162,10 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
         elif isinstance(instruction, Variable):
             graph = graph.add_node(node, buffer_descriptor=create_variable_input_buffer_descriptor(node.name))
             continue
+        elif is_instruction_a_no_operation(instruction):
+            graph = graph.add_node(
+                node, buffer_descriptor=graph.nodes[first(graph.predecessors(node))]["buffer_descriptor"]
+            )
 
         if "buffer_descriptor" in graph.nodes[node]:
             node_to_users = try_returning_buffer_descriptor_to_queue(
@@ -255,35 +264,27 @@ def iterate_buffer_descriptors_to_nodes(graph):
 
 
 @toolz.memoize
-def create_buffer_descriptor_to_color(graph):
-    colors = [
-        "red",
-        "blue",
-        "green",
-        "yellow",
-        "purple",
-        "orange",
-    ]
+def create_buffer_descriptor_to_color_and_style(graph):
+    nodes = filter(
+        lambda buffer_descriptor: buffer_descriptor.buffer_type == BufferType.Intermediate,
+        iterate_buffer_descriptors_to_nodes(graph),
+    )
+    nodes = list(nodes)
 
-    return {
-        buffer_descriptor: color
-        for buffer_descriptor, color in zip(
-            filter(
-                lambda buffer_descriptor: buffer_descriptor.buffer_type == BufferType.Intermediate,
-                iterate_buffer_descriptors_to_nodes(graph),
-            ),
-            colors,
-        )
-    }
+    import colorsys
+
+    hsv_tuples = [(i * 1.0 / 100, 0.5, 0.5) for i in range(len(nodes))]
+    colors = ["#%02x%02x%02x" % tuple(map(lambda hsv: int(hsv * 255), colorsys.hsv_to_rgb(*hsv))) for hsv in hsv_tuples]
+
+    return {buffer_descriptor: (color, "filled") for i, (buffer_descriptor, color) in enumerate(zip(nodes, colors))}
 
 
 def visualize_node(graphviz_graph, graph, node):
-    buffer_descriptor_to_color = create_buffer_descriptor_to_color(graph)
+    buffer_descriptor_to_color_and_style = create_buffer_descriptor_to_color_and_style(graph)
     buffer_descriptor = graph.nodes[node]["buffer_descriptor"]
     if buffer_descriptor.buffer_type == BufferType.Intermediate:
-        color = buffer_descriptor_to_color[buffer_descriptor]
-        fontcolor = {"yellow": "black"}.get(color, "white")
-        style = "filled"
+        color, style = buffer_descriptor_to_color_and_style[buffer_descriptor]
+        fontcolor = "white"
     elif buffer_descriptor.buffer_type == BufferType.ConstantInput:
         color = "black"
         fontcolor = "white"
@@ -294,7 +295,9 @@ def visualize_node(graphviz_graph, graph, node):
         style = "solid"
     else:
         raise ValueError("Unrecognized BufferType")
-    graphviz_graph.node(node.name, label=f"{node}", color=color, style=style, fontcolor=fontcolor)
+    graphviz_graph.node(
+        node.name, label=f"{node} @ {buffer_descriptor.name}", color=color, style=style, fontcolor=fontcolor
+    )
 
 
 def create_tile_shape(shape):
@@ -512,12 +515,13 @@ def test_bert(
     }
 
     graph = model.graph
-    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
-    node_to_library = generate_kernels(graph, test_output_path, node_output_to_array_tile_config)
 
     graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(graph)
     # visualize_graph(graph, visualize_node=visualize_node)
+
+    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
+    node_to_library = generate_kernels(graph, test_output_path, node_output_to_array_tile_config)
 
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
