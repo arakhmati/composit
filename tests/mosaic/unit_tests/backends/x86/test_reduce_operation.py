@@ -100,11 +100,7 @@ def run_cnp_kernel(
 
     logger.info("Generate kernel")
     kernel_name = reduce_operation.generate_kernel(
-        test_output_path,
-        input_array_tile_config,
-        output_array_tile_config,
-        operation,
-        axis,
+        test_output_path, input_array_tile_config, output_array_tile_config, operation
     )
 
     logger.info("Compile kernel as shared library")
@@ -117,10 +113,7 @@ def run_cnp_kernel(
     def run(np_input):
         input_flat_array = to_flat_array(np_input, input_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_flat_array.dtype)
-        run_kernel(
-            cast_numpy_array_to_pointer(input_flat_array),
-            cast_numpy_array_to_pointer(output_flat_array),
-        )
+        run_kernel(cast_numpy_array_to_pointer(input_flat_array), cast_numpy_array_to_pointer(output_flat_array))
         return from_flat_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")

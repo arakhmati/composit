@@ -353,7 +353,6 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
                 *input_array_tile_configs,
                 output_array_tile_config,
                 instruction_class_name,
-                instruction.axis,
             )
         elif instruction_class_name in {"embedding"}:
             node_to_kernel_name[node] = None

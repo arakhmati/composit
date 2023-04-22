@@ -20,12 +20,7 @@ float _maxf(float input_a, float input_b) {
 """
 
 
-def generate_kernel(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation, axis):
-    if isinstance(axis, tuple):
-        axes = axis
-    else:
-        axes = [axis]
-
+def generate_kernel(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
     kwargs = dict(
         num_reduced_elements=math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape)
     )
@@ -35,7 +30,6 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
         input_array_tile_config,
         output_array_tile_config,
         operation,
-        axis,
     )
 
     input_var = c.variable(InputType, "input_var")
@@ -52,7 +46,6 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
         input_array_tile_config,
         output_array_tile_config,
         operation=operation,
-        axes=axes,
         c_variables=dict(input_var=input_var, output_var=output_var),
         offsets=dict(input=c.literal(0), output=c.literal(0)),
         **kwargs,
@@ -112,7 +105,7 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_body(input_array_tile_config, output_array_tile_config, operation, axes, c_variables, offsets, **kwargs):
+def generate_body(input_array_tile_config, output_array_tile_config, operation, c_variables, offsets, **kwargs):
     level_name = input_array_tile_config.level_name
 
     input_num_tiles_per_axis = input_array_tile_config.num_tiles_per_axis()
@@ -152,7 +145,6 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
             input_array_tile_config[tuple(0 for _ in range(len(input_array_tile_config.shape)))],
             output_array_tile_config[tuple(0 for _ in range(len(output_array_tile_config.shape)))],
             operation=operation,
-            axes=axes,
             c_variables=c_variables,
             offsets=dict(input=next_input_offset, output=next_output_offset),
             **kwargs,
