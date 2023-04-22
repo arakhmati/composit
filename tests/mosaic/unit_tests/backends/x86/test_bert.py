@@ -293,7 +293,7 @@ def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
             node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
                 test_output_path, *input_array_tile_configs, input_b_levels_to_transpose=None, use_avx_manually=True
             )
-        elif instruction_class_name in {"exp", "sqrt"}:
+        elif instruction_class_name in {"exp", "sqrt", "gelu"}:
             node_to_kernel_name[node] = unary_operation.generate_kernel(
                 test_output_path, input_array_tile_configs[0], instruction_class_name
             )
@@ -366,7 +366,7 @@ def test_bert(
     node_to_kernel_name = generate_kernels(test_output_path, graph, node_output_to_array_tile_config)
 
     nodes_with_kernels = filter(
-        lambda node: class_name(graph.nodes[node]["instruction"]) in {"matmul", "exp", "sqrt"}, graph
+        lambda node: class_name(graph.nodes[node]["instruction"]) in {"matmul", "exp", "sqrt", "gelu"}, graph
     )
     assert len(node_to_kernel_name) == toolz.count(nodes_with_kernels)
 

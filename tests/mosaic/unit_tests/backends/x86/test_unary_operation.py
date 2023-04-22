@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import composit as cnp
+import composit.nn
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, create_tile_view
@@ -24,6 +25,7 @@ FILE_DIR = pathlib.Path(__file__).parent.resolve()
 operation_to_np_function = {
     "exp": np.exp,
     "sqrt": np.sqrt,
+    "gelu": cnp.nn.vectorized_functions.gelu,
 }
 
 
@@ -36,6 +38,7 @@ def run_torch(num_iterations, input_shape, operation: str):
     operation_to_torch_function = {
         "exp": torch.exp,
         "sqrt": torch.sqrt,
+        "gelu": torch.gelu,
     }
     torch_function = operation_to_torch_function[operation]
 
@@ -171,7 +174,7 @@ def run_unary_operation(
 @pytest.mark.parametrize("compare_against_torch", [False])
 @pytest.mark.parametrize("input_shape", [(1, 128, 128)])
 @pytest.mark.parametrize("l1_cache_shape", [(1, 64, 64)])
-@pytest.mark.parametrize("operation", ["exp", "sqrt"])
+@pytest.mark.parametrize("operation", ["exp", "sqrt", "gelu"])
 def test_unary_operation(
     request,
     num_iterations,

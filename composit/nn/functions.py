@@ -3,7 +3,7 @@ import numpy as np
 
 from composit.multidigraph import MultiDiGraph
 from composit.nn.core import Variable, wrap_as_instruction
-from composit.nn.vectorized_functions import cdf
+from composit.nn import vectorized_functions
 from composit.persistent_array import PersistentArray, Node
 
 
@@ -25,7 +25,7 @@ def embedding(input_tensor, weights):
 
 @wrap_as_instruction()
 def gelu(input_tensor):
-    return input_tensor * cdf(input_tensor)
+    return vectorized_functions.gelu(input_tensor)
 
 
 @wrap_as_instruction()

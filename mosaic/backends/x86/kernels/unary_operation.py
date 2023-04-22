@@ -11,6 +11,15 @@ from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
+gelu_function = """     
+float cdf(float input) {
+    return 0.5 * (1 + erff(input / sqrtf(2)));
+}
+float geluf(float input) {
+    return input * cdf(input);
+}
+"""
+
 
 def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
@@ -35,6 +44,7 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
             c.Include("stdint.h"),
             c.NewLine(),
             c.NewLine(),
+            c.Text(gelu_function),
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
@@ -56,6 +66,7 @@ def generate_body(
     operation_to_c_function = {
         "exp": "expf",
         "sqrt": "sqrtf",
+        "gelu": "geluf",
     }
 
     index = c.variable(c.Type("uint32_t"), "index")

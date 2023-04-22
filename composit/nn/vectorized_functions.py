@@ -13,3 +13,7 @@ def cdf(input_tensor):
 
 def pdf(input_tensor):
     return (0.3989422804014327 * np.exp(input_tensor * input_tensor * -0.5)).astype(input_tensor.dtype)
+
+
+def gelu(input_tensor):
+    return input_tensor * cdf(input_tensor)

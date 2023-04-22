@@ -377,11 +377,11 @@ class Text:
 @dataclass
 class File:
     name: Union[str, pathlib.Path]
-    objects: list[Union[Include, Variable, Function]]
+    elements: list[Union[Include, Variable, Function]]
 
     def __repr__(self):
         delimiter = "\n"
-        return f"{concatenate_as_string(self.objects, delimiter)}\n"
+        return f"{concatenate_as_string(self.elements, delimiter)}\n"
 
     def save(self):
         with open(self.name, "w") as f:
