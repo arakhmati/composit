@@ -14,7 +14,7 @@ python_files = ["test_*.py", "*_test.py"]
 
 [tool.poetry]
 name = "composit"
-version = "0.1.0"
+version = "0.0.0"
 description = "Used to create Baby AGI"
 authors = ["typon <hfarooq@protonmail.com>", "arakhmati <akhmed.rakhmati@gmail.com>"]
 readme = "README.md"
@@ -28,10 +28,10 @@ graphviz = "^0.20.1"
 networkx = "^3.1"
 loguru = "^0.7.0"
 pandas = "^2.0.0"
-black = "^23.3.0"
 
 
 [tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
 pytest = "^7.3.0"
 ruff = "^0.0.261"
 matplotlib = "^3.7.1"
