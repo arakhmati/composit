@@ -94,23 +94,18 @@ def generate_body(
     inner_loop_increment = c.literal(1)
     outer_loop_body_after = c.block()
 
+    b = c.variable(c.Type("uint32_t"), f"{level_name}_b")
+    m = c.variable(c.Type("uint32_t"), f"{level_name}_m")
+    n = c.variable(c.Type("uint32_t"), f"{level_name}_n")
+    k = c.variable(c.Type("uint32_t"), f"{level_name}_k")
+
+    a_ranges = tuple(num_tiles for num_tiles in input_a_array_tile_config.num_tiles_per_axis())
+    *_, n_range = (num_tiles for num_tiles in input_b_array_tile_config.num_tiles_per_axis())
+
+    *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
+    b_size = math.prod(b_sizes)
+
     if isinstance(input_a_array_tile_config, ArrayTileConfig):
-        a_num_tiles_per_axis = input_a_array_tile_config.num_tiles_per_axis()
-        b_num_tiles_per_axis = input_b_array_tile_config.num_tiles_per_axis()
-        a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
-        *_, n_range = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
-
-        *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
-        b_size = math.prod(b_sizes)
-
-        a_tile = input_a_array_tile_config[tuple(0 for _ in range(len(a_num_tiles_per_axis)))]
-        b_tile = input_b_array_tile_config[tuple(0 for _ in range(len(b_num_tiles_per_axis)))]
-
-        b = c.variable(c.Type("uint32_t"), f"{level_name}_b")
-        m = c.variable(c.Type("uint32_t"), f"{level_name}_m")
-        n = c.variable(c.Type("uint32_t"), f"{level_name}_n")
-        k = c.variable(c.Type("uint32_t"), f"{level_name}_k")
-
         output_tile_volume = math.prod(
             [*input_a_array_tile_config.tile_shape[:-1], input_b_array_tile_config.tile_shape[-1]]
         )
@@ -152,6 +147,8 @@ def generate_body(
             inner_loop_body = c.block(declare_next_b_offset, declare_next_output_offset)
             outer_loop_body_before = c.block(declare_next_a_offset)
 
+        a_tile = input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))]
+        b_tile = input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))]
         inner_loop_body += generate_body(
             a_tile,
             b_tile,
@@ -162,17 +159,6 @@ def generate_body(
         )
 
     else:
-        a_ranges = tuple(num_tiles for num_tiles in input_a_array_tile_config.shape)
-        *_, n_range = (num_tiles for num_tiles in input_b_array_tile_config.shape)
-
-        *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
-        b_size = math.prod(b_sizes)
-
-        b = c.variable(c.Type("uint32_t"), "b")
-        m = c.variable(c.Type("uint32_t"), "m")
-        n = c.variable(c.Type("uint32_t"), "n")
-        k = c.variable(c.Type("uint32_t"), "k")
-
         if level_name in input_b_levels_to_transpose:
             inner_loop_index = k
             inner_loop_size = c.literal(k_size)

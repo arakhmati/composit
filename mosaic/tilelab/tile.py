@@ -58,6 +58,10 @@ class AtomicTileConfig(PClass):
     def __repr__(self):
         return f"{class_name(self)}(shape={self.shape}, slices={self.slices})"
 
+    def num_tiles_per_axis(self):
+        # Each scalar value is a tile
+        return self.shape
+
 
 def create_array_tile_config(
     tile_view: TileView,
