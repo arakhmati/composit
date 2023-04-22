@@ -6,7 +6,7 @@ import codegen as c
 
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
-from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
+from mosaic.backends.x86.kernel_name import create_kernel_name
 
 
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
@@ -32,13 +32,20 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
     input_b_var = c.variable(InputType, "input_b_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = generate_body(
-        input_a_array_tile_config,
-        input_b_array_tile_config,
-        operation=operation,
-        c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
-        offsets=dict(a=c.literal(0), b=c.literal(0)),
-    )
+    if input_a_array_tile_config == input_b_array_tile_config:
+        body = generate_optimized_body(
+            input_a_array_tile_config,
+            operation,
+            c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+        )
+    else:
+        body = generate_body(
+            input_a_array_tile_config,
+            input_b_array_tile_config,
+            operation=operation,
+            c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+            offsets=dict(a=c.literal(0), b=c.literal(0)),
+        )
 
     file = c.File(
         (path / pathlib.Path(kernel_name)).with_suffix(".c"),
@@ -65,6 +72,27 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
         offset = offset + index * c.literal(math.prod(num_tiles_per_axis[axis + 1 :]))
     offset = offset * c.literal(next_level_volume)
     return offset
+
+
+def generate_optimized_body(input_a_array_tile_config, operation, c_variables):
+    index = c.variable(c.Type("uint32_t"), "index")
+    num_iterations = math.prod(input_a_array_tile_config.shape)
+
+    loop = c.ForLoop(
+        c.Declare(index, c.literal(0)),
+        index < c.literal(num_iterations),
+        c.add_in_place(index, c.literal(1)),
+        c.block(
+            c.assign(
+                c_variables["output_var"][index],
+                operation_to_python_operator[operation](
+                    c_variables["input_a_var"][index], c_variables["input_b_var"][index]
+                ),
+            )
+        ),
+    )
+
+    return c.block(loop)
 
 
 def generate_body(input_a_array_tile_config, input_b_array_tile_config, operation, c_variables, offsets):

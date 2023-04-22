@@ -40,6 +40,12 @@ class Expression:
     def __add__(self, other):
         return Expression(BinaryOperation(self, other, "+"))
 
+    def __sub__(self, other):
+        return Expression(BinaryOperation(self, other, "-"))
+
+    def __truediv__(self, other):
+        return Expression(BinaryOperation(self, other, "/"))
+
 
 def literal(value):
     @dataclass

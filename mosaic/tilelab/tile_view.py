@@ -50,9 +50,15 @@ def _binary_operation(view_a: TileView, _: TileView) -> TileView:
 
 
 def _reduce(view: TileView, axis) -> TileView:
+    if isinstance(axis, tuple):
+        axes = axis
+    else:
+        axes = [axis]
+
     def new_shape(shape):
         shape = list(shape)
-        shape[axis] = 1
+        for axis in axes:
+            shape[axis] = 1
         return tuple(shape)
 
     hierarchy = []

@@ -7,7 +7,7 @@ import codegen as c
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 from mosaic.backends.x86.constants import AVX_SIZE, MEMORY_ALIGNMENT
-from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
+from mosaic.backends.x86.kernel_name import create_kernel_name
 
 OffsetType = Union[c.Variable, c.Expression]
 

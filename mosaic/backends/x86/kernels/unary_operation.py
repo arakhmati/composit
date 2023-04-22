@@ -5,17 +5,23 @@ import codegen as c
 
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
-from mosaic.backends.x86.kernels.kernel_name import create_kernel_name
+from mosaic.backends.x86.kernel_name import create_kernel_name
 
 
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
+operation_to_c_function = {
+    "exp": "expf",
+    "sqrt": "sqrtf",
+    "gelu": "geluf",
+}
+
 gelu_function = """     
-float cdf(float input) {
+static inline float cdf(float input) {
     return 0.5 * (1 + erff(input / sqrtf(2)));
 }
-float geluf(float input) {
+static inline float geluf(float input) {
     return input * cdf(input);
 }
 """
@@ -63,16 +69,10 @@ def generate_body(
     operation,
     c_variables,
 ):
-    operation_to_c_function = {
-        "exp": "expf",
-        "sqrt": "sqrtf",
-        "gelu": "geluf",
-    }
-
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_array_tile_config.shape)
 
-    b_loop = c.ForLoop(
+    loop = c.ForLoop(
         c.Declare(index, c.literal(0)),
         index < c.literal(num_iterations),
         c.add_in_place(index, c.literal(1)),
@@ -84,4 +84,4 @@ def generate_body(
         ),
     )
 
-    return c.block(b_loop)
+    return c.block(loop)

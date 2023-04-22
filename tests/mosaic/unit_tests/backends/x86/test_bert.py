@@ -19,7 +19,7 @@ from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.passes.inspect import format_bytes
-from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation, binary_operation
+from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation, binary_operation, reduce_operation
 from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
 
@@ -288,6 +288,7 @@ def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
         input_array_tile_configs = [
             node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(graph, node)
         ]
+        output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
         try:
             if instruction_class_name == "matmul":
@@ -296,11 +297,21 @@ def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
                 )
             elif instruction_class_name in {"exp", "sqrt", "gelu"}:
                 node_to_kernel_name[node] = unary_operation.generate_kernel(
-                    test_output_path, input_array_tile_configs[0], instruction_class_name
+                    test_output_path, *input_array_tile_configs, instruction_class_name
                 )
             elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
                 node_to_kernel_name[node] = binary_operation.generate_kernel(
                     test_output_path, *input_array_tile_configs, instruction_class_name
+                )
+            elif instruction_class_name in {"reshape"}:
+                node_to_kernel_name[node] = None
+            elif instruction_class_name in {"sum", "mean", "max"}:
+                node_to_kernel_name[node] = reduce_operation.generate_kernel(
+                    test_output_path,
+                    *input_array_tile_configs,
+                    output_array_tile_config,
+                    instruction_class_name,
+                    instruction.axis,
                 )
             else:
                 raise NotImplementedError
@@ -374,7 +385,7 @@ def test_bert(
 
     nodes_with_kernels = filter(
         lambda node: class_name(graph.nodes[node]["instruction"])
-        in {"matmul", "exp", "sqrt", "gelu", "add", "subtract", "divide", "multiply"},
+        in {"matmul", "exp", "sqrt", "gelu", "add", "subtract", "divide", "multiply", "reshape", "sum", "mean", "max"},
         graph,
     )
     assert len(node_to_kernel_name) == toolz.count(nodes_with_kernels)
