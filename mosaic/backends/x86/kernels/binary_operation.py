@@ -150,15 +150,22 @@ def generate_body(input_a_array_tile_config, input_b_array_tile_config, operatio
         )
 
     loop = inner_loop_body
-    for a_index, b_index, num_a_iterations, num_b_iterations in zip(
-        reversed(a_indices), reversed(b_indices), reversed(a_ranges), reversed(b_ranges)
-    ):
-        declare_b_index = b_index << (a_index if num_a_iterations == num_b_iterations else c.literal(0))
+    for a_axis, (a_index, num_a_iterations) in enumerate(zip(reversed(a_indices), reversed(a_ranges))):
+        b_axis = len(b_ranges) - 1 - a_axis
+        if b_axis >= 0:
+            b_index = b_indices[b_axis]
+            num_b_iterations = b_ranges[b_axis]
+            declare_b_index = c.block(b_index << (a_index if num_a_iterations == num_b_iterations else c.literal(0)))
+            body = declare_b_index + loop
+        else:
+            body = loop
+
         loop = c.ForLoop(
             c.Declare(a_index, c.literal(0)),
             a_index < c.literal(num_a_iterations),
             c.add_in_place(a_index, c.literal(1)),
-            c.block(declare_b_index, loop),
+            body,
         )
+        loop = c.block(loop)
 
-    return c.block(loop)
+    return loop

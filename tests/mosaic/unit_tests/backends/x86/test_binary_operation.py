@@ -74,6 +74,16 @@ def run_torch(num_iterations, input_a_shape, input_b_shape, operation: str):
     return execution_times
 
 
+def create_l1_cache_b_shape(input_a_shape, input_b_shape, l1_cache_a_shape):
+    l1_cache_b_shape = tuple(
+        input_a_tile_dim if input_a_dim == input_b_dim else 1
+        for input_a_dim, input_b_dim, input_a_tile_dim in zip(
+            reversed(input_a_shape), reversed(input_b_shape), reversed(l1_cache_a_shape)
+        )
+    )
+    return tuple(reversed(l1_cache_b_shape))
+
+
 def run_cnp_kernel(
     num_iterations,
     test_output_path,
@@ -90,10 +100,7 @@ def run_cnp_kernel(
     output_var = operation_to_python_operator[operation](input_a_var, input_b_var)
 
     logger.info("Propagate tile views and create tile metadatas")
-    l1_cache_b_shape = tuple(
-        input_a_tile_dim if input_a_dim == input_b_dim else 1
-        for input_a_dim, input_b_dim, input_a_tile_dim in zip(input_a_shape, input_b_shape, l1_cache_a_shape)
-    )
+    l1_cache_b_shape = create_l1_cache_b_shape(input_a_shape, input_b_shape, l1_cache_a_shape)
     tile_views = propagate_tile_views(
         output_var.graph,
         inputs={
@@ -193,7 +200,7 @@ def run_binary_operation(
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
 @pytest.mark.parametrize("input_a_shape", [(2, 128, 128)])
-@pytest.mark.parametrize("input_b_shape", [(2, 128, 128), (1, 1, 1), (1, 128, 1)])
+@pytest.mark.parametrize("input_b_shape", [(2, 128, 128), (1, 1, 1), (1, 128, 1), (128,)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
 @pytest.mark.parametrize("operation", ["add", "subtract", "multiply", "divide"])
 def test_binary_operation(
