@@ -2,6 +2,7 @@ from collections import deque
 import enum
 import math
 import pathlib
+from ctypes import cdll
 
 import numpy as np
 import pytest
@@ -18,9 +19,10 @@ from composit.multidigraph import compose_all, topological_traversal
 from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.passes.inspect import format_bytes
+from mosaic.backends.x86.compile import compile_shared_library
 from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation, binary_operation, reduce_operation
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config
+from mosaic.passes.inspect import format_bytes
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
 
 
@@ -28,6 +30,7 @@ from model_zoo.bert import (
     create_bert_config,
     functional_bert,
     convert_parameters_to_numpy,
+    create_random_long,
 )
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
@@ -39,7 +42,7 @@ class BufferType(enum.Enum):
     Intermediate = enum.auto()
 
 
-class Buffer(PClass):
+class BufferDescriptor(PClass):
     name: str = field()
     buffer_type: BufferType = field()
 
@@ -47,42 +50,54 @@ class Buffer(PClass):
         return hash(self.name)
 
     def __repr__(self):
-        return f"Buffer(name={self.name}, buffer_type={self.buffer_type})"
+        return f"BufferDescriptor(name={self.name}, buffer_type={self.buffer_type})"
+
+
+class ConstantBufferDescriptor(PClass):
+    name: str = field()
+    buffer_type: BufferType = field()
+    array = field()
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __repr__(self):
+        return f"ConstantBufferDescriptor(name={self.name}, buffer_type={self.buffer_type}, array={self.array})"
 
 
 class BufferManager(PClass):
     graph = field()
-    buffer_to_nodes = field()
-
-    @property
-    def buffers(self):
-        return self.buffer_to_nodes.keys()
+    buffer_descriptors_to_nodes = field()
 
 
-def intermediate_buffer_factory():
+def intermediate_buffer_descriptor_factory():
     buffer_id = 0
 
-    def create_intermediate_buffer():
+    def create_intermediate_buffer_descriptor():
         nonlocal buffer_id
-        buffer = Buffer(name=f"intermediate_buffer_{buffer_id}", buffer_type=BufferType.Intermediate)
+        buffer_descriptor = BufferDescriptor(
+            name=f"intermediate_buffer_descriptor_{buffer_id}", buffer_type=BufferType.Intermediate
+        )
         buffer_id += 1
-        return buffer
+        return buffer_descriptor
 
-    return create_intermediate_buffer
-
-
-create_intermediate_buffer = intermediate_buffer_factory()
+    return create_intermediate_buffer_descriptor
 
 
-def create_constant_input_buffer(name):
-    return Buffer(name=name, buffer_type=BufferType.ConstantInput)
+create_intermediate_buffer_descriptor = intermediate_buffer_descriptor_factory()
 
 
-def create_variable_input_buffer(name):
-    return Buffer(name=name, buffer_type=BufferType.VariableInput)
+def create_constant_input_buffer_descriptor(name, array):
+    return ConstantBufferDescriptor(name=name, buffer_type=BufferType.ConstantInput, array=array)
 
 
-def try_returning_buffer_to_queue(graph, node, node_to_users, buffer_to_current_node, buffer_stack):
+def create_variable_input_buffer_descriptor(name):
+    return BufferDescriptor(name=name, buffer_type=BufferType.VariableInput)
+
+
+def try_returning_buffer_descriptor_to_queue(
+    graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
+):
     for predecessor, _ in graph.in_edges(node):
         if isinstance(graph.nodes[predecessor]["instruction"], (Constant, Variable)):
             continue
@@ -91,10 +106,10 @@ def try_returning_buffer_to_queue(graph, node, node_to_users, buffer_to_current_
             continue
 
         node_to_users = node_to_users.set(predecessor, node_to_users[predecessor] - 1)
-        if node_to_users[predecessor] == 0 and "buffer" in graph.nodes[predecessor]:
-            buffer = graph.nodes[predecessor]["buffer"]
-            if buffer_to_current_node[buffer] == predecessor:
-                buffer_stack.append(buffer)
+        if node_to_users[predecessor] == 0 and "buffer_descriptor" in graph.nodes[predecessor]:
+            buffer_descriptor = graph.nodes[predecessor]["buffer_descriptor"]
+            if buffer_descriptor_to_current_node[buffer_descriptor] == predecessor:
+                buffer_descriptor_stack.append(buffer_descriptor)
 
     return node_to_users
 
@@ -103,68 +118,71 @@ def can_instruction_reuse_buffer(instruction):
     return type(instruction).__name__ not in {"matmul"}
 
 
-def propagate_buffer_down(graph, node, node_to_users, buffer_to_current_node):
+def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_current_node):
     if graph.out_degree(node) != 1:
-        return graph, node_to_users, buffer_to_current_node
+        return graph, node_to_users, buffer_descriptor_to_current_node
 
     (successor,) = graph.successors(node)
 
     successor_instruction = graph.nodes[successor]["instruction"]
     if not can_instruction_reuse_buffer(successor_instruction):
-        return graph, node_to_users, buffer_to_current_node
+        return graph, node_to_users, buffer_descriptor_to_current_node
 
-    if "buffer" in graph.nodes[successor]:
-        return graph, node_to_users, buffer_to_current_node
+    if "buffer_descriptor" in graph.nodes[successor]:
+        return graph, node_to_users, buffer_descriptor_to_current_node
 
-    buffer = graph.nodes[node]["buffer"]
-    graph = graph.add_node(successor, buffer=buffer)
-    buffer_to_current_node = buffer_to_current_node.set(buffer, successor)
+    buffer_descriptor = graph.nodes[node]["buffer_descriptor"]
+    graph = graph.add_node(successor, buffer_descriptor=buffer_descriptor)
+    buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, successor)
 
-    return propagate_buffer_down(graph, successor, node_to_users, buffer_to_current_node)
+    return propagate_buffer_down(graph, successor, node_to_users, buffer_descriptor_to_current_node)
 
 
-def create_buffer_graph(*outputs):
-    buffer_stack = deque(maxlen=None)
+def populate_buffer_descriptors(graph):
+    buffer_descriptor_stack = deque(maxlen=None)
     node_to_users = pmap()
-    buffer_to_current_node = pmap()
+    buffer_descriptor_to_current_node = pmap()
 
-    graph = compose_all(*(output.graph for output in outputs))
     for node in graph:
         node_to_users = node_to_users.set(node, graph.out_degree(node))
 
     for node in topological_traversal(graph):
         instruction = graph.nodes[node]["instruction"]
         if isinstance(instruction, Constant):
-            graph = graph.add_node(node, buffer=create_constant_input_buffer(node.name))
+            graph = graph.add_node(
+                node, buffer_descriptor=create_constant_input_buffer_descriptor(node.name, array=instruction.array)
+            )
             continue
         elif isinstance(instruction, Variable):
-            graph = graph.add_node(node, buffer=create_variable_input_buffer(node.name))
+            graph = graph.add_node(node, buffer_descriptor=create_variable_input_buffer_descriptor(node.name))
             continue
 
-        if "buffer" in graph.nodes[node]:
-            node_to_users = try_returning_buffer_to_queue(
-                graph, node, node_to_users, buffer_to_current_node, buffer_stack
+        if "buffer_descriptor" in graph.nodes[node]:
+            node_to_users = try_returning_buffer_descriptor_to_queue(
+                graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
             )
             continue
 
-        if not buffer_stack:
-            buffer = create_intermediate_buffer()
+        if not buffer_descriptor_stack:
+            buffer_descriptor = create_intermediate_buffer_descriptor()
         else:
-            buffer = buffer_stack.pop()
+            buffer_descriptor = buffer_descriptor_stack.pop()
 
-        graph = graph.add_node(node, buffer=buffer)
-        buffer_to_current_node = buffer_to_current_node.set(buffer, node)
-        graph, node_to_users, buffer_to_current_node = propagate_buffer_down(
-            graph, node, node_to_users, buffer_to_current_node
+        graph = graph.add_node(node, buffer_descriptor=buffer_descriptor)
+        buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, node)
+        graph, node_to_users, buffer_descriptor_to_current_node = propagate_buffer_down(
+            graph, node, node_to_users, buffer_descriptor_to_current_node
         )
-        node_to_users = try_returning_buffer_to_queue(graph, node, node_to_users, buffer_to_current_node, buffer_stack)
+        node_to_users = try_returning_buffer_descriptor_to_queue(
+            graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
+        )
 
     return graph
 
 
 def size_buffers(graph):
-    buffer_to_size = {}
-    for buffer, nodes in iterate_buffer_to_nodes(graph).items():
+    buffer_descriptor_to_size = {}
+    for buffer_descriptor, nodes in iterate_buffer_descriptors_to_nodes(graph).items():
         for node in nodes:
             attributes = graph.nodes[node]
             shapes = attributes["shapes"]
@@ -175,48 +193,63 @@ def size_buffers(graph):
             assert len(dtypes) == 1
             dtype = dtypes[0]
 
-            num_bytes = math.prod(shape) * dtype.itemsize
-            current_num_bytes = buffer_to_size.setdefault(buffer, 0)
+            num_bytes = math.prod(shape)
+            current_num_bytes, current_dtype = buffer_descriptor_to_size.setdefault(buffer_descriptor, (0, None))
+            if current_dtype is not None:
+                assert current_dtype == dtype
 
             if num_bytes > current_num_bytes:
-                buffer_to_size[buffer] = num_bytes
+                buffer_descriptor_to_size[buffer_descriptor] = (num_bytes, dtype)
 
-    buffer_to_size = pmap(buffer_to_size)
-    logger.info(f"Total Memory used: {format_bytes(sum(buffer_to_size.values()))}")
-    return buffer_to_size
+    buffer_descriptor_to_size = pmap(buffer_descriptor_to_size)
+    logger.info(
+        f"Total Memory used: {format_bytes(sum(size * dtype.itemsize for size, dtype in buffer_descriptor_to_size.values()))}"
+    )
+    return buffer_descriptor_to_size
+
+
+class Buffer(PClass):
+    array = field()
+
+    def data(self):
+        return cast_numpy_array_to_pointer(self.array)
 
 
 def allocate_buffers(graph):
-    buffer_to_size = size_buffers(graph)
-    buffer_to_memory = {}
-    for buffer, size in buffer_to_size.items():
-        array = create_aligned_array((size,), dtype=np.uint8)
-        array[:] = 0
-        memory = cast_numpy_array_to_pointer(array)
-        buffer_to_memory[buffer] = memory
-    buffer_to_memory = pmap(buffer_to_memory)
-    return buffer_to_memory
+    buffer_descriptor_to_size = size_buffers(graph)
+    buffer_descriptor_to_buffer = {}
+    for buffer_descriptor, (size, dtype) in buffer_descriptor_to_size.items():
+        array = create_aligned_array((size,), dtype=dtype)
+        if buffer_descriptor.buffer_type == BufferType.ConstantInput:
+            array[:] = buffer_descriptor.array
+        else:
+            array[:] = 0
+        buffer_descriptor_to_buffer[buffer_descriptor] = Buffer(array=array)
+    buffer_descriptor_to_buffer = pmap(buffer_descriptor_to_buffer)
+    return buffer_descriptor_to_buffer
 
 
-def iterate_buffers(graph):
-    buffers = set()
+def iterate_buffer_descriptors(graph):
+    buffer_descriptors = set()
     for node, attributes in graph.nodes(data=True):
-        buffers.add(attributes["buffer"])
-    buffers = pset(buffers)
-    return buffers
+        buffer_descriptors.add(attributes["buffer_descriptor"])
+    buffer_descriptors = pset(buffer_descriptors)
+    return buffer_descriptors
 
 
-def iterate_buffer_to_nodes(graph):
-    buffer_to_nodes = {}
+def iterate_buffer_descriptors_to_nodes(graph):
+    buffer_descriptor_to_nodes = {}
     for node, attributes in graph.nodes(data=True):
-        nodes = buffer_to_nodes.setdefault(attributes["buffer"], [])
+        nodes = buffer_descriptor_to_nodes.setdefault(attributes["buffer_descriptor"], [])
         nodes.append(node)
-    buffer_to_nodes = pmap({buffer: pvector(nodes) for buffer, nodes in buffer_to_nodes.items()})
-    return buffer_to_nodes
+    buffer_descriptor_to_nodes = pmap(
+        {buffer_descriptor: pvector(nodes) for buffer_descriptor, nodes in buffer_descriptor_to_nodes.items()}
+    )
+    return buffer_descriptor_to_nodes
 
 
 @toolz.memoize
-def create_buffer_to_color(graph):
+def create_buffer_descriptor_to_color(graph):
     colors = [
         "red",
         "blue",
@@ -227,25 +260,29 @@ def create_buffer_to_color(graph):
     ]
 
     return {
-        buffer: color
-        for buffer, color in zip(
-            filter(lambda buffer: buffer.buffer_type == BufferType.Intermediate, iterate_buffer_to_nodes(graph)), colors
+        buffer_descriptor: color
+        for buffer_descriptor, color in zip(
+            filter(
+                lambda buffer_descriptor: buffer_descriptor.buffer_type == BufferType.Intermediate,
+                iterate_buffer_descriptors_to_nodes(graph),
+            ),
+            colors,
         )
     }
 
 
 def visualize_node(graphviz_graph, graph, node):
-    buffer_to_color = create_buffer_to_color(graph)
-    buffer = graph.nodes[node]["buffer"]
-    if buffer.buffer_type == BufferType.Intermediate:
-        color = buffer_to_color[buffer]
+    buffer_descriptor_to_color = create_buffer_descriptor_to_color(graph)
+    buffer_descriptor = graph.nodes[node]["buffer_descriptor"]
+    if buffer_descriptor.buffer_type == BufferType.Intermediate:
+        color = buffer_descriptor_to_color[buffer_descriptor]
         fontcolor = {"yellow": "black"}.get(color, "white")
         style = "filled"
-    elif buffer.buffer_type == BufferType.ConstantInput:
+    elif buffer_descriptor.buffer_type == BufferType.ConstantInput:
         color = "black"
         fontcolor = "white"
         style = "filled"
-    elif buffer.buffer_type == BufferType.VariableInput:
+    elif buffer_descriptor.buffer_type == BufferType.VariableInput:
         color = "black"
         fontcolor = "black"
         style = "solid"
@@ -262,7 +299,6 @@ def create_tile_shape(shape):
     elif len(shape) == 1:
         return (min(shape[0], 32),)
     else:
-        logger.info(f"Scalar: {shape}")
         return ()
 
 
@@ -275,10 +311,8 @@ def propagate_array_tile_config(graph, input_var_to_scheme):
     return node_output_to_array_tile_config
 
 
-def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
+def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
     nodes = filter(lambda node: graph.in_degree(node) > 0, graph)
-
-    unimplemented = set()
 
     node_to_kernel_name = {}
     for node in nodes:
@@ -290,38 +324,84 @@ def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
         ]
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
-        try:
-            if instruction_class_name == "matmul":
-                node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
-                    test_output_path, *input_array_tile_configs, input_b_levels_to_transpose=None, use_avx_manually=True
-                )
-            elif instruction_class_name in {"exp", "sqrt", "gelu"}:
-                node_to_kernel_name[node] = unary_operation.generate_kernel(
-                    test_output_path, *input_array_tile_configs, instruction_class_name
-                )
-            elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
-                node_to_kernel_name[node] = binary_operation.generate_kernel(
-                    test_output_path, *input_array_tile_configs, instruction_class_name
-                )
-            elif instruction_class_name in {"reshape"}:
-                node_to_kernel_name[node] = None
-            elif instruction_class_name in {"sum", "mean", "max"}:
-                node_to_kernel_name[node] = reduce_operation.generate_kernel(
-                    test_output_path,
-                    *input_array_tile_configs,
-                    output_array_tile_config,
-                    instruction_class_name,
-                    instruction.axis,
-                )
-            else:
-                raise NotImplementedError
-        except:
-            unimplemented.add(instruction_class_name)
-    logger.info(sorted(unimplemented))
+        if instruction_class_name == "matmul":
+            node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
+                test_output_path, *input_array_tile_configs, input_b_levels_to_transpose=None, use_avx_manually=True
+            )
+        elif instruction_class_name in {"exp", "sqrt", "gelu"}:
+            node_to_kernel_name[node] = unary_operation.generate_kernel(
+                test_output_path, *input_array_tile_configs, instruction_class_name
+            )
+        elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
+            node_to_kernel_name[node] = binary_operation.generate_kernel(
+                test_output_path, *input_array_tile_configs, instruction_class_name
+            )
+        elif instruction_class_name in {"reshape"}:
+            node_to_kernel_name[node] = None
+        elif instruction_class_name in {"sum", "mean", "max"}:
+            node_to_kernel_name[node] = reduce_operation.generate_kernel(
+                test_output_path,
+                *input_array_tile_configs,
+                output_array_tile_config,
+                instruction_class_name,
+                instruction.axis,
+            )
+        elif instruction_class_name in {"embedding"}:
+            node_to_kernel_name[node] = None
+        elif instruction_class_name in {"transpose"}:
+            node_to_kernel_name[node] = None
+        else:
+            raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
 
-    return pmap(node_to_kernel_name)
+    kernel_name_to_library = {}
+    for kernel_name in set(node_to_kernel_name.values()):
+        if kernel_name is None:
+            kernel_name_to_library[kernel_name] = None
+        else:
+            shared_library_file = compile_shared_library(test_output_path, kernel_name)
+            kernel_name_to_library[kernel_name] = (shared_library_file, kernel_name)
+
+    node_to_library = {node: kernel_name_to_library[kernel_name] for node, kernel_name in node_to_kernel_name.items()}
+    return pmap(node_to_library)
 
 
+def evaluate(graph, node_to_library, buffer_descriptor_to_buffer, inputs, node_output_to_array_tile_config):
+    for input_var, array in inputs.items():
+        input_node = input_var.node
+        array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
+        buffer = buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
+        buffer.array[:] = to_flat_array(array, array_tile_config)
+
+    nodes_to_evaluate = filter(
+        lambda node: graph.in_degree(node) > 0 and node in node_to_library, topological_traversal(graph)
+    )
+
+    shared_libraries = {}
+    for node in nodes_to_evaluate:
+        input_buffers = [
+            buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
+            for input_node, _ in get_operands(graph, node)
+        ]
+        output_buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
+
+        input_pointers = [input_buffer.data() for input_buffer in input_buffers]
+        output_pointer = output_buffer.data()
+
+        library = node_to_library[node]
+        if library is None:
+            # instruction_class_name = class_name(graph.nodes[node]["instruction"])
+            # assert instruction_class_name == "reshape"
+            continue
+
+        (shared_library_file, kernel_name) = library
+        shared_library = shared_libraries.setdefault(shared_library_file, cdll.LoadLibrary(shared_library_file))
+        run_kernel = getattr(shared_library, kernel_name)
+        run_kernel(*input_pointers, output_pointer)
+        # logger.info(f"Running {kernel_name} for {node.name}")
+        # logger.info(output_buffer.array)
+
+
+@pytest.mark.parametrize("num_inputs", [1])
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [3])
 @pytest.mark.parametrize("sequence_size", [32])
@@ -330,6 +410,7 @@ def generate_kernels(test_output_path, graph, node_output_to_array_tile_config):
 @pytest.mark.parametrize("vocab_size", [16])
 def test_bert(
     request,
+    num_inputs,
     batch_size,
     num_encoders,
     sequence_size,
@@ -353,8 +434,9 @@ def test_bert(
     input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     parameters = {
-        cnp.nn.variable(name=name, shape=value.shape, dtype=np.float16): value
+        cnp.nn.variable(name=name, shape=value.shape, dtype=np.float32): value
         for name, value in convert_parameters_to_numpy(transformers_model).items()
+        if "position_embeddings" not in name and "pooler" not in name
     }
 
     with cnp.nn.module.disable_modules():
@@ -369,29 +451,32 @@ def test_bert(
             head_size=head_size,
         )
 
-    graph = create_buffer_graph(model)
-
     input_var_to_scheme = {
         var: [
             TileLevel(level_name="tile", tile_shape=create_tile_shape(var.shape)),
         ]
         for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
     }
-    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
 
+    graph = model.graph
+    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
+    node_to_library = generate_kernels(graph, test_output_path, node_output_to_array_tile_config)
+
+    graph = populate_buffer_descriptors(graph)
+    buffer_descriptor_to_buffer = allocate_buffers(graph)
     # visualize_graph(graph, visualize_node=visualize_node)
 
-    node_to_kernel_name = generate_kernels(test_output_path, graph, node_output_to_array_tile_config)
-
-    nodes_with_kernels = filter(
-        lambda node: class_name(graph.nodes[node]["instruction"])
-        in {"matmul", "exp", "sqrt", "gelu", "add", "subtract", "divide", "multiply", "reshape", "sum", "mean", "max"},
-        graph,
-    )
-    assert len(node_to_kernel_name) == toolz.count(nodes_with_kernels)
-
-    # buffer_to_memory = allocate_buffers(graph)
-    # for node in graph:
-    #     input_pointers = [buffer_to_memory[graph.nodes[input_node]["buffer"]] for input_node, _ in get_operands(node)]
-    #     output_pointer = buffer_to_memory[graph.nodes[node]["buffer"]]
-    #     logger.info(f"node={node}, num_inputs={len(input_pointers)}")
+    for _ in range(num_inputs):
+        input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
+        token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
+        evaluate(
+            graph,
+            node_to_library,
+            buffer_descriptor_to_buffer,
+            inputs={
+                input_ids_var: input_ids,
+                token_type_ids_var: token_type_ids,
+                **parameters,
+            },
+            node_output_to_array_tile_config=node_output_to_array_tile_config,
+        )

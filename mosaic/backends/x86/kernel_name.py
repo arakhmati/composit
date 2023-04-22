@@ -17,7 +17,10 @@ def normalize_value(value):
 
 
 def create_kernel_name(*args):
-    return "__".join(f"{normalize_value(value)}" for value in args).replace(" ", "_")
+    kernel_name = "__".join(f"{normalize_value(value)}" for value in args)
+    kernel_name = kernel_name.replace(" ", "_")
+    kernel_name = kernel_name.replace("-", "_")
+    return kernel_name
 
 
 __all__ = ["create_kernel_name"]
