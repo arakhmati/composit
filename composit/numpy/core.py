@@ -7,6 +7,7 @@ import numpy as np
 from pyrsistent import immutable, PClass, field
 from toolz import functoolz, memoize
 
+from composit.introspection import class_name
 from composit.multidigraph import MultiDiGraph, merge_graphs
 from composit.persistent_array import PersistentArray, Node
 from composit.string import random_string
@@ -83,7 +84,7 @@ def create_from_numpy_compute_instruction(
     )
     dtypes = tuple(dtype_to_override or inferred_dtype for inferred_dtype in inferred_dtypes)
 
-    name = f"{type(instruction).__name__}-{random_string()}"
+    name = f"{class_name(instruction)}-{random_string()}"
     new_node = Node(name=name)
     graph = graph.add_node(new_node, instruction=instruction, shapes=shapes, dtypes=dtypes)
     for index, operand in enumerate(operands):

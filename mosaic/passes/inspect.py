@@ -4,6 +4,7 @@ import numpy as np
 from loguru import logger
 import pandas as pd
 
+from composit.introspection import class_name
 from composit.multidigraph import compose_all, topological_traversal
 
 pd.set_option("display.max_rows", None)
@@ -31,7 +32,7 @@ def inspect(*outputs):
         name = node.name
 
         instruction = attributes["instruction"]
-        type_name = type(instruction).__name__
+        type_name = class_name(instruction)
 
         shapes = attributes["shapes"]
         assert len(shapes) == 1

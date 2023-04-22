@@ -15,7 +15,7 @@ from pyrsistent import pmap, pvector, PClass, field, pset
 import composit as cnp
 from composit.hash import deterministic_hash
 from composit.introspection import class_name
-from composit.multidigraph import compose_all, topological_traversal
+from composit.multidigraph import topological_traversal
 from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
@@ -115,7 +115,7 @@ def try_returning_buffer_descriptor_to_queue(
 
 
 def can_instruction_reuse_buffer(instruction):
-    return type(instruction).__name__ not in {"matmul"}
+    return class_name(instruction) not in {"matmul"}
 
 
 def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_current_node):
@@ -203,7 +203,8 @@ def size_buffers(graph):
 
     buffer_descriptor_to_size = pmap(buffer_descriptor_to_size)
     logger.info(
-        f"Total Memory used: {format_bytes(sum(size * dtype.itemsize for size, dtype in buffer_descriptor_to_size.values()))}"
+        "Total Memory used: "
+        f"{format_bytes(sum(size * dtype.itemsize for size, dtype in buffer_descriptor_to_size.values()))}"
     )
     return buffer_descriptor_to_size
 
