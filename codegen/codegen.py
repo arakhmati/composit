@@ -281,7 +281,7 @@ class Declare:
 
 @dataclass
 class Block:
-    statements: list[Union[Statement, Return, "If", "ForLoop"]]
+    statements: list[Union[Statement, Return, "If", "ForLoop", "Block"]]
     indentation_level: Optional[int] = None
     indentation: int = 4
 
