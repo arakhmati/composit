@@ -235,6 +235,19 @@ def assign(*args):
 
 
 @dataclass
+class NotEquals:
+    left_side: Union[Variable, Subscript]
+    right_side: Expression
+
+    def __repr__(self):
+        return f"{self.left_side.value} != {self.right_side.value}"
+
+
+def not_equals(*args):
+    return NotEquals(*args)
+
+
+@dataclass
 class AssignUpdate:
     left_side: Union[Variable, Subscript]
     right_side: Expression
@@ -268,7 +281,7 @@ class Declare:
 
 @dataclass
 class Block:
-    statements: list[Union[Statement, Return, "ForLoop"]]
+    statements: list[Union[Statement, Return, "If", "ForLoop"]]
     indentation_level: Optional[int] = None
     indentation: int = 4
 
@@ -277,7 +290,7 @@ class Block:
             return
         self.indentation_level = indentation_level
         for statement in self.statements:
-            if isinstance(statement, (ForLoop, Function, Block)):
+            if isinstance(statement, (Block, If, ForLoop, Function)):
                 statement.set_indentation_level(indentation_level + 1)
 
     def __add__(self, other: "Block") -> "Block":
@@ -298,6 +311,21 @@ class Block:
 
 def block(*statements) -> Block:
     return Block(statements)
+
+
+@dataclass
+class If:
+    condition: Expression
+    body: Block
+
+    def set_indentation_level(self, indentation_level=0):
+        self.body.set_indentation_level(indentation_level)
+
+    def __repr__(self):
+        self.set_indentation_level()
+        return f"""\
+if ({self.condition})
+{self.body}"""
 
 
 @dataclass
@@ -423,11 +451,13 @@ __all__ = [
     "Return",
     "Assign",
     "assign",
+    "not_equals",
     "AssignUpdate",
     "add_in_place",
     "Declare",
     "Block",
     "block",
+    "If",
     "ForLoop",
     "Function",
     "FunctionCall",
