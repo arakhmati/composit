@@ -14,29 +14,46 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
+from mosaic.tilelab.tile_view import TileLevel, create_tile_view
 from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
-from mosaic.backends.x86.kernels import matrix_multiplication
+from mosaic.backends.x86.kernels import binary_operation
 from mosaic.backends.x86.compile import compile_shared_library
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
+operation_to_np_function = {
+    "add": np.add,
+    "subtract": np.subtract,
+    "multiply": np.multiply,
+    "divide": np.divide,
+}
 
-def run_torch(num_iterations, input_a_shape, input_b_shape):
+
+def run_torch(num_iterations, input_a_shape, input_b_shape, operation: str):
     logger.info("Run torch")
     import torch
 
     torch.set_num_threads(1)
 
+    operation_to_torch_function = {
+        "add": torch.add,
+        "subtract": torch.subtract,
+        "multiply": torch.multiply,
+        "divide": torch.divide,
+    }
+    torch_function = operation_to_torch_function[operation]
+
+    np_function = operation_to_np_function[operation]
+
     def run(np_input_a, np_input_b):
         torch_a = torch.from_numpy(np_input_a)
         torch_b = torch.from_numpy(np_input_b)
-        output = torch_a @ torch_b
+        output = torch_function(torch_a, torch_b)
         return output.numpy()
 
     np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
     np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
-    assert np.allclose(run(np_input_a, np_input_b), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+    assert np.allclose(run(np_input_a, np_input_b), np_function(np_input_a, np_input_b), atol=1e-5, rtol=1e-6)
 
     execution_times = []
     for i in range(num_iterations):
@@ -61,38 +78,33 @@ def run_cnp_kernel(
     test_output_path,
     input_a_shape,
     input_b_shape,
-    l1_cache_a_shape,
-    l1_cache_b_shape,
-    *,
-    input_b_levels_to_transpose,
-    use_avx_manually,
+    l1_cache_shape,
+    operation,
 ):
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Creating composit graph")
     input_a_var = cnp.nn.variable(name="input_a_var", shape=input_a_shape)
     input_b_var = cnp.nn.variable(name="input_b_var", shape=input_b_shape)
-    output_var = input_a_var @ input_b_var
+    output_shape = input_a_var.shape
 
-    logger.info("Propagate tile views and create tile metadatas")
-    tile_views = propagate_tile_views(
-        output_var.graph,
-        inputs={
-            input_a_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
-            input_b_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
-        },
+    logger.info("Create tile views")
+    tile_view = create_tile_view(
+        input_a_var.shape,
+        [TileLevel(level_name="l1_cache", tile_shape=l1_cache_shape)],
     )
-    input_a_array_tile_config = create_array_tile_config(tile_views[input_a_var])
-    input_b_array_tile_config = create_array_tile_config(tile_views[input_b_var])
-    output_array_tile_config = create_array_tile_config(tile_views[output_var])
+
+    logger.info("Create tile metadata")
+    input_a_array_tile_config = create_array_tile_config(tile_view)
+    input_b_array_tile_config = create_array_tile_config(tile_view)
+    output_array_tile_config = create_array_tile_config(tile_view)
 
     logger.info("Generate kernel")
-    kernel_name = matrix_multiplication.generate_kernel(
+    kernel_name = binary_operation.generate_kernel(
         test_output_path,
         input_a_array_tile_config,
         input_b_array_tile_config,
-        input_b_levels_to_transpose=input_b_levels_to_transpose,
-        use_avx_manually=use_avx_manually,
+        operation,
     )
 
     logger.info("Compile kernel as shared library")
@@ -102,18 +114,10 @@ def run_cnp_kernel(
     shared_library = cdll.LoadLibrary(shared_library_file)
     run_kernel = getattr(shared_library, kernel_name)
 
-    transpose_order = list(range(len(input_b_var.shape)))
-    transpose_order[-2:] = reversed(transpose_order[-2:])
-
     def run(np_input_a, np_input_b):
         input_a_flat_array = to_flat_array(np_input_a, input_a_array_tile_config)
-        input_b_flat_array = to_flat_array(
-            np_input_b,
-            input_b_array_tile_config,
-            transpose_levels=input_b_levels_to_transpose,
-            order=transpose_order,
-        )
-        output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_a_flat_array.dtype)
+        input_b_flat_array = to_flat_array(np_input_b, input_b_array_tile_config)
+        output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_a_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_a_flat_array),
             cast_numpy_array_to_pointer(input_b_flat_array),
@@ -122,9 +126,10 @@ def run_cnp_kernel(
         return from_flat_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")
+    np_function = operation_to_np_function[operation]
     np_input_a = np.random.uniform(-0.5, 0.5, input_a_var.shape).astype(np.float32)
     np_input_b = np.random.uniform(-0.5, 0.5, input_b_var.shape).astype(np.float32)
-    assert np.allclose(run(np_input_a, np_input_b), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+    assert np.allclose(run(np_input_a, np_input_b), np_function(np_input_a, np_input_b), atol=1e-5, rtol=1e-6)
 
     logger.info(f"Run Kernel for {num_iterations} iterations")
     execution_times = []
@@ -145,20 +150,18 @@ def run_cnp_kernel(
     return execution_times
 
 
-def run_matrix_multiplication(
+def run_binary_operation(
     test_output_path,
     num_iterations: int,
     compare_against_torch: bool,
-    input_b_levels_to_transpose: list[str],
-    use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
-    l1_cache_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l1_cache_b_shape: tuple[int, ...],
+    l1_cache_shape: tuple[int, ...],
+    operation: str,
 ):
     fig, ax = plt.subplots()
     if compare_against_torch:
-        torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
+        torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape, operation)
         ax.plot(torch_execution_times, color="red")
 
     cnp_execution_times = run_cnp_kernel(
@@ -166,10 +169,8 @@ def run_matrix_multiplication(
         test_output_path,
         input_a_shape,
         input_b_shape,
-        l1_cache_a_shape=l1_cache_a_shape,
-        l1_cache_b_shape=l1_cache_b_shape,
-        input_b_levels_to_transpose=input_b_levels_to_transpose,
-        use_avx_manually=use_avx_manually,
+        l1_cache_shape=l1_cache_shape,
+        operation=operation,
     )
 
     ax.plot(cnp_execution_times, color="green")
@@ -185,60 +186,28 @@ def run_matrix_multiplication(
 
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
-@pytest.mark.parametrize("input_b_levels_to_transpose", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
-@pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
-@pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
-@pytest.mark.parametrize("input_b_shape", [(128, 128)])
-@pytest.mark.parametrize("l1_cache_b_shape", [(64, 64)])
-def test_matrix_multiplication(
+@pytest.mark.parametrize("input_b_shape", [(1, 128, 128)])
+@pytest.mark.parametrize("l1_cache_shape", [(1, 64, 64)])
+@pytest.mark.parametrize("operation", ["add", "subtract", "multiply", "divide"])
+def test_binary_operation(
     request,
     num_iterations,
     compare_against_torch: bool,
-    input_b_levels_to_transpose: list[str],
-    use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
-    l1_cache_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
-    l1_cache_b_shape: tuple[int, ...],
+    l1_cache_shape: tuple[int, ...],
+    operation: str,
 ):
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
 
-    run_matrix_multiplication(
+    run_binary_operation(
         test_output_path,
         num_iterations,
         compare_against_torch,
-        input_b_levels_to_transpose,
-        use_avx_manually,
         input_a_shape,
-        l1_cache_a_shape,
         input_b_shape,
-        l1_cache_b_shape,
-    )
-
-
-if __name__ == "__main__":
-    batch_size = 3
-    sequence_size = 4
-    m_size = 128
-    k_size = 128
-    n_size = 128
-
-    tile_batch_size = 1
-    tile_sequence_size = 1
-    tile_m_size = 64
-    tile_k_size = 64
-    tile_n_size = 64
-
-    run_matrix_multiplication(
-        FILE_DIR / "test_output" / "custom",
-        num_iterations=25,
-        compare_against_torch=True,
-        input_b_levels_to_transpose=["atomic", "l1_cache"],
-        use_avx_manually=True,
-        input_a_shape=(batch_size, sequence_size, m_size, k_size),
-        l1_cache_a_shape=(batch_size, sequence_size, tile_m_size, tile_k_size),
-        input_b_shape=(batch_size, sequence_size, k_size, n_size),
-        l1_cache_b_shape=(batch_size, sequence_size, tile_k_size, tile_n_size),
+        l1_cache_shape,
+        operation,
     )

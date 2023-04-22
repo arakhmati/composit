@@ -151,6 +151,12 @@ class Variable:
     def __add__(self, other):
         return Expression(BinaryOperation(self, other, "+"))
 
+    def __sub__(self, other):
+        return Expression(BinaryOperation(self, other, "-"))
+
+    def __truediv__(self, other):
+        return Expression(BinaryOperation(self, other, "/"))
+
 
 def variable(type, name) -> Variable:
     return Variable(type, Identifier(name))
@@ -178,6 +184,15 @@ class Subscript:
 
     def __mul__(self, other):
         return Expression(BinaryOperation(self, other, "*"))
+
+    def __add__(self, other):
+        return Expression(BinaryOperation(self, other, "+"))
+
+    def __sub__(self, other):
+        return Expression(BinaryOperation(self, other, "-"))
+
+    def __truediv__(self, other):
+        return Expression(BinaryOperation(self, other, "/"))
 
 
 @dataclass
