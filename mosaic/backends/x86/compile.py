@@ -23,30 +23,31 @@ FLAGS = [
 
 def compile_shared_library(test_output_path, kernel_name):
     source_file = str(test_output_path / f"{kernel_name}.c")
+    base_command = ["gcc", source_file, "-I", str(test_output_path), *FLAGS]
+
     assembly_file = test_output_path / f"{kernel_name}.s"
     assembly_file.unlink(missing_ok=True)
     assembly_file = str(assembly_file)
-    command = [
-        "gcc",
-        source_file,
-        "-I",
-        str(test_output_path),
-        *FLAGS,
+    assembly_command = base_command + [
         "-S",
         "-fverbose-asm",
         "-o",
         assembly_file,
     ]
-    logger.info(f"Compile Source Code to Assembly: \"{' '.join(command)}\"")
-    result = subprocess.run(command)
+    logger.info(f"Compile Source Code to Assembly: \"{' '.join(assembly_command)}\"")
+    result = subprocess.run(assembly_command)
     assert result.returncode == 0
 
     shared_library_file = test_output_path / f"{kernel_name}.so"
     shared_library_file.unlink(missing_ok=True)
     shared_library_file = str(shared_library_file)
-    command = ["gcc", assembly_file, "-fPIC", "-shared", "-o", shared_library_file]
-    logger.info(f"Compile Assembly to Binary: \"{' '.join(command)}\"")
-    result = subprocess.run(command)
+    shared_library_command = base_command + [
+        "-shared",
+        "-o",
+        shared_library_file,
+    ]
+    logger.info(f"Compile Source Code to Shared Library: \"{' '.join(shared_library_command)}\"")
+    result = subprocess.run(shared_library_command)
     assert result.returncode == 0
 
     return shared_library_file
