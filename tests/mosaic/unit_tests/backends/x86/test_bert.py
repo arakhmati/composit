@@ -7,6 +7,7 @@ from ctypes import cdll
 import numpy as np
 import pytest
 import toolz
+import torch
 
 import transformers
 from loguru import logger
@@ -22,7 +23,7 @@ from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
 from mosaic.backends.x86.kernels import matrix_multiplication, unary_operation, binary_operation, reduce_operation
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array, from_flat_array
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
 
 
@@ -138,7 +139,7 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     return propagate_buffer_down(graph, successor, node_to_users, buffer_descriptor_to_current_node)
 
 
-def populate_buffer_descriptors(graph):
+def populate_buffer_descriptors(graph, reuse_buffers=False):
     buffer_descriptor_stack = deque(maxlen=None)
     node_to_users = pmap()
     buffer_descriptor_to_current_node = pmap()
@@ -163,16 +164,20 @@ def populate_buffer_descriptors(graph):
             )
             continue
 
-        if not buffer_descriptor_stack:
-            buffer_descriptor = create_intermediate_buffer_descriptor()
+        if reuse_buffers:
+            if not buffer_descriptor_stack:
+                buffer_descriptor = create_intermediate_buffer_descriptor()
+            else:
+                buffer_descriptor = buffer_descriptor_stack.pop()
         else:
-            buffer_descriptor = buffer_descriptor_stack.pop()
+            buffer_descriptor = create_intermediate_buffer_descriptor()
 
         graph = graph.add_node(node, buffer_descriptor=buffer_descriptor)
         buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, node)
-        graph, node_to_users, buffer_descriptor_to_current_node = propagate_buffer_down(
-            graph, node, node_to_users, buffer_descriptor_to_current_node
-        )
+        if reuse_buffers:
+            graph, node_to_users, buffer_descriptor_to_current_node = propagate_buffer_down(
+                graph, node, node_to_users, buffer_descriptor_to_current_node
+            )
         node_to_users = try_returning_buffer_descriptor_to_queue(
             graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
         )
@@ -366,12 +371,49 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
     return pmap(node_to_library)
 
 
-def evaluate(graph, node_to_library, buffer_descriptor_to_buffer, inputs, node_output_to_array_tile_config):
+# def compare(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
+#     shape = graph.nodes[node]["shapes"][0]
+#     volume = math.prod(shape)
+#     buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
+#     logger.info(id(buffer))
+#     logger.info(buffer.array)
+#     array_tile_config = node_output_to_array_tile_config[(node, 0)]
+#     kernel_array = from_flat_array(buffer.array[:volume], array_tile_config)
+#     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
+#     # logger.info(f"Comparing: {node.name}")
+#     # logger.info(kernel_array.shape)
+#     # logger.info(cache_array.shape)
+#     # logger.info(kernel_array)
+#     # logger.info(cache_array)
+#     assert np.allclose(
+#         kernel_array,
+#         cache_array,
+#         atol=1e-4,
+#         rtol=1e-5,
+#     ), f"{kernel_array} {cache_array}"
+
+
+def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
     for input_var, array in inputs.items():
         input_node = input_var.node
         array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
         buffer = buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
         buffer.array[:] = to_flat_array(array, array_tile_config)
+
+
+# TODO: remove "use_cache" once all of the kernels are implemented
+def use_cache(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
+    array = cache[cnp.nn.variable(name=node.name, shape=())]
+    array_tile_config = node_output_to_array_tile_config[(node, 0)]
+    buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
+    flat_array = to_flat_array(array, array_tile_config)
+    buffer.array[: len(flat_array)] = flat_array
+
+
+def evaluate(
+    output_var, graph, inputs, node_to_library, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache
+):
+    initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config)
 
     nodes_to_evaluate = filter(
         lambda node: graph.in_degree(node) > 0 and node in node_to_library, topological_traversal(graph)
@@ -390,16 +432,21 @@ def evaluate(graph, node_to_library, buffer_descriptor_to_buffer, inputs, node_o
 
         library = node_to_library[node]
         if library is None:
-            # instruction_class_name = class_name(graph.nodes[node]["instruction"])
-            # assert instruction_class_name == "reshape"
+            logger.info(f"Using composit cache for {node.name}")
+            use_cache(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache)
             continue
 
         (shared_library_file, kernel_name) = library
         shared_library = shared_libraries.setdefault(shared_library_file, cdll.LoadLibrary(shared_library_file))
         run_kernel = getattr(shared_library, kernel_name)
+
+        logger.info(f"Running {kernel_name} for {node.name}")
         run_kernel(*input_pointers, output_pointer)
-        # logger.info(f"Running {kernel_name} for {node.name}")
-        # logger.info(output_buffer.array)
+
+    output_node = output_var.node
+    array_tile_config = node_output_to_array_tile_config[(output_node, 0)]
+    buffer = buffer_descriptor_to_buffer[graph.nodes[output_node]["buffer_descriptor"]]
+    return from_flat_array(buffer.array, array_tile_config)
 
 
 @pytest.mark.parametrize("num_inputs", [1])
@@ -409,6 +456,7 @@ def evaluate(graph, node_to_library, buffer_descriptor_to_buffer, inputs, node_o
 @pytest.mark.parametrize("num_attention_heads", [4])
 @pytest.mark.parametrize("head_size", [32])
 @pytest.mark.parametrize("vocab_size", [16])
+@pytest.mark.parametrize("reuse_buffers", [False])
 def test_bert(
     request,
     num_inputs,
@@ -418,7 +466,11 @@ def test_bert(
     num_attention_heads,
     head_size,
     vocab_size,
+    reuse_buffers,
 ):
+    np.random.seed(0)
+    torch.manual_seed(0)
+
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
     test_output_path.mkdir(parents=True, exist_ok=True)
@@ -463,21 +515,34 @@ def test_bert(
     node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
     node_to_library = generate_kernels(graph, test_output_path, node_output_to_array_tile_config)
 
-    graph = populate_buffer_descriptors(graph)
+    graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(graph)
     # visualize_graph(graph, visualize_node=visualize_node)
 
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
-        evaluate(
-            graph,
-            node_to_library,
-            buffer_descriptor_to_buffer,
-            inputs={
-                input_ids_var: input_ids,
-                token_type_ids_var: token_type_ids,
-                **parameters,
-            },
-            node_output_to_array_tile_config=node_output_to_array_tile_config,
+
+        inputs = {
+            input_ids_var: input_ids,
+            token_type_ids_var: token_type_ids,
+            **parameters,
+        }
+
+        golden_output, cache = cnp.nn.evaluate(
+            model,
+            inputs=inputs,
+            return_cache=True,
         )
+
+        output = evaluate(
+            model,
+            graph,
+            inputs=inputs,
+            node_to_library=node_to_library,
+            buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
+            node_output_to_array_tile_config=node_output_to_array_tile_config,
+            cache=cache,  # Pass in temporarily
+        )
+
+        assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
