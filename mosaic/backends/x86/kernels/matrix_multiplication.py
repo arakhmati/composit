@@ -116,15 +116,24 @@ def generate_body(
 
         declare_next_a_offset = next_a_offset << (
             offsets["input_a_var"]
+            + (b * c.literal(m_size) * c.literal(k_size) * c.literal(math.prod(input_a_array_tile_config.tile_shape)))
             + ((m * c.literal(k_size) + k) * c.literal(math.prod(input_a_array_tile_config.tile_shape)))
         )
         declare_next_output_offset = next_output_offset << (
-            offsets["output_var"] + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
+            offsets["output_var"]
+            + (b * c.literal(m_size) * c.literal(n_size) * c.literal(output_tile_volume))
+            + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
         )
 
         if level_name in input_b_levels_to_transpose:
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
+                + (
+                    b
+                    * c.literal(n_size)
+                    * c.literal(k_size)
+                    * c.literal(math.prod(input_b_array_tile_config.tile_shape))
+                )
                 + ((n * c.literal(k_size) + k) * c.literal(math.prod(input_b_array_tile_config.tile_shape)))
             )
             inner_loop_index = k
@@ -137,6 +146,12 @@ def generate_body(
         else:
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
+                + (
+                    b
+                    * c.literal(k_size)
+                    * c.literal(n_size)
+                    * c.literal(math.prod(input_b_array_tile_config.tile_shape))
+                )
                 + ((k * c.literal(n_size) + n) * c.literal(math.prod(input_b_array_tile_config.tile_shape)))
             )
             inner_loop_index = n

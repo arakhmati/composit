@@ -7,7 +7,6 @@ import math
 import pathlib
 import time
 
-import torch
 from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
@@ -187,7 +186,6 @@ def test_embedding(
     l1_cache_b_shape: tuple[int, ...],
 ):
     np.random.seed(0)
-    torch.manual_seed(0)
 
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))

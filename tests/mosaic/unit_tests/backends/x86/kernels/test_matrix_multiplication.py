@@ -202,6 +202,45 @@ def test_matrix_multiplication(
     input_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
 ):
+    np.random.seed(0)
+
+    test_name = request.node.name
+    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
+
+    run_matrix_multiplication(
+        test_output_path,
+        num_iterations,
+        compare_against_torch,
+        input_b_levels_to_transpose,
+        use_avx_manually,
+        input_a_shape,
+        l1_cache_a_shape,
+        input_b_shape,
+        l1_cache_b_shape,
+    )
+
+
+@pytest.mark.parametrize("num_iterations", [1000])
+@pytest.mark.parametrize("compare_against_torch", [False])
+@pytest.mark.parametrize("input_b_levels_to_transpose", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
+@pytest.mark.parametrize("use_avx_manually", [False, True])
+@pytest.mark.parametrize("input_a_shape", [(1, 4, 128, 128)])
+@pytest.mark.parametrize("l1_cache_a_shape", [(1, 1, 64, 64)])
+@pytest.mark.parametrize("input_b_shape", [(1, 4, 128, 128)])
+@pytest.mark.parametrize("l1_cache_b_shape", [(1, 1, 64, 64)])
+def test_batched_matrix_multiplication(
+    request,
+    num_iterations,
+    compare_against_torch: bool,
+    input_b_levels_to_transpose: list[str],
+    use_avx_manually: bool,
+    input_a_shape: tuple[int, ...],
+    l1_cache_a_shape: tuple[int, ...],
+    input_b_shape: tuple[int, ...],
+    l1_cache_b_shape: tuple[int, ...],
+):
+    np.random.seed(0)
+
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
 
