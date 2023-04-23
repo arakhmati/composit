@@ -28,14 +28,34 @@ class TileView(PClass):
         return f"{class_name(self)}(shape={self.shape}, hierarchy={self.hierarchy})"
 
 
-def _matmul(self, other):
-    shape = self.shape[:-1] + other.shape[-1:]
+def _embedding(view_a: TileView, view_b: TileView) -> TileView:
+    batch_size, sequence_size = view_a.shape
+    _, hidden_size = view_b.shape
+
     hierarchy = []
-    for a_level, b_level in zip(self.hierarchy, other.hierarchy):
+    for view_a_level, view_b_level in zip(view_a.hierarchy, view_b.hierarchy):
+        tile_batch_size, tile_sequence_size = view_a_level.tile_shape
+        _, tile_hidden_size = view_b_level.tile_shape
         hierarchy.append(
             TileLevel(
-                level_name=a_level.level_name,
-                tile_shape=a_level.tile_shape[:-1] + b_level.tile_shape[-1:],
+                level_name=view_a_level.level_name, tile_shape=(tile_batch_size, tile_sequence_size, tile_hidden_size)
+            )
+        )
+
+    return TileView(
+        shape=(batch_size, sequence_size, hidden_size),
+        hierarchy=hierarchy,
+    )
+
+
+def _matmul(view_a: TileView, view_b: TileView) -> TileView:
+    shape = view_a.shape[:-1] + view_b.shape[-1:]
+    hierarchy = []
+    for view_a_level, view_b_level in zip(view_a.hierarchy, view_b.hierarchy):
+        hierarchy.append(
+            TileLevel(
+                level_name=view_a_level.level_name,
+                tile_shape=view_a_level.tile_shape[:-1] + view_b_level.tile_shape[-1:],
             )
         )
 
@@ -154,9 +174,7 @@ def propagate_tile_views(
         if instruction_class_name == "Constant":
             tile_view = create_tile_view((), [TileLevel(level_name="tile", tile_shape=())])
         elif instruction_class_name == "embedding":
-            tile_view = create_tile_view(
-                graph.nodes[node]["shapes"][0], [TileLevel(level_name="tile", tile_shape=(1, 32, 32))]
-            )
+            tile_view = _embedding(input_tile_views[0], input_tile_views[1])
         elif instruction_class_name == "matmul":
             tile_view = _matmul(input_tile_views[0], input_tile_views[1])
         elif instruction_class_name in {"sum", "mean", "max"}:

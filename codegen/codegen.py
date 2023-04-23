@@ -163,6 +163,9 @@ class Variable:
     def __truediv__(self, other):
         return Expression(BinaryOperation(self, other, "/"))
 
+    def __mod__(self, other):
+        return Expression(BinaryOperation(self, other, "%"))
+
 
 def variable(type, name) -> Variable:
     return Variable(type, Identifier(name))
