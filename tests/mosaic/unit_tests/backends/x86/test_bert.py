@@ -28,6 +28,7 @@ from mosaic.backends.x86.kernels import (
     binary_operation,
     reduce,
     transpose,
+    embedding,
 )
 from mosaic.passes.inspect import format_bytes
 from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array, from_flat_array
@@ -306,10 +307,13 @@ def visualize_node(graphviz_graph, graph, node):
     )
 
 
-def create_tile_shape(shape):
+def create_tile_shape(var):
+    shape = var.shape
     if len(shape) == 3:
         return (1, 32, 32)
     elif len(shape) == 2:
+        if "embeddings.weight" in var.name:
+            return (1, 32)
         return min(shape[0], 32), min(shape[1], 32)
     elif len(shape) == 1:
         return (min(shape[0], 32),)
@@ -326,7 +330,7 @@ def propagate_array_tile_config(graph, input_var_to_scheme):
     return node_output_to_array_tile_config
 
 
-def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
+def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config):
     nodes = filter(lambda node: graph.in_degree(node) > 0, graph)
 
     node_to_kernel_name = {}
@@ -361,7 +365,9 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
                 instruction_class_name,
             )
         elif instruction_class_name in {"embedding"}:
-            node_to_kernel_name[node] = None
+            node_to_kernel_name[node] = node_to_kernel_name[node] = node_to_kernel_name[
+                node
+            ] = embedding.generate_kernel(test_output_path, output_array_tile_config)
         elif instruction_class_name in {"transpose"}:
             node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel(
                 test_output_path,
@@ -372,38 +378,49 @@ def generate_kernels(graph, test_output_path, node_output_to_array_tile_config):
         else:
             raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
 
-    kernel_name_to_library = {}
+    kernel_name_to_run_kernel = {}
     for kernel_name in set(node_to_kernel_name.values()):
         if kernel_name is None:
-            kernel_name_to_library[kernel_name] = None
+            kernel_name_to_run_kernel[kernel_name] = lambda *_: None
         else:
             shared_library_file = compile_shared_library(test_output_path, kernel_name)
-            kernel_name_to_library[kernel_name] = (shared_library_file, kernel_name)
+            shared_library = cdll.LoadLibrary(shared_library_file)
+            run_kernel = getattr(shared_library, kernel_name)
+            kernel_name_to_run_kernel[kernel_name] = run_kernel
 
-    node_to_library = {node: kernel_name_to_library[kernel_name] for node, kernel_name in node_to_kernel_name.items()}
-    return pmap(node_to_library)
+    node_to_run_kernel = {
+        node: kernel_name_to_run_kernel[kernel_name] for node, kernel_name in node_to_kernel_name.items()
+    }
+    return pmap(node_to_run_kernel)
 
 
 # def compare(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
 #     shape = graph.nodes[node]["shapes"][0]
 #     volume = math.prod(shape)
 #     buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
-#     logger.info(id(buffer))
-#     logger.info(buffer.array)
 #     array_tile_config = node_output_to_array_tile_config[(node, 0)]
 #     kernel_array = from_flat_array(buffer.array[:volume], array_tile_config)
 #     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
-#     # logger.info(f"Comparing: {node.name}")
-#     # logger.info(kernel_array.shape)
-#     # logger.info(cache_array.shape)
-#     # logger.info(kernel_array)
-#     # logger.info(cache_array)
-#     assert np.allclose(
+#     logger.info(f"Comparing: {node.name}")
+#
+#     allclose = np.allclose(
 #         kernel_array,
 #         cache_array,
 #         atol=1e-4,
 #         rtol=1e-5,
-#     ), f"{kernel_array} {cache_array}"
+#     )
+#
+#     if not allclose:
+#         input_array_tile_configs = [
+#             node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(graph, node)
+#         ]
+#         logger.info(input_array_tile_configs)
+#         logger.info(kernel_array.shape)
+#         logger.info(cache_array.shape)
+#         logger.info(kernel_array)
+#         logger.info(cache_array)
+#
+#     assert allclose
 
 
 def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
@@ -414,25 +431,15 @@ def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node
         buffer.array[:] = to_flat_array(array, array_tile_config)
 
 
-# TODO: remove "use_cache" once all of the kernels are implemented
-def use_cache(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
-    array = cache[cnp.nn.variable(name=node.name, shape=())]
-    array_tile_config = node_output_to_array_tile_config[(node, 0)]
-    buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
-    flat_array = to_flat_array(array, array_tile_config)
-    buffer.array[: len(flat_array)] = flat_array
-
-
 def evaluate(
-    output_var, graph, inputs, node_to_library, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache
+    output_var, graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer, node_output_to_array_tile_config
 ):
     initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config)
 
     nodes_to_evaluate = filter(
-        lambda node: graph.in_degree(node) > 0 and node in node_to_library, topological_traversal(graph)
+        lambda node: graph.in_degree(node) > 0 and node in node_to_run_kernel, topological_traversal(graph)
     )
 
-    shared_libraries = {}
     for node in nodes_to_evaluate:
         input_buffers = [
             buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
@@ -443,17 +450,7 @@ def evaluate(
         input_pointers = [input_buffer.data() for input_buffer in input_buffers]
         output_pointer = output_buffer.data()
 
-        library = node_to_library[node]
-        if library is None:
-            logger.info(f"Using composit cache for {node.name}")
-            use_cache(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache)
-            continue
-
-        (shared_library_file, kernel_name) = library
-        shared_library = shared_libraries.setdefault(shared_library_file, cdll.LoadLibrary(shared_library_file))
-        run_kernel = getattr(shared_library, kernel_name)
-
-        logger.info(f"Running {kernel_name} for {node.name}")
+        run_kernel = node_to_run_kernel[node]
         run_kernel(*input_pointers, output_pointer)
 
     output_node = output_var.node
@@ -519,7 +516,7 @@ def test_bert(
 
     input_var_to_scheme = {
         var: [
-            TileLevel(level_name="tile", tile_shape=create_tile_shape(var.shape)),
+            TileLevel(level_name="tile", tile_shape=create_tile_shape(var)),
         ]
         for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
     }
@@ -531,7 +528,7 @@ def test_bert(
     # visualize_graph(graph, visualize_node=visualize_node)
 
     node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
-    node_to_library = generate_kernels(graph, test_output_path, node_output_to_array_tile_config)
+    node_to_run_kernel = generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config)
 
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
@@ -553,10 +550,9 @@ def test_bert(
             model,
             graph,
             inputs=inputs,
-            node_to_library=node_to_library,
+            node_to_run_kernel=node_to_run_kernel,
             buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
             node_output_to_array_tile_config=node_output_to_array_tile_config,
-            cache=cache,  # Pass in temporarily
         )
 
         assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)

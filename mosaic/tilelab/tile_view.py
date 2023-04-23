@@ -91,7 +91,7 @@ def _reduce(view: TileView, axis) -> TileView:
 def _reshape(view: TileView, newshape) -> TileView:
     def new_shape(shape):
         if len(shape) < len(newshape):
-            return (1, 32, 4, 32)
+            return (1, 32, 1, 32)
         else:
             return (1, 32, 32)
 
