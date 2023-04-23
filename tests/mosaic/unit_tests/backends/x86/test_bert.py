@@ -115,8 +115,8 @@ def try_returning_buffer_descriptor_to_queue(
             continue
 
         node_to_users = node_to_users.set(predecessor, node_to_users[predecessor] - 1)
-        if node_to_users[predecessor] == 0 and "buffer_descriptor" in graph.nodes[predecessor]:
-            buffer_descriptor = graph.nodes[predecessor]["buffer_descriptor"]
+        if node_to_users[predecessor] == 0 and "buffer_descriptors" in graph.nodes[predecessor]:
+            buffer_descriptor = first(graph.nodes[predecessor]["buffer_descriptors"])
             if buffer_descriptor_to_current_node[buffer_descriptor] == predecessor:
                 buffer_descriptor_stack.append(buffer_descriptor)
 
@@ -141,11 +141,11 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     if not can_instruction_reuse_buffer(successor_instruction):
         return graph, node_to_users, buffer_descriptor_to_current_node
 
-    if "buffer_descriptor" in graph.nodes[successor]:
+    if "buffer_descriptors" in graph.nodes[successor]:
         return graph, node_to_users, buffer_descriptor_to_current_node
 
-    buffer_descriptor = graph.nodes[node]["buffer_descriptor"]
-    graph = graph.add_node(successor, buffer_descriptor=buffer_descriptor)
+    buffer_descriptor = first(graph.nodes[node]["buffer_descriptors"])
+    graph = graph.add_node(successor, buffer_descriptors=tuple([buffer_descriptor]))
     buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, successor)
 
     return propagate_buffer_down(graph, successor, node_to_users, buffer_descriptor_to_current_node)
@@ -163,18 +163,20 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
         instruction = graph.nodes[node]["instruction"]
         if isinstance(instruction, Constant):
             graph = graph.add_node(
-                node, buffer_descriptor=create_constant_input_buffer_descriptor(node.name, array=instruction.array)
+                node,
+                buffer_descriptors=tuple([create_constant_input_buffer_descriptor(node.name, array=instruction.array)]),
             )
             continue
         elif isinstance(instruction, Variable):
-            graph = graph.add_node(node, buffer_descriptor=create_variable_input_buffer_descriptor(node.name))
+            graph = graph.add_node(node, buffer_descriptors=tuple([create_variable_input_buffer_descriptor(node.name)]))
             continue
         elif is_instruction_a_no_operation(instruction):
             graph = graph.add_node(
-                node, buffer_descriptor=graph.nodes[first(graph.predecessors(node))]["buffer_descriptor"]
+                node,
+                buffer_descriptors=tuple([first(graph.nodes[first(graph.predecessors(node))]["buffer_descriptors"])]),
             )
 
-        if "buffer_descriptor" in graph.nodes[node]:
+        if "buffer_descriptors" in graph.nodes[node]:
             node_to_users = try_returning_buffer_descriptor_to_queue(
                 graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
             )
@@ -188,7 +190,7 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
         else:
             buffer_descriptor = create_intermediate_buffer_descriptor()
 
-        graph = graph.add_node(node, buffer_descriptor=buffer_descriptor)
+        graph = graph.add_node(node, buffer_descriptors=tuple([buffer_descriptor]))
         buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, node)
         if reuse_buffers:
             graph, node_to_users, buffer_descriptor_to_current_node = propagate_buffer_down(
@@ -254,7 +256,7 @@ def allocate_buffers(graph):
 def iterate_buffer_descriptors(graph):
     buffer_descriptors = set()
     for node, attributes in graph.nodes(data=True):
-        buffer_descriptors.add(attributes["buffer_descriptor"])
+        buffer_descriptors.update(attributes["buffer_descriptors"])
     buffer_descriptors = pset(buffer_descriptors)
     return buffer_descriptors
 
@@ -262,7 +264,8 @@ def iterate_buffer_descriptors(graph):
 def iterate_buffer_descriptors_to_nodes(graph):
     buffer_descriptor_to_nodes = {}
     for node, attributes in graph.nodes(data=True):
-        nodes = buffer_descriptor_to_nodes.setdefault(attributes["buffer_descriptor"], [])
+        buffer_descriptor = first(attributes["buffer_descriptors"])
+        nodes = buffer_descriptor_to_nodes.setdefault(buffer_descriptor, [])
         nodes.append(node)
     buffer_descriptor_to_nodes = pmap(
         {buffer_descriptor: pvector(nodes) for buffer_descriptor, nodes in buffer_descriptor_to_nodes.items()}
@@ -288,7 +291,7 @@ def create_buffer_descriptor_to_color_and_style(graph):
 
 def visualize_node(graphviz_graph, graph, node):
     buffer_descriptor_to_color_and_style = create_buffer_descriptor_to_color_and_style(graph)
-    buffer_descriptor = graph.nodes[node]["buffer_descriptor"]
+    buffer_descriptor = first(graph.nodes[node]["buffer_descriptors"])
     if buffer_descriptor.buffer_type == BufferType.Intermediate:
         color, style = buffer_descriptor_to_color_and_style[buffer_descriptor]
         fontcolor = "white"
@@ -397,7 +400,7 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
 # def compare(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
 #     shape = graph.nodes[node]["shapes"][0]
 #     volume = math.prod(shape)
-#     buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
+#     buffer = first(buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptors"]])
 #     array_tile_config = node_output_to_array_tile_config[(node, 0)]
 #     kernel_array = from_flat_array(buffer.array[:volume], array_tile_config)
 #     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
@@ -427,7 +430,7 @@ def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node
     for input_var, array in inputs.items():
         input_node = input_var.node
         array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
-        buffer = buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
+        buffer = buffer_descriptor_to_buffer[first(graph.nodes[input_node]["buffer_descriptors"])]
         buffer.array[:] = to_flat_array(array, array_tile_config)
 
 
@@ -442,10 +445,10 @@ def evaluate(
 
     for node in nodes_to_evaluate:
         input_buffers = [
-            buffer_descriptor_to_buffer[graph.nodes[input_node]["buffer_descriptor"]]
+            buffer_descriptor_to_buffer[first(graph.nodes[input_node]["buffer_descriptors"])]
             for input_node, _ in get_operands(graph, node)
         ]
-        output_buffer = buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptor"]]
+        output_buffer = buffer_descriptor_to_buffer[first(graph.nodes[node]["buffer_descriptors"])]
 
         input_pointers = [input_buffer.data() for input_buffer in input_buffers]
         output_pointer = output_buffer.data()
@@ -455,7 +458,7 @@ def evaluate(
 
     output_node = output_var.node
     array_tile_config = node_output_to_array_tile_config[(output_node, 0)]
-    buffer = buffer_descriptor_to_buffer[graph.nodes[output_node]["buffer_descriptor"]]
+    buffer = buffer_descriptor_to_buffer[first(graph.nodes[output_node]["buffer_descriptors"])]
     return from_flat_array(buffer.array, array_tile_config)
 
 
