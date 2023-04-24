@@ -495,14 +495,14 @@ def test_bert(
         vocab_size=vocab_size,
     )
 
-    transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
+    transformers_model = transformers.models.bert.modeling_bert.BertModel(config, add_pooling_layer=False)
 
     input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     parameters = {
         cnp.nn.variable(name=name, shape=value.shape, dtype=np.float32): value
         for name, value in convert_parameters_to_numpy(transformers_model).items()
-        if "position_embeddings" not in name and "pooler" not in name
+        if "position_embeddings" not in name
     }
 
     with cnp.nn.module.disable_modules():
