@@ -3,6 +3,7 @@ from ctypes import cdll
 import enum
 import math
 import pathlib
+import time
 
 import numpy as np
 import pytest
@@ -304,16 +305,16 @@ def visualize_node(graphviz_graph, graph, node):
     )
 
 
-def create_tile_shape(var):
+def create_tile_shape(var, tile_size):
     shape = var.shape
     if len(shape) == 3:
-        return (1, 32, 32)
+        return (1, tile_size, tile_size)
     elif len(shape) == 2:
         if "embeddings.weight" in var.name:
-            return (1, 32)
-        return min(shape[0], 32), min(shape[1], 32)
+            return (1, tile_size)
+        return min(shape[0], tile_size), min(shape[1], tile_size)
     elif len(shape) == 1:
-        return (min(shape[0], 32),)
+        return (min(shape[0], tile_size),)
     else:
         return ()
 
@@ -457,7 +458,14 @@ def evaluate(
 
 
 def setup_test(
-    request, batch_size, num_encoders, sequence_size, num_attention_heads, head_size, vocab_size, reuse_buffers
+    request,
+    batch_size,
+    num_encoders,
+    sequence_size,
+    num_attention_heads,
+    head_size,
+    vocab_size,
+    reuse_buffers,
 ):
     np.random.seed(0)
     torch.manual_seed(0)
@@ -497,7 +505,7 @@ def setup_test(
 
     input_var_to_scheme = {
         var: [
-            TileLevel(level_name="tile", tile_shape=create_tile_shape(var)),
+            TileLevel(level_name="tile", tile_shape=create_tile_shape(var, head_size)),
         ]
         for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
     }
@@ -519,6 +527,7 @@ def setup_test(
         node_to_run_kernel,
         buffer_descriptor_to_buffer,
         node_output_to_array_tile_config,
+        transformers_model,
     )
 
 
@@ -550,6 +559,7 @@ def test_evaluates_correctly(
         node_to_run_kernel,
         buffer_descriptor_to_buffer,
         node_output_to_array_tile_config,
+        _,
     ) = setup_test(
         request,
         batch_size,
@@ -587,3 +597,99 @@ def test_evaluates_correctly(
         )
 
         assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
+
+
+@pytest.mark.parametrize("num_iterations", [10])
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("num_encoders", [12])
+@pytest.mark.parametrize("sequence_size", [128])
+@pytest.mark.parametrize("num_attention_heads", [12])
+@pytest.mark.parametrize("head_size", [64])
+@pytest.mark.parametrize("vocab_size", [16])
+@pytest.mark.parametrize("reuse_buffers", [False])
+def test_benchmark(
+    request,
+    num_iterations,
+    batch_size,
+    num_encoders,
+    sequence_size,
+    num_attention_heads,
+    head_size,
+    vocab_size,
+    reuse_buffers,
+):
+    torch.set_num_threads(1)
+
+    (
+        output_var,
+        input_ids_var,
+        token_type_ids_var,
+        parameters,
+        buffer_graph,
+        node_to_run_kernel,
+        buffer_descriptor_to_buffer,
+        node_output_to_array_tile_config,
+        transformers_model,
+    ) = setup_test(
+        request,
+        batch_size,
+        num_encoders,
+        sequence_size,
+        num_attention_heads,
+        head_size,
+        vocab_size,
+        reuse_buffers,
+    )
+
+    input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
+    token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
+
+    inputs = {
+        input_ids_var: input_ids,
+        token_type_ids_var: token_type_ids,
+        **parameters,
+    }
+
+    golden_output, cache = cnp.nn.evaluate(
+        output_var,
+        inputs=inputs,
+        return_cache=True,
+    )
+    output = evaluate(
+        output_var,
+        buffer_graph,
+        inputs=inputs,
+        node_to_run_kernel=node_to_run_kernel,
+        buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
+        node_output_to_array_tile_config=node_output_to_array_tile_config,
+    )
+    assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
+
+    execution_times = []
+    for _ in range(num_iterations):
+        start = time.time_ns()
+        output = transformers_model(torch.from_numpy(input_ids))["last_hidden_state"]
+        end = time.time_ns()
+        execution_times.append(end - start)
+    execution_times = np.asarray(execution_times) / 1e6
+    logger.info(f"torch Average Execution Time: {execution_times.mean()} milliseconds")
+    logger.info(f"torch Minimum Execution Time: {execution_times.min()} milliseconds")
+    logger.info(f"torch Maximum Execution Time: {execution_times.max()} milliseconds")
+
+    execution_times = []
+    for _ in range(num_iterations):
+        start = time.time_ns()
+        output = evaluate(
+            output_var,
+            buffer_graph,
+            inputs=inputs,
+            node_to_run_kernel=node_to_run_kernel,
+            buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
+            node_output_to_array_tile_config=node_output_to_array_tile_config,
+        )
+        end = time.time_ns()
+        execution_times.append(end - start)
+    execution_times = np.asarray(execution_times) / 1e6
+    logger.info(f"composit Average Execution Time: {execution_times.mean()} milliseconds")
+    logger.info(f"composit Minimum Execution Time: {execution_times.min()} milliseconds")
+    logger.info(f"composit Maximum Execution Time: {execution_times.max()} milliseconds")

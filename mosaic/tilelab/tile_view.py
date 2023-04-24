@@ -90,10 +90,11 @@ def _reduce(view: TileView, axis) -> TileView:
 
 def _reshape(view: TileView, newshape) -> TileView:
     def new_shape(shape):
+        tile_size = shape[-1]
         if len(shape) < len(newshape):
-            return (1, 32, 1, 32)
+            return (1, tile_size, 1, tile_size)
         else:
-            return (1, 32, 32)
+            return (1, tile_size, tile_size)
 
     hierarchy = []
     for level in view.hierarchy:
