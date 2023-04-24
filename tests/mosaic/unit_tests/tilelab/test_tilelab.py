@@ -10,7 +10,7 @@ from mosaic.tilelab.tile_view import (
     propagate_tile_views,
 )
 
-from mosaic.tilelab.tile import to_flat_array, from_flat_array, create_array_tile_config
+from mosaic.tilelab.tile import to_tilized_array, from_tilized_array, create_array_tile_config
 
 
 @pytest.mark.parametrize("input_shape", [(4, 32, 32)])
@@ -197,5 +197,5 @@ def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
 
     output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
-    output_flat_array = to_flat_array(output, output_array_tile_config)
-    assert np.allclose(output, from_flat_array(output_flat_array, output_array_tile_config))
+    output_flat_array = to_tilized_array(output, output_array_tile_config)
+    assert np.allclose(output, from_tilized_array(output_flat_array, output_array_tile_config))

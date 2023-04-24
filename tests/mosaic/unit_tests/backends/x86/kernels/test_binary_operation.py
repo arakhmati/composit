@@ -16,7 +16,7 @@ from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.kernels.binary_operation import operation_to_python_operator
 from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
-from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
+from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import binary_operation
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -128,15 +128,15 @@ def run_cnp_kernel(
     run_kernel = getattr(shared_library, kernel_name)
 
     def run(np_input_a, np_input_b):
-        input_a_flat_array = to_flat_array(np_input_a, input_a_array_tile_config)
-        input_b_flat_array = to_flat_array(np_input_b, input_b_array_tile_config)
+        input_a_flat_array = to_tilized_array(np_input_a, input_a_array_tile_config)
+        input_b_flat_array = to_tilized_array(np_input_b, input_b_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_a_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_a_flat_array),
             cast_numpy_array_to_pointer(input_b_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),
         )
-        return from_flat_array(output_flat_array, output_array_tile_config)
+        return from_tilized_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")
     np_function = operation_to_np_function[operation]

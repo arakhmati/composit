@@ -32,7 +32,7 @@ from mosaic.backends.x86.kernels import (
     embedding,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_flat_array, from_flat_array
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_tilized_array, from_tilized_array
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
 
 
@@ -401,7 +401,7 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
 #     volume = math.prod(shape)
 #     buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[node]["buffer_descriptors"])]
 #     array_tile_config = node_output_to_array_tile_config[(node, 0)]
-#     kernel_array = from_flat_array(buffer.array[:volume], array_tile_config)
+#     kernel_array = from_tilized_array(buffer.array[:volume], array_tile_config)
 #     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
 #     logger.info(f"Comparing: {node.name}")
 #
@@ -425,7 +425,7 @@ def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffe
         input_node = input_var.node
         array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
         buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
-        buffer.array[:] = to_flat_array(array, array_tile_config)
+        buffer.array[:] = to_tilized_array(array, array_tile_config)
 
 
 def evaluate(
@@ -454,7 +454,7 @@ def evaluate(
     output_node = output_var.node
     array_tile_config = node_output_to_array_tile_config[(output_node, 0)]
     buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[output_node]["buffer_descriptors"])]
-    return from_flat_array(buffer.array, array_tile_config)
+    return from_tilized_array(buffer.array, array_tile_config)
 
 
 def setup_test(

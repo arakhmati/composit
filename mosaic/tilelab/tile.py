@@ -18,9 +18,9 @@ class ArrayTileConfig(PClass):
 
     @property
     def hierarchy(self):
-        return [TileLevel(level_name=self.level_name, tile_shape=self.tile_shape)] + first(
-            self.index_to_tile.values()
-        ).hierarchy
+        current = [TileLevel(level_name=self.level_name, tile_shape=self.tile_shape)]
+        downstream = first(self.index_to_tile.values()).hierarchy
+        return current + downstream
 
     @property
     def tile_shape(self):
@@ -147,7 +147,7 @@ def create_aligned_array(shape, dtype, align=32):
     return array
 
 
-def to_flat_array(
+def to_tilized_array(
     array: np.array, array_tile_config: ArrayTileConfig, *, transpose_levels=None, order=None
 ) -> np.ndarray:
     if transpose_levels is None:
@@ -167,7 +167,7 @@ def to_flat_array(
     return flat_array
 
 
-def from_flat_array(flat_array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
+def from_tilized_array(flat_array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
     tile_level = array_tile_config.hierarchy[-1]
     num_tiles = len(flat_array) / math.prod(tile_level.tile_shape)
     tiles = (tile.reshape(tile_level.tile_shape) for tile in np.array_split(flat_array, num_tiles))

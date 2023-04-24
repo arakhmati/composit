@@ -16,7 +16,7 @@ import composit.nn
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, create_tile_view
-from mosaic.tilelab.tile import create_array_tile_config, to_flat_array, from_flat_array
+from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import unary_operation
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -79,7 +79,7 @@ def run_cnp_kernel(
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Creating composit graph")
-    input_var = cnp.nn.variable(name="input_var_a", shape=input_shape)
+    input_var = cnp.nn.variable(name="input_var", shape=input_shape)
     output_shape = input_var.shape
 
     logger.info("Create tile views")
@@ -107,13 +107,13 @@ def run_cnp_kernel(
     run_kernel = getattr(shared_library, kernel_name)
 
     def run(np_input):
-        input_flat_array = to_flat_array(np_input, input_array_tile_config)
+        input_flat_array = to_tilized_array(np_input, input_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_shape),), dtype=input_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),
         )
-        return from_flat_array(output_flat_array, output_array_tile_config)
+        return from_tilized_array(output_flat_array, output_array_tile_config)
 
     logger.info("Run Comparison")
     np_function = operation_to_np_function[operation]
