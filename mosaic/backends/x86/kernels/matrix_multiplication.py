@@ -33,7 +33,13 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
 
 
 def generate_kernel(
-    path, input_a_array_tile_config, input_b_array_tile_config, *, input_b_levels_to_transpose, use_avx_manually: bool
+    path,
+    input_a_array_tile_config,
+    input_b_array_tile_config,
+    output_array_tile_config,
+    *,
+    input_b_levels_to_transpose,
+    use_avx_manually: bool,
 ):
     if input_b_levels_to_transpose is None:
         input_b_levels_to_transpose = set()
@@ -50,10 +56,12 @@ def generate_kernel(
     input_b_var = c.variable(InputType, "input_b_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = generate_body(
+    body = initialize_output(output_array_tile_config, output_var)
+
+    body += generate_body(
         input_a_array_tile_config,
         input_b_array_tile_config,
-        c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+        arguments=[input_a_var, input_b_var, output_var],
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
         input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
@@ -80,15 +88,32 @@ def generate_kernel(
     return kernel_name
 
 
+def initialize_output(output_array_tile_config, output_var):
+    index = c.variable(c.Type("uint32_t"), "index")
+    num_iterations = math.prod(output_array_tile_config.shape)
+
+    value = c.literal(0)
+    loop = c.ForLoop(
+        c.Declare(index, c.literal(0)),
+        index < c.literal(num_iterations),
+        c.add_in_place(index, c.literal(1)),
+        c.block(c.assign(output_var[index], value)),
+    )
+
+    return c.block(loop)
+
+
 def generate_body(
     input_a_array_tile_config,
     input_b_array_tile_config,
-    c_variables,
+    arguments,
     offsets,
     *,
     input_b_levels_to_transpose,
     use_avx_manually: bool,
 ):
+    input_a_var, input_b_var, output_var = arguments
+
     level_name = input_a_array_tile_config.level_name
 
     inner_loop_increment = c.literal(1)
@@ -165,7 +190,7 @@ def generate_body(
         inner_loop_body += generate_body(
             input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
             input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
-            c_variables=c_variables,
+            arguments=arguments,
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
             input_b_levels_to_transpose=input_b_levels_to_transpose,
             use_avx_manually=use_avx_manually,
@@ -192,7 +217,7 @@ def generate_body(
                 inner_loop_body = c.block(
                     input_a_vector
                     << _mm256_load_ps(
-                        c_variables["input_a_var"]
+                        input_a_var
                         + offsets["input_a_var"]
                         + b * c.literal(m_size) * c.literal(k_size)
                         + m * c.literal(k_size)
@@ -200,7 +225,7 @@ def generate_body(
                     ),
                     input_b_vector
                     << _mm256_load_ps(
-                        c_variables["input_b_var"]
+                        input_b_var
                         + offsets["input_b_var"]
                         + b * c.literal(n_size) * c.literal(k_size)
                         + n * c.literal(k_size)
@@ -219,7 +244,7 @@ def generate_body(
                 outer_loop_body_after = c.block(
                     c.Statement(
                         c.add_in_place(
-                            c_variables["output_var"][
+                            output_var[
                                 offsets["output_var"]
                                 + b * c.literal(m_size) * c.literal(n_size)
                                 + m * c.literal(n_size)
@@ -249,8 +274,8 @@ def generate_body(
                     declare_b_index,
                     c.Statement(
                         c.add_in_place(
-                            c_variables["output_var"][output_index],
-                            c_variables["input_a_var"][a_index] * c_variables["input_b_var"][b_index],
+                            output_var[output_index],
+                            input_a_var[a_index] * input_b_var[b_index],
                         )
                     ),
                 )
@@ -281,8 +306,8 @@ def generate_body(
                 declare_output_index,
                 c.Statement(
                     c.add_in_place(
-                        c_variables["output_var"][output_index],
-                        c_variables["input_a_var"][a_index] * c_variables["input_b_var"][b_index],
+                        output_var[output_index],
+                        input_a_var[a_index] * input_b_var[b_index],
                     )
                 ),
             )

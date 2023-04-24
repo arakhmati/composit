@@ -35,18 +35,13 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     input_var = c.variable(InputType, "input_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = c.block()
-    if operation == "max":
-        body = initialize_output(
-            output_array_tile_config,
-            c_variables=dict(input_var=input_var, output_var=output_var),
-        )
+    body = initialize_output(output_array_tile_config, operation=operation, arguments=[input_var, output_var])
 
     body += generate_body(
         input_array_tile_config,
         output_array_tile_config,
         operation=operation,
-        c_variables=dict(input_var=input_var, output_var=output_var),
+        arguments=[input_var, output_var],
         offsets=dict(input=c.literal(0), output=c.literal(0)),
         **kwargs,
     )
@@ -72,24 +67,22 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     return kernel_name
 
 
-def initialize_output(output_array_tile_config, c_variables):
+def initialize_output(output_array_tile_config, operation, arguments):
+    input_var, output_var = arguments
+
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(output_array_tile_config.shape)
 
-    input_var = c_variables["input_var"]
-    output_var = c_variables["output_var"]
+    value = c.literal(0)
+    if operation == "max":
+        value = c.literal("-INFINITY")
 
     loop = c.block(
         c.ForLoop(
             c.Declare(index, c.literal(0)),
             index < c.literal(num_iterations),
             c.add_in_place(index, c.literal(1)),
-            c.block(
-                c.assign(
-                    c_variables["output_var"][index],
-                    c.literal("-INFINITY"),
-                )
-            ),
+            c.block(c.assign(output_var[index], value)),
         )
     )
 
@@ -105,7 +98,9 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_body(input_array_tile_config, output_array_tile_config, operation, c_variables, offsets, **kwargs):
+def generate_body(input_array_tile_config, output_array_tile_config, operation, arguments, offsets, **kwargs):
+    input_var, output_var = arguments
+
     level_name = input_array_tile_config.level_name
 
     input_num_tiles_per_axis = input_array_tile_config.num_tiles_per_axis()
@@ -145,7 +140,7 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
             input_array_tile_config[tuple(0 for _ in range(len(input_array_tile_config.shape)))],
             output_array_tile_config[tuple(0 for _ in range(len(output_array_tile_config.shape)))],
             operation=operation,
-            c_variables=c_variables,
+            arguments=arguments,
             offsets=dict(input=next_input_offset, output=next_output_offset),
             **kwargs,
         )
@@ -158,18 +153,20 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
             compute_offset(offsets["output"], output_indices, output_num_tiles_per_axis, 1)
         )
 
-        input_var = c_variables["input_var"][input_index]
-        output_var = c_variables["output_var"][output_index]
         if operation == "sum":
-            reduction_step = operator.add(output_var, input_var)
+            reduction_step = operator.add(output_var[output_index], input_var[input_index])
         elif operation == "mean":
-            reduction_step = operator.add(output_var, input_var / c.literal(kwargs["num_reduced_elements"]))
+            reduction_step = operator.add(
+                output_var[output_index], input_var[input_index] / c.literal(kwargs["num_reduced_elements"])
+            )
         elif operation == "max":
-            reduction_step = c.invoke("_maxf", output_var, input_var)
+            reduction_step = c.invoke("_maxf", output_var[output_index], input_var[input_index])
         else:
             raise NotImplementedError
 
-        inner_loop_body = c.block(declare_index, declare_output_index, c.assign(output_var, reduction_step))
+        inner_loop_body = c.block(
+            declare_index, declare_output_index, c.assign(output_var[output_index], reduction_step)
+        )
 
     loop = inner_loop_body
     for input_index, output_index, num_input_iterations, num_output_iterations in zip(

@@ -91,6 +91,7 @@ def run_cnp_kernel(
         test_output_path,
         input_a_array_tile_config,
         input_b_array_tile_config,
+        output_array_tile_config,
         input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )

@@ -1,7 +1,5 @@
 import subprocess
 
-from loguru import logger
-
 FLAGS = [
     "-std=c2x",
     "-O3",
@@ -34,7 +32,6 @@ def compile_shared_library(test_output_path, kernel_name):
         "-o",
         assembly_file,
     ]
-    logger.info(f"Compile Source Code to Assembly: \"{' '.join(assembly_command)}\"")
     result = subprocess.run(assembly_command)
     assert result.returncode == 0
 
@@ -46,7 +43,6 @@ def compile_shared_library(test_output_path, kernel_name):
         "-o",
         shared_library_file,
     ]
-    logger.info(f"Compile Source Code to Shared Library: \"{' '.join(shared_library_command)}\"")
     result = subprocess.run(shared_library_command)
     assert result.returncode == 0
 

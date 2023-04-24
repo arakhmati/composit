@@ -1,8 +1,8 @@
 from collections import deque
+from ctypes import cdll
 import enum
 import math
 import pathlib
-from ctypes import cdll
 
 import numpy as np
 import pytest
@@ -11,7 +11,7 @@ import torch
 
 import transformers
 from loguru import logger
-from pyrsistent import pmap, pvector, PClass, field, pset
+from pyrsistent import pmap, pvector, PClass, field
 from toolz import first
 
 import composit as cnp
@@ -128,7 +128,7 @@ def is_instruction_a_no_operation(instruction):
 
 
 def can_instruction_reuse_buffer(instruction):
-    return class_name(instruction) not in {"matmul"}
+    return class_name(instruction) not in {"matmul", "mean", "sum", "transpose"}
 
 
 def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_current_node):
@@ -144,7 +144,9 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     if "buffer_descriptors" in graph.nodes[successor]:
         return graph, node_to_users, buffer_descriptor_to_current_node
 
-    buffer_descriptor = first(graph.nodes[node]["buffer_descriptors"])
+    (input_node_to_successor, _), *_ = get_operands(graph, successor)
+    buffer_descriptor = first(graph.nodes[input_node_to_successor]["buffer_descriptors"])
+
     graph = graph.add_node(successor, buffer_descriptors=tuple([buffer_descriptor]))
     buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, successor)
 
@@ -253,14 +255,6 @@ def allocate_buffers(graph):
     return buffer_descriptor_to_buffer
 
 
-def iterate_buffer_descriptors(graph):
-    buffer_descriptors = set()
-    for node, attributes in graph.nodes(data=True):
-        buffer_descriptors.update(attributes["buffer_descriptors"])
-    buffer_descriptors = pset(buffer_descriptors)
-    return buffer_descriptors
-
-
 def iterate_buffer_descriptors_to_nodes(graph):
     buffer_descriptor_to_nodes = {}
     for node, attributes in graph.nodes(data=True):
@@ -348,7 +342,11 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
 
         if instruction_class_name == "matmul":
             node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
-                test_output_path, *input_array_tile_configs, input_b_levels_to_transpose=None, use_avx_manually=True
+                test_output_path,
+                *input_array_tile_configs,
+                output_array_tile_config,
+                input_b_levels_to_transpose=None,
+                use_avx_manually=True,
             )
         elif instruction_class_name in {"exp", "sqrt", "gelu"}:
             node_to_kernel_name[node] = unary_operation.generate_kernel(
@@ -397,25 +395,20 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
     return pmap(node_to_run_kernel)
 
 
-# def compare(graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
-#     shape = graph.nodes[node]["shapes"][0]
+# def compare(buffer_graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
+#     shape = buffer_graph.nodes[node]["shapes"][0]
 #     volume = math.prod(shape)
-#     buffer = first(buffer_descriptor_to_buffer[graph.nodes[node]["buffer_descriptors"]])
+#     buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[node]["buffer_descriptors"])]
 #     array_tile_config = node_output_to_array_tile_config[(node, 0)]
 #     kernel_array = from_flat_array(buffer.array[:volume], array_tile_config)
 #     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
 #     logger.info(f"Comparing: {node.name}")
 #
-#     allclose = np.allclose(
-#         kernel_array,
-#         cache_array,
-#         atol=1e-4,
-#         rtol=1e-5,
-#     )
+#     allclose = np.allclose(kernel_array, cache_array, atol=1e-4, rtol=1e-5)
 #
 #     if not allclose:
 #         input_array_tile_configs = [
-#             node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(graph, node)
+#             node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(buffer_graph, node)
 #         ]
 #         logger.info(input_array_tile_configs)
 #         logger.info(kernel_array.shape)
@@ -426,29 +419,30 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
 #     assert allclose
 
 
-def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
+def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
     for input_var, array in inputs.items():
         input_node = input_var.node
         array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
-        buffer = buffer_descriptor_to_buffer[first(graph.nodes[input_node]["buffer_descriptors"])]
+        buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
         buffer.array[:] = to_flat_array(array, array_tile_config)
 
 
 def evaluate(
-    output_var, graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer, node_output_to_array_tile_config
+    output_var, buffer_graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer, node_output_to_array_tile_config
 ):
-    initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config)
+    initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config)
 
     nodes_to_evaluate = filter(
-        lambda node: graph.in_degree(node) > 0 and node in node_to_run_kernel, topological_traversal(graph)
+        lambda node: buffer_graph.in_degree(node) > 0 and node in node_to_run_kernel,
+        topological_traversal(buffer_graph),
     )
 
     for node in nodes_to_evaluate:
         input_buffers = [
-            buffer_descriptor_to_buffer[first(graph.nodes[input_node]["buffer_descriptors"])]
-            for input_node, _ in get_operands(graph, node)
+            buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
+            for input_node, _ in get_operands(buffer_graph, node)
         ]
-        output_buffer = buffer_descriptor_to_buffer[first(graph.nodes[node]["buffer_descriptors"])]
+        output_buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[node]["buffer_descriptors"])]
 
         input_pointers = [input_buffer.data() for input_buffer in input_buffers]
         output_pointer = output_buffer.data()
@@ -458,28 +452,12 @@ def evaluate(
 
     output_node = output_var.node
     array_tile_config = node_output_to_array_tile_config[(output_node, 0)]
-    buffer = buffer_descriptor_to_buffer[first(graph.nodes[output_node]["buffer_descriptors"])]
+    buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[output_node]["buffer_descriptors"])]
     return from_flat_array(buffer.array, array_tile_config)
 
 
-@pytest.mark.parametrize("num_inputs", [1])
-@pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("num_encoders", [3])
-@pytest.mark.parametrize("sequence_size", [32])
-@pytest.mark.parametrize("num_attention_heads", [4])
-@pytest.mark.parametrize("head_size", [32])
-@pytest.mark.parametrize("vocab_size", [16])
-@pytest.mark.parametrize("reuse_buffers", [False])
-def test_bert(
-    request,
-    num_inputs,
-    batch_size,
-    num_encoders,
-    sequence_size,
-    num_attention_heads,
-    head_size,
-    vocab_size,
-    reuse_buffers,
+def setup_test(
+    request, batch_size, num_encoders, sequence_size, num_attention_heads, head_size, vocab_size, reuse_buffers
 ):
     np.random.seed(0)
     torch.manual_seed(0)
@@ -506,7 +484,7 @@ def test_bert(
     }
 
     with cnp.nn.module.disable_modules():
-        model = functional_bert(
+        output_var = functional_bert(
             input_ids_var,
             token_type_ids_var,
             None,
@@ -524,14 +502,64 @@ def test_bert(
         for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
     }
 
-    graph = model.graph
+    graph = output_var.graph
+    buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
+    buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
+    # visualize_graph(buffer_graph, visualize_node=visualize_node)
 
-    graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
-    buffer_descriptor_to_buffer = allocate_buffers(graph)
-    # visualize_graph(graph, visualize_node=visualize_node)
+    node_output_to_array_tile_config = propagate_array_tile_config(buffer_graph, input_var_to_scheme)
+    node_to_run_kernel = generate_and_compile_kernels(buffer_graph, test_output_path, node_output_to_array_tile_config)
 
-    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
-    node_to_run_kernel = generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config)
+    return (
+        output_var,
+        input_ids_var,
+        token_type_ids_var,
+        parameters,
+        buffer_graph,
+        node_to_run_kernel,
+        buffer_descriptor_to_buffer,
+        node_output_to_array_tile_config,
+    )
+
+
+@pytest.mark.parametrize("num_inputs", [1])
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("num_encoders", [3])
+@pytest.mark.parametrize("sequence_size", [32])
+@pytest.mark.parametrize("num_attention_heads", [4])
+@pytest.mark.parametrize("head_size", [32])
+@pytest.mark.parametrize("vocab_size", [16])
+@pytest.mark.parametrize("reuse_buffers", [False, True])
+def test_evaluates_correctly(
+    request,
+    num_inputs,
+    batch_size,
+    num_encoders,
+    sequence_size,
+    num_attention_heads,
+    head_size,
+    vocab_size,
+    reuse_buffers,
+):
+    (
+        output_var,
+        input_ids_var,
+        token_type_ids_var,
+        parameters,
+        buffer_graph,
+        node_to_run_kernel,
+        buffer_descriptor_to_buffer,
+        node_output_to_array_tile_config,
+    ) = setup_test(
+        request,
+        batch_size,
+        num_encoders,
+        sequence_size,
+        num_attention_heads,
+        head_size,
+        vocab_size,
+        reuse_buffers,
+    )
 
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
@@ -544,14 +572,14 @@ def test_bert(
         }
 
         golden_output, cache = cnp.nn.evaluate(
-            model,
+            output_var,
             inputs=inputs,
             return_cache=True,
         )
 
         output = evaluate(
-            model,
-            graph,
+            output_var,
+            buffer_graph,
             inputs=inputs,
             node_to_run_kernel=node_to_run_kernel,
             buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
