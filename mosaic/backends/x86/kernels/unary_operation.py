@@ -40,7 +40,7 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
     body = generate_body(
         input_array_tile_config,
         operation=operation,
-        c_variables=dict(input_var=input_var, output_var=output_var),
+        arguments=[input_var, output_var],
     )
 
     file = c.File(
@@ -67,8 +67,10 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
 def generate_body(
     input_array_tile_config,
     operation,
-    c_variables,
+    arguments,
 ):
+    input_var, output_var = arguments
+
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_array_tile_config.shape)
 
@@ -76,12 +78,7 @@ def generate_body(
         c.Declare(index, c.literal(0)),
         index < c.literal(num_iterations),
         c.add_in_place(index, c.literal(1)),
-        c.block(
-            c.assign(
-                c_variables["output_var"][index],
-                c.invoke(operation_to_c_function[operation], c_variables["input_var"][index]),
-            )
-        ),
+        c.block(c.assign(output_var[index], c.invoke(operation_to_c_function[operation], input_var[index]))),
     )
 
     return c.block(loop)
