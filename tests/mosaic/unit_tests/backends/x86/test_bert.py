@@ -30,9 +30,10 @@ from mosaic.backends.x86.kernels import (
     reduce,
     transpose,
     embedding,
+    tilize,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_tilized_array, from_tilized_array
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, from_tilized_array
 from mosaic.tilelab.tile_view import propagate_tile_views, TileLevel
 
 
@@ -329,19 +330,22 @@ def propagate_array_tile_config(graph, input_var_to_scheme):
 
 
 def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config):
-    nodes = filter(lambda node: graph.in_degree(node) > 0, graph)
-
     node_to_kernel_name = {}
-    for node in nodes:
+    for node in graph:
         instruction = graph.nodes[node]["instruction"]
         instruction_class_name = class_name(instruction)
 
         input_array_tile_configs = [
-            node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(graph, node)
+            node_output_to_array_tile_config[(input_node, output_index)]
+            for input_node, output_index in get_operands(graph, node)
         ]
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
-        if instruction_class_name == "matmul":
+        if instruction_class_name in {"Variable", "Constant"}:
+            node_to_kernel_name[node] = tilize.generate_kernel(
+                test_output_path, output_array_tile_config, graph.nodes[node]["dtypes"][0]
+            )
+        elif instruction_class_name == "matmul":
             node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
                 test_output_path,
                 *input_array_tile_configs,
@@ -372,10 +376,7 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
             ] = embedding.generate_kernel(test_output_path, output_array_tile_config)
         elif instruction_class_name in {"transpose"}:
             node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel(
-                test_output_path,
-                *input_array_tile_configs,
-                output_array_tile_config,
-                instruction.axes,
+                test_output_path, *input_array_tile_configs, output_array_tile_config, instruction.axes
             )
         else:
             raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
@@ -420,18 +421,18 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
 #     assert allclose
 
 
-def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
+def initialize_variable_buffers(buffer_graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer):
     for input_var, array in inputs.items():
         input_node = input_var.node
-        array_tile_config = node_output_to_array_tile_config[(input_node, 0)]
         buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
-        buffer.array[:] = to_tilized_array(array, array_tile_config)
+        run_kernel = node_to_run_kernel[input_node]
+        run_kernel(cast_numpy_array_to_pointer(array.flatten()), buffer.data())
 
 
 def evaluate(
     output_var, buffer_graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer, node_output_to_array_tile_config
 ):
-    initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer, node_output_to_array_tile_config)
+    initialize_variable_buffers(buffer_graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer)
 
     nodes_to_evaluate = filter(
         lambda node: buffer_graph.in_degree(node) > 0 and node in node_to_run_kernel,
@@ -606,7 +607,7 @@ def test_evaluates_correctly(
 @pytest.mark.parametrize("num_attention_heads", [12])
 @pytest.mark.parametrize("head_size", [64])
 @pytest.mark.parametrize("vocab_size", [16])
-@pytest.mark.parametrize("reuse_buffers", [False])
+@pytest.mark.parametrize("reuse_buffers", [True])
 def test_benchmark(
     request,
     num_iterations,
