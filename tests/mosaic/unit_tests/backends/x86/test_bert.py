@@ -342,16 +342,29 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
         if instruction_class_name in {"Variable", "Constant"}:
+            kwargs = {}
+            user_node = first(graph.successors(node))
+            if class_name(graph.nodes[user_node]["instruction"]) == "matmul":
+                kwargs = dict(transpose_levels={"tile", "atomic"}, order=(1, 0))
+
             node_to_kernel_name[node] = tilize.generate_kernel(
-                test_output_path, output_array_tile_config, graph.nodes[node]["dtypes"][0]
+                test_output_path, output_array_tile_config, graph.nodes[node]["dtypes"][0], **kwargs
             )
         elif instruction_class_name == "matmul":
+            _, (input_b_node, _) = get_operands(graph, node)
+            input_b_is_a_variable = class_name(graph.nodes[input_b_node]["instruction"]) == "Variable"
+            input_b_levels_to_transpose = set()
+            use_avx_manually = False
+            if input_b_is_a_variable:
+                input_b_levels_to_transpose = {"tile", "atomic"}
+                use_avx_manually = True
+
             node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
                 test_output_path,
                 *input_array_tile_configs,
                 output_array_tile_config,
-                input_b_levels_to_transpose=None,
-                use_avx_manually=True,
+                input_b_levels_to_transpose=input_b_levels_to_transpose,
+                use_avx_manually=use_avx_manually,
             )
         elif instruction_class_name in {"exp", "sqrt", "gelu"}:
             node_to_kernel_name[node] = unary_operation.generate_kernel(
