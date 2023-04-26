@@ -250,6 +250,7 @@ def visualize_graph(
     visualize_node=default_visualize_node,
     visualize_edge=default_visualize_edge,
     render=True,
+    timeout=1,
 ) -> None:
     if graphviz_graph is None:
         graphviz_graph = graphviz.Digraph()
@@ -267,7 +268,7 @@ def visualize_graph(
 
         file_name = f"graph-{random_string()}.gv"
         graphviz_graph.render(file_name, view=True, format="svg")
-        time.sleep(1)
+        time.sleep(timeout)
         os.remove(file_name)
         os.remove(f"{file_name}.svg")
 

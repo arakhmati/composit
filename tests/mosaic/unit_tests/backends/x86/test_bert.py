@@ -230,7 +230,7 @@ def size_buffers(graph):
 
     buffer_descriptor_to_size = pmap(buffer_descriptor_to_size)
     logger.info(
-        "Total Memory used: "
+        "Total Memory Used: "
         f"{format_bytes(sum(size * dtype.itemsize for size, dtype in buffer_descriptor_to_size.values()))}"
     )
     return buffer_descriptor_to_size
@@ -527,7 +527,9 @@ def setup_test(
     graph = output_var.graph
     buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
-    # visualize_graph(buffer_graph, visualize_node=visualize_node)
+
+    # from composit.multidigraph import visualize_graph
+    # visualize_graph(buffer_graph, visualize_node=visualize_node, timeout=5)
 
     node_output_to_array_tile_config = propagate_array_tile_config(buffer_graph, input_var_to_scheme)
     node_to_run_kernel = generate_and_compile_kernels(buffer_graph, test_output_path, node_output_to_array_tile_config)
