@@ -22,7 +22,7 @@ float _maxf(float input_a, float input_b) {
 
 def generate_kernel(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
     kwargs = dict(
-        num_reduced_elements=math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape)
+        mean_coefficient=1.0 / (math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape))
     )
 
     kernel_name = create_kernel_name(
@@ -157,7 +157,7 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
             reduction_step = operator.add(output_var[output_index], input_var[input_index])
         elif operation == "mean":
             reduction_step = operator.add(
-                output_var[output_index], input_var[input_index] / c.literal(kwargs["num_reduced_elements"])
+                output_var[output_index], input_var[input_index] * c.literal(kwargs["mean_coefficient"])
             )
         elif operation == "max":
             reduction_step = c.invoke("_maxf", output_var[output_index], input_var[input_index])
