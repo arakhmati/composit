@@ -383,6 +383,15 @@ class Function:
         return replace(self, _static=True)
 
 
+def void_function(name, arguments, body_function, *args, **kwargs):
+    return Function(
+        return_type=Type("void"),
+        name=Identifier(name),
+        arguments=arguments,
+        body=body_function(arguments, *args, **kwargs),
+    )
+
+
 @dataclass
 class FunctionCall:
     function_name: Identifier
@@ -463,6 +472,7 @@ __all__ = [
     "If",
     "ForLoop",
     "Function",
+    "void_function",
     "FunctionCall",
     "invoke",
     "Include",

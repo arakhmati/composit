@@ -26,6 +26,13 @@ class ArrayTileConfig(PClass):
     def tile_shape(self):
         return first(self.index_to_tile.values()).shape
 
+    @property
+    def rank(self):
+        return len(self.shape)
+
+    def next_level(self):
+        return self[tuple(0 for _ in range(self.rank))]
+
     def num_tiles_per_axis(self):
         return tuple(dim // tile_dim for dim, tile_dim in zip(self.shape, self.tile_shape))
 

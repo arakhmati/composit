@@ -31,19 +31,20 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
     input_a_var = c.variable(InputType, "input_a_var")
     input_b_var = c.variable(InputType, "input_b_var")
     output_var = c.variable(OutputType, "output_var")
+    arguments = (input_a_var, input_b_var, output_var)
 
     if input_a_array_tile_config == input_b_array_tile_config:
-        body = generate_optimized_body(
-            input_a_array_tile_config,
-            operation,
-            arguments=[input_a_var, input_b_var, output_var],
+        body_function = generate_optimized_body
+        body_function_kwargs = dict(
+            input_a_array_tile_config=input_a_array_tile_config,
+            operation=operation,
         )
     else:
-        body = generate_body(
-            input_a_array_tile_config,
-            input_b_array_tile_config,
+        body_function = generate_body
+        body_function_kwargs = dict(
+            input_a_array_tile_config=input_a_array_tile_config,
+            input_b_array_tile_config=input_b_array_tile_config,
             operation=operation,
-            arguments=[input_a_var, input_b_var, output_var],
             offsets=dict(a=c.literal(0), b=c.literal(0)),
         )
 
@@ -55,11 +56,11 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
             c.NewLine(),
             c.NewLine(),
             c.NewLine(),
-            c.Function(
-                return_type=c.Type("void"),
+            c.void_function(
                 name=c.Identifier(kernel_name),
-                arguments=[input_a_var, input_b_var, output_var],
-                body=body,
+                arguments=arguments,
+                body_function=body_function,
+                **body_function_kwargs,
             ),
         ],
     )
@@ -74,7 +75,7 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_optimized_body(input_a_array_tile_config, operation, arguments):
+def generate_optimized_body(arguments, *, input_a_array_tile_config, operation):
     input_a_var, input_b_var, output_var = arguments
 
     index = c.variable(c.Type("uint32_t"), "index")
@@ -92,7 +93,7 @@ def generate_optimized_body(input_a_array_tile_config, operation, arguments):
     return c.block(loop)
 
 
-def generate_body(input_a_array_tile_config, input_b_array_tile_config, operation, arguments, offsets):
+def generate_body(arguments, *, input_a_array_tile_config, input_b_array_tile_config, operation, offsets):
     input_a_var, input_b_var, output_var = arguments
 
     level_name = input_a_array_tile_config.level_name
@@ -124,10 +125,10 @@ def generate_body(input_a_array_tile_config, input_b_array_tile_config, operatio
 
         inner_loop_body = c.block(declare_next_a_offset, declare_next_b_offset)
         inner_loop_body += generate_body(
-            input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
-            input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
+            arguments,
+            input_a_array_tile_config=input_a_array_tile_config.next_level(),
+            input_b_array_tile_config=input_b_array_tile_config.next_level(),
             operation=operation,
-            arguments=arguments,
             offsets=dict(a=next_a_offset, b=next_b_offset),
         )
     else:
