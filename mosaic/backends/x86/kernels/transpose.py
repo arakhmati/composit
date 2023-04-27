@@ -25,8 +25,8 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
     body = generate_body(
         input_array_tile_config,
         output_array_tile_config,
+        arguments=[input_var, output_var],
         axes=axes,
-        c_variables=dict(input_var=input_var, output_var=output_var),
         offsets=dict(input=c.literal(0), output=c.literal(0)),
     )
 
@@ -63,7 +63,9 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_body(input_array_tile_config, output_array_tile_config, axes, c_variables, offsets):
+def generate_body(input_array_tile_config, output_array_tile_config, arguments, axes, offsets):
+    input_var, output_var = arguments
+
     level_name = input_array_tile_config.level_name
 
     input_num_tiles_per_axis = input_array_tile_config.num_tiles_per_axis()
@@ -103,7 +105,7 @@ def generate_body(input_array_tile_config, output_array_tile_config, axes, c_var
             input_array_tile_config[tuple(0 for _ in range(len(input_array_tile_config.shape)))],
             output_array_tile_config[tuple(0 for _ in range(len(output_array_tile_config.shape)))],
             axes=axes,
-            c_variables=c_variables,
+            arguments=arguments,
             offsets=dict(input=next_input_offset, output=next_output_offset),
         )
     else:
@@ -115,9 +117,9 @@ def generate_body(input_array_tile_config, output_array_tile_config, axes, c_var
             compute_offset(offsets["output"], output_indices, output_num_tiles_per_axis, 1)
         )
 
-        input_var = c_variables["input_var"][input_index]
-        output_var = c_variables["output_var"][output_index]
-        inner_loop_body = c.block(declare_index, declare_output_index, c.assign(output_var, input_var))
+        inner_loop_body = c.block(
+            declare_index, declare_output_index, c.assign(output_var[output_index], input_var[input_index])
+        )
 
     loop = inner_loop_body
     for input_index, output_index, num_input_iterations in zip(

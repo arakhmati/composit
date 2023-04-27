@@ -28,7 +28,7 @@ def generate_kernel(
 
     body = generate_body(
         output_array_tile_config,
-        c_variables=dict(input_var=input_var, weights=weights, output_var=output_var),
+        arguments=[input_var, weights, output_var],
     )
 
     file = c.File(
@@ -52,15 +52,16 @@ def generate_kernel(
 
 def generate_body(
     output_array_tile_config,
-    c_variables,
+    arguments,
 ):
+    input_var, weights, output_var = arguments
     batch_size, sequence_size, hidden_size = output_array_tile_config.shape
 
     batch_size_index = c.variable(c.Type("uint32_t"), "batch_size_index")
     sequence_size_index = c.variable(c.Type("uint32_t"), "sequence_size_index")
     hidden_size_index = c.variable(c.Type("uint32_t"), "hidden_size_index")
 
-    word_index = c_variables["input_var"][batch_size_index * c.literal(sequence_size) + sequence_size_index]
+    word_index = input_var[batch_size_index * c.literal(sequence_size) + sequence_size_index]
     weights_index = word_index * c.literal(hidden_size) + hidden_size_index
 
     tile_shape = output_array_tile_config.tile_shape
@@ -84,7 +85,7 @@ def generate_body(
         c.Declare(hidden_size_index, c.literal(0)),
         hidden_size_index < c.literal(hidden_size),
         c.add_in_place(hidden_size_index, c.literal(1)),
-        c.block(c.assign(c_variables["output_var"][output_index], c_variables["weights"][weights_index])),
+        c.block(c.assign(output_var[output_index], weights[weights_index])),
     )
 
     sequence_size_loop = c.ForLoop(

@@ -36,14 +36,14 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
         body = generate_optimized_body(
             input_a_array_tile_config,
             operation,
-            c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+            arguments=[input_a_var, input_b_var, output_var],
         )
     else:
         body = generate_body(
             input_a_array_tile_config,
             input_b_array_tile_config,
             operation=operation,
-            c_variables=dict(input_a_var=input_a_var, input_b_var=input_b_var, output_var=output_var),
+            arguments=[input_a_var, input_b_var, output_var],
             offsets=dict(a=c.literal(0), b=c.literal(0)),
         )
 
@@ -74,7 +74,9 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_optimized_body(input_a_array_tile_config, operation, c_variables):
+def generate_optimized_body(input_a_array_tile_config, operation, arguments):
+    input_a_var, input_b_var, output_var = arguments
+
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_a_array_tile_config.shape)
 
@@ -83,19 +85,16 @@ def generate_optimized_body(input_a_array_tile_config, operation, c_variables):
         index < c.literal(num_iterations),
         c.add_in_place(index, c.literal(1)),
         c.block(
-            c.assign(
-                c_variables["output_var"][index],
-                operation_to_python_operator[operation](
-                    c_variables["input_a_var"][index], c_variables["input_b_var"][index]
-                ),
-            )
+            c.assign(output_var[index], operation_to_python_operator[operation](input_a_var[index], input_b_var[index]))
         ),
     )
 
     return c.block(loop)
 
 
-def generate_body(input_a_array_tile_config, input_b_array_tile_config, operation, c_variables, offsets):
+def generate_body(input_a_array_tile_config, input_b_array_tile_config, operation, arguments, offsets):
+    input_a_var, input_b_var, output_var = arguments
+
     level_name = input_a_array_tile_config.level_name
 
     a_num_tiles_per_axis = input_a_array_tile_config.num_tiles_per_axis()
@@ -128,7 +127,7 @@ def generate_body(input_a_array_tile_config, input_b_array_tile_config, operatio
             input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
             input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
             operation=operation,
-            c_variables=c_variables,
+            arguments=arguments,
             offsets=dict(a=next_a_offset, b=next_b_offset),
         )
     else:
@@ -142,10 +141,7 @@ def generate_body(input_a_array_tile_config, input_b_array_tile_config, operatio
             declare_index,
             declare_b_index,
             c.assign(
-                c_variables["output_var"][a_index],
-                operation_to_python_operator[operation](
-                    c_variables["input_a_var"][a_index], c_variables["input_b_var"][b_index]
-                ),
+                output_var[a_index], operation_to_python_operator[operation](input_a_var[a_index], input_b_var[b_index])
             ),
         )
 
