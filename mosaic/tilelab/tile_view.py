@@ -10,10 +10,23 @@ from composit.persistent_array import PersistentArray
 from composit.multidigraph import topological_traversal
 from composit.numpy.core import get_operands
 
+from mosaic.tilelab.layout import DefaultLayout
+
 
 class TileLevel(PClass):
     level_name = field()
     tile_shape = field()
+    layout = field(initial=DefaultLayout())
+
+
+class ScalarTileLevel(PClass):
+    level_name = field()
+    rank: int = field()
+    layout = field(initial=DefaultLayout())
+
+    @property
+    def tile_shape(self):
+        return tuple(1 for _ in range(self.rank))
 
 
 class TileView(PClass):
@@ -42,10 +55,7 @@ def _embedding(view_a: TileView, view_b: TileView) -> TileView:
             )
         )
 
-    return TileView(
-        shape=(batch_size, sequence_size, hidden_size),
-        hierarchy=hierarchy,
-    )
+    return TileView(shape=(batch_size, sequence_size, hidden_size), hierarchy=hierarchy)
 
 
 def _matmul(view_a: TileView, view_b: TileView) -> TileView:
@@ -59,10 +69,7 @@ def _matmul(view_a: TileView, view_b: TileView) -> TileView:
             )
         )
 
-    return TileView(
-        shape=shape,
-        hierarchy=hierarchy,
-    )
+    return TileView(shape=shape, hierarchy=hierarchy)
 
 
 def _binary_operation(view_a: TileView, _: TileView) -> TileView:
@@ -115,24 +122,13 @@ def _transpose(view: TileView, order) -> TileView:
     return TileView(shape=new_shape(view.shape), hierarchy=hierarchy)
 
 
-def create_tile_view(
-    shape: tuple[int, ...],
-    hierarchy: list[TileLevel],
-):
-    return TileView(
-        shape=shape,
-        hierarchy=hierarchy,
-    )
+def create_tile_view(shape: tuple[int, ...], hierarchy: list[TileLevel]):
+    return TileView(shape=shape, hierarchy=hierarchy)
 
 
 def retilize_view(old_view: TileView, hierarchy: list[TileLevel]):
-    new_view = TileView(
-        shape=old_view.shape,
-        hierarchy=hierarchy,
-    )
-
+    new_view = TileView(shape=old_view.shape, hierarchy=hierarchy)
     steps = None
-
     return new_view, steps
 
 
@@ -173,7 +169,9 @@ def propagate_tile_views(
         input_tile_views = [cache[operand] for operand in get_operands(graph, node)]
 
         if instruction_class_name == "Constant":
-            tile_view = create_tile_view((), [TileLevel(level_name="tile", tile_shape=())])
+            tile_view = create_tile_view(
+                (), [TileLevel(level_name="tile", tile_shape=()), ScalarTileLevel(level_name="scalar", rank=0)]
+            )
         elif instruction_class_name == "embedding":
             tile_view = _embedding(input_tile_views[0], input_tile_views[1])
         elif instruction_class_name == "matmul":

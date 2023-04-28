@@ -8,12 +8,14 @@ from pyrsistent import PClass, field, pmap
 from toolz import first
 
 from composit.introspection import class_name
+from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, TileView
 
 
 class ArrayTileConfig(PClass):
     level_name = field()
     shape = field()
+    layout = field()
     index_to_tile = field()
 
     @property
@@ -44,7 +46,7 @@ class ArrayTileConfig(PClass):
             f"{class_name(self)}(level_name={self.level_name}, shape={self.shape}, "
             f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
         )
-        first_child = first(self.index_to_tile.values())
+        first_child = self.next_level()
         if isinstance(first_child, ArrayTileConfig):
             first_child_repr = f"\n{first_child}"
         else:
@@ -54,8 +56,9 @@ class ArrayTileConfig(PClass):
 
 
 class AtomicTileConfig(PClass):
-    level_name = field(initial="atomic")
+    level_name = field()
     shape = field()
+    layout = field()
     slices = field()
 
     @property
@@ -94,38 +97,44 @@ def create_array_tile_config(
 
         new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
-        if remaining_hierarchy:
+        if len(remaining_hierarchy) > 1:
             index_to_tile[tile_indices] = create_array_tile_config(
                 TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets
             )
         else:
+            leaf_level = remaining_hierarchy[-1]
             tile_slices = tuple(slice(index, index + tile_dim) for index, tile_dim in zip(new_offsets, tile_shape))
-            index_to_tile[tile_indices] = AtomicTileConfig(shape=tile_shape, slices=tile_slices)
+            index_to_tile[tile_indices] = AtomicTileConfig(
+                level_name=leaf_level.level_name,
+                shape=tile_shape,
+                layout=leaf_level.layout,
+                slices=tile_slices,
+            )
 
     array_tile_config = ArrayTileConfig(
         level_name=tile_level.level_name,
         shape=shape,
+        layout=tile_level.layout,
         index_to_tile=pmap(index_to_tile),
     )
 
     return array_tile_config
 
 
-def to_tiles(tensor, arg, transpose_levels, order):
+def to_tiles(tensor, arg):
     if isinstance(arg, ArrayTileConfig):
         array_tile_config = arg
         ranges = tuple(range(num_tiles) for num_tiles in array_tile_config.num_tiles_per_axis())
-        if array_tile_config.level_name in transpose_levels:
-            ranges = [ranges[axis] for axis in order]
+        if isinstance(arg.layout, TransposedLayout):
+            ranges = [ranges[axis] for axis in arg.layout.order]
         for tile_indices in itertools.product(*ranges):
-            if array_tile_config.level_name in transpose_levels:
-                tile_indices = tuple([tile_indices[axis] for axis in order])
-            yield from to_tiles(tensor, array_tile_config[tile_indices], transpose_levels, order)
+            if isinstance(arg.layout, TransposedLayout):
+                tile_indices = tuple([tile_indices[axis] for axis in arg.layout.order])
+            yield from to_tiles(tensor, array_tile_config[tile_indices])
     else:
-        slice_metadata = arg
-        tensor = tensor[slice_metadata.slices]
-        if slice_metadata.level_name in transpose_levels:
-            tensor = np.transpose(tensor, order)
+        tensor = tensor[arg.slices]
+        if isinstance(arg.layout, TransposedLayout):
+            tensor = np.transpose(tensor, arg.layout.order)
         yield tensor
 
 
@@ -154,13 +163,8 @@ def create_aligned_array(shape, dtype, align=32):
     return array
 
 
-def to_tilized_array(
-    array: np.array, array_tile_config: ArrayTileConfig, *, transpose_levels=None, order=None
-) -> np.ndarray:
-    if transpose_levels is None:
-        transpose_levels = set()
-
-    tiles = to_tiles(array, array_tile_config, transpose_levels, order)
+def to_tilized_array(array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
+    tiles = to_tiles(array, array_tile_config)
 
     tile_size = math.prod(array_tile_config.hierarchy[-1].tile_shape)
     start = 0

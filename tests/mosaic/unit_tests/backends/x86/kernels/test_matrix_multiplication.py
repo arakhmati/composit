@@ -14,7 +14,8 @@ import numpy as np
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
-from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
+from mosaic.tilelab.layout import DefaultLayout, TransposedLayout
+from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views, ScalarTileLevel
 from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import matrix_multiplication
 from mosaic.backends.x86.compile import compile_shared_library
@@ -64,7 +65,8 @@ def run_cnp_kernel(
     l1_cache_a_shape,
     l1_cache_b_shape,
     *,
-    input_b_levels_to_transpose,
+    l1_cache_b_layout,
+    scalar_b_layout,
     use_avx_manually,
 ):
     test_output_path.mkdir(parents=True, exist_ok=True)
@@ -78,8 +80,14 @@ def run_cnp_kernel(
     tile_views = propagate_tile_views(
         output_var.graph,
         inputs={
-            input_a_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
-            input_b_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
+            input_a_var: [
+                TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
+                ScalarTileLevel(level_name="scalar", rank=len(l1_cache_a_shape)),
+            ],
+            input_b_var: [
+                TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape, layout=l1_cache_b_layout),
+                ScalarTileLevel(level_name="scalar", rank=len(l1_cache_b_shape), layout=scalar_b_layout),
+            ],
         },
     )
     input_a_array_tile_config = create_array_tile_config(tile_views[input_a_var])
@@ -92,7 +100,6 @@ def run_cnp_kernel(
         input_a_array_tile_config,
         input_b_array_tile_config,
         output_array_tile_config,
-        input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )
 
@@ -108,12 +115,7 @@ def run_cnp_kernel(
 
     def run(np_input_a, np_input_b):
         input_a_flat_array = to_tilized_array(np_input_a, input_a_array_tile_config)
-        input_b_flat_array = to_tilized_array(
-            np_input_b,
-            input_b_array_tile_config,
-            transpose_levels=input_b_levels_to_transpose,
-            order=transpose_order,
-        )
+        input_b_flat_array = to_tilized_array(np_input_b, input_b_array_tile_config)
         output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_a_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_a_flat_array),
@@ -150,12 +152,13 @@ def run_matrix_multiplication(
     test_output_path,
     num_iterations: int,
     compare_against_torch: bool,
-    input_b_levels_to_transpose: list[str],
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
+    l1_cache_b_layout,
+    scalar_b_layout,
 ):
     fig, ax = plt.subplots()
     if compare_against_torch:
@@ -169,7 +172,8 @@ def run_matrix_multiplication(
         input_b_shape,
         l1_cache_a_shape=l1_cache_a_shape,
         l1_cache_b_shape=l1_cache_b_shape,
-        input_b_levels_to_transpose=input_b_levels_to_transpose,
+        l1_cache_b_layout=l1_cache_b_layout,
+        scalar_b_layout=scalar_b_layout,
         use_avx_manually=use_avx_manually,
     )
 
@@ -186,22 +190,24 @@ def run_matrix_multiplication(
 
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
-@pytest.mark.parametrize("input_b_levels_to_transpose", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
 @pytest.mark.parametrize("input_b_shape", [(128, 128)])
 @pytest.mark.parametrize("l1_cache_b_shape", [(64, 64)])
+@pytest.mark.parametrize("l1_cache_b_layout", [DefaultLayout(), TransposedLayout(order=(1, 0))])
+@pytest.mark.parametrize("scalar_b_layout", [DefaultLayout(), TransposedLayout(order=(1, 0))])
 def test_matrix_multiplication(
     request,
     num_iterations,
     compare_against_torch: bool,
-    input_b_levels_to_transpose: list[str],
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
+    l1_cache_b_layout,
+    scalar_b_layout,
 ):
     np.random.seed(0)
 
@@ -212,33 +218,36 @@ def test_matrix_multiplication(
         test_output_path,
         num_iterations,
         compare_against_torch,
-        input_b_levels_to_transpose,
         use_avx_manually,
         input_a_shape,
         l1_cache_a_shape,
         input_b_shape,
         l1_cache_b_shape,
+        l1_cache_b_layout,
+        scalar_b_layout,
     )
 
 
 @pytest.mark.parametrize("num_iterations", [1000])
 @pytest.mark.parametrize("compare_against_torch", [False])
-@pytest.mark.parametrize("input_b_levels_to_transpose", [[], ["atomic"], ["l1_cache"], ["atomic", "l1_cache"]])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 4, 128, 128)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 1, 64, 64)])
 @pytest.mark.parametrize("input_b_shape", [(1, 4, 128, 128)])
 @pytest.mark.parametrize("l1_cache_b_shape", [(1, 1, 64, 64)])
+@pytest.mark.parametrize("l1_cache_b_layout", [DefaultLayout(), TransposedLayout(order=(0, 1, 3, 2))])
+@pytest.mark.parametrize("scalar_b_layout", [DefaultLayout(), TransposedLayout(order=(0, 1, 3, 2))])
 def test_batched_matrix_multiplication(
     request,
     num_iterations,
     compare_against_torch: bool,
-    input_b_levels_to_transpose: list[str],
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
     input_b_shape: tuple[int, ...],
     l1_cache_b_shape: tuple[int, ...],
+    l1_cache_b_layout,
+    scalar_b_layout,
 ):
     np.random.seed(0)
 
@@ -249,12 +258,13 @@ def test_batched_matrix_multiplication(
         test_output_path,
         num_iterations,
         compare_against_torch,
-        input_b_levels_to_transpose,
         use_avx_manually,
         input_a_shape,
         l1_cache_a_shape,
         input_b_shape,
         l1_cache_b_shape,
+        l1_cache_b_layout,
+        scalar_b_layout,
     )
 
 
@@ -275,10 +285,11 @@ if __name__ == "__main__":
         FILE_DIR / "test_output" / "custom",
         num_iterations=25,
         compare_against_torch=True,
-        input_b_levels_to_transpose=["atomic", "l1_cache"],
         use_avx_manually=True,
         input_a_shape=(batch_size, sequence_size, m_size, k_size),
         l1_cache_a_shape=(batch_size, sequence_size, tile_m_size, tile_k_size),
         input_b_shape=(batch_size, sequence_size, k_size, n_size),
         l1_cache_b_shape=(batch_size, sequence_size, tile_k_size, tile_n_size),
+        l1_cache_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
+        scalar_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
     )

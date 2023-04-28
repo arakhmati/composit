@@ -2,6 +2,7 @@ import math
 import pathlib
 
 import codegen as c
+from mosaic.tilelab.layout import TransposedLayout
 
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
@@ -9,11 +10,8 @@ from mosaic.backends.x86.kernel_name import create_kernel_name
 from mosaic.backends.ctypes import get_ctype_string_from_numpy_dtype
 
 
-def generate_kernel(path, array_tile_config: ArrayTileConfig, dtype, transpose_levels=None, order=None):
-    if transpose_levels is None:
-        transpose_levels = set()
-
-    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, array_tile_config, dtype, transpose_levels, order)
+def generate_kernel(path, array_tile_config: ArrayTileConfig, dtype):
+    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, array_tile_config, dtype)
 
     ctype_string = get_ctype_string_from_numpy_dtype(dtype)
     InputType = c.Type(ctype_string).const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
@@ -27,8 +25,6 @@ def generate_kernel(path, array_tile_config: ArrayTileConfig, dtype, transpose_l
         arguments=[input_var, output_var],
         offset=c.literal(0),
         original_shape=array_tile_config.shape,
-        transpose_levels=transpose_levels,
-        order=order,
     )
 
     file = c.File(
@@ -88,7 +84,7 @@ def transpose_sequence(sequence, axes):
     return tuple(new_sequence)
 
 
-def generate_body(array_tile_config, arguments, offset, original_shape, transpose_levels, order, all_indices=None):
+def generate_body(array_tile_config, arguments, offset, original_shape, all_indices=None):
     if all_indices is None:
         all_indices = []
 
@@ -101,7 +97,8 @@ def generate_body(array_tile_config, arguments, offset, original_shape, transpos
     indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_{axis}") for axis, _ in enumerate(ranges)]
     original_indices = list(indices)
 
-    if level_name in transpose_levels:
+    if isinstance(array_tile_config.layout, TransposedLayout):
+        order = array_tile_config.layout.order
         num_tiles_per_axis = transpose_sequence(num_tiles_per_axis, order)
         ranges = transpose_sequence(ranges, order)
         indices = transpose_sequence(indices, order)
@@ -120,8 +117,6 @@ def generate_body(array_tile_config, arguments, offset, original_shape, transpos
             arguments=[input_var, output_var],
             offset=next_offset,
             original_shape=original_shape,
-            transpose_levels=transpose_levels,
-            order=order,
             all_indices=all_indices,
         )
     else:

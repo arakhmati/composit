@@ -15,7 +15,7 @@ import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.kernels.binary_operation import operation_to_python_operator
-from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views
+from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views, ScalarTileLevel
 from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import binary_operation
 from mosaic.backends.x86.compile import compile_shared_library
@@ -104,8 +104,14 @@ def run_cnp_kernel(
     tile_views = propagate_tile_views(
         output_var.graph,
         inputs={
-            input_a_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape)],
-            input_b_var: [TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape)],
+            input_a_var: [
+                TileLevel(level_name="l1_cache", tile_shape=l1_cache_a_shape),
+                ScalarTileLevel(level_name="scalar", rank=len(l1_cache_a_shape)),
+            ],
+            input_b_var: [
+                TileLevel(level_name="l1_cache", tile_shape=l1_cache_b_shape),
+                ScalarTileLevel(level_name="scalar", rank=len(l1_cache_b_shape)),
+            ],
         },
     )
     input_a_array_tile_config = create_array_tile_config(tile_views[input_a_var])

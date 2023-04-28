@@ -3,6 +3,7 @@ import pathlib
 from typing import Union
 
 import codegen as c
+from mosaic.tilelab.layout import TransposedLayout
 
 from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
@@ -38,17 +39,12 @@ def generate_kernel(
     input_b_array_tile_config,
     output_array_tile_config,
     *,
-    input_b_levels_to_transpose,
     use_avx_manually: bool,
 ):
-    if input_b_levels_to_transpose is None:
-        input_b_levels_to_transpose = set()
-
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_a_array_tile_config,
         input_b_array_tile_config,
-        input_b_levels_to_transpose,
         use_avx_manually,
     )
 
@@ -63,7 +59,6 @@ def generate_kernel(
         input_b_array_tile_config,
         arguments=[input_a_var, input_b_var, output_var],
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
-        input_b_levels_to_transpose=input_b_levels_to_transpose,
         use_avx_manually=use_avx_manually,
     )
 
@@ -103,13 +98,23 @@ def initialize_output(output_array_tile_config, output_var):
     return c.block(loop)
 
 
+def input_b_is_transposed(array_tile_config):
+    if not isinstance(array_tile_config.layout, TransposedLayout):
+        return False
+
+    order = tuple(array_tile_config.layout.order)
+    contiguous_order = tuple(range(len(order)))
+    if order[:-2] == contiguous_order[:-2] and order[-2:] != contiguous_order[-2:]:
+        return True
+    return False
+
+
 def generate_body(
     input_a_array_tile_config,
     input_b_array_tile_config,
     arguments,
     offsets,
     *,
-    input_b_levels_to_transpose,
     use_avx_manually: bool,
 ):
     input_a_var, input_b_var, output_var = arguments
@@ -150,7 +155,7 @@ def generate_body(
             + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
         )
 
-        if level_name in input_b_levels_to_transpose:
+        if input_b_is_transposed(input_b_array_tile_config):
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
                 + (
@@ -192,12 +197,11 @@ def generate_body(
             input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
             arguments=arguments,
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
-            input_b_levels_to_transpose=input_b_levels_to_transpose,
             use_avx_manually=use_avx_manually,
         )
 
     else:
-        if level_name in input_b_levels_to_transpose:
+        if input_b_is_transposed(input_b_array_tile_config):
             inner_loop_index = k
             inner_loop_size = c.literal(k_size)
             outer_loop_index = n

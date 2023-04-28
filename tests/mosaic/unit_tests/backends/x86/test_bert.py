@@ -11,8 +11,8 @@ from loguru import logger
 import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.x86.model import compile_to_mosaic_model, evaluate_mosaic_model
-from mosaic.tilelab.tile_view import TileLevel
-
+from mosaic.tilelab.layout import TransposedLayout
+from mosaic.tilelab.tile_view import TileLevel, ScalarTileLevel
 
 from model_zoo.bert import (
     functional_bert,
@@ -58,6 +58,16 @@ def create_tile_shape(var, tile_size):
         return ()
 
 
+def create_hierarchy(var, tile_shape):
+    kwargs = {}
+    if "dense.weight" in var.name:
+        kwargs = dict(layout=TransposedLayout(order=(1, 0)))
+    return [
+        TileLevel(level_name="tile", tile_shape=tile_shape, **kwargs),
+        ScalarTileLevel(level_name="scalar", rank=len(tile_shape), **kwargs),
+    ]
+
+
 def composit_model(
     batch_size,
     num_encoders,
@@ -83,9 +93,7 @@ def composit_model(
 
     # Use solver to figure out the tile levels
     input_var_to_scheme = {
-        var: [
-            TileLevel(level_name="tile", tile_shape=create_tile_shape(var, head_size)),
-        ]
+        var: create_hierarchy(var, create_tile_shape(var, head_size))
         for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
     }
 

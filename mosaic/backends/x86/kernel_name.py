@@ -8,7 +8,7 @@ def normalize_value(value):
     if isinstance(value, str):
         return value
     elif isinstance(value, ArrayTileConfig):
-        return f"{normalize_value(value.shape)}_{normalize_value(value.hierarchy)}"
+        return f"{normalize_value(value.shape)}_{normalize_value(value.hierarchy)}_{normalize_value(value.layout)}"
     elif isinstance(value, TileLevel):
         return f"{value.level_name}_{normalize_value(value.tile_shape)}"
     elif isinstance(value, collections.abc.Iterable):
@@ -18,8 +18,8 @@ def normalize_value(value):
 
 def create_kernel_name(*args):
     kernel_name = "__".join(f"{normalize_value(value)}" for value in args)
-    kernel_name = kernel_name.replace(" ", "_")
-    kernel_name = kernel_name.replace("-", "_")
+    for character in [" ", "-", "(", ")", "=", ","]:
+        kernel_name = kernel_name.replace(character, "_")
     return kernel_name
 
 
