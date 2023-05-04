@@ -25,6 +25,19 @@ FLAGS = [
 ]
 
 
+def compile_source_file_to_assembly(source_file: Path, include_paths: Collection[Path], output_object_file: Path):
+    output_object_file.unlink(missing_ok=True)
+    output_object_file = str(output_object_file)
+
+    source_file = str(source_file)
+    include_paths = [str(include_path) for include_path in include_paths]
+
+    command = ["g++", "-c", source_file, *include_paths, *FLAGS, "-S", "-fverbose-asm", "-o", output_object_file]
+    logger.info(f"Compile Source Code to Assembly: \"{' '.join(command)}\"")
+    result = subprocess.run(command)
+    assert result.returncode == 0
+
+
 def compile_source_file_to_object_file(source_file: Path, include_paths: Collection[Path], output_object_file: Path):
     output_object_file.unlink(missing_ok=True)
     output_object_file = str(output_object_file)
@@ -33,7 +46,7 @@ def compile_source_file_to_object_file(source_file: Path, include_paths: Collect
     include_paths = [str(include_path) for include_path in include_paths]
 
     command = ["g++", "-c", source_file, *include_paths, *FLAGS, "-o", output_object_file]
-    logger.info(f"Compile source Code to object file: \"{' '.join(command)}\"")
+    logger.info(f"Compile Source Code to Object File: \"{' '.join(command)}\"")
     result = subprocess.run(command)
     assert result.returncode == 0
 
@@ -66,8 +79,11 @@ def compile_shared_library(test_output_path, kernel_name, enable_tracy=False):
     shared_library.unlink(missing_ok=True)
     shared_library = str(shared_library)
     command = ["g++", "-fPIC", "-shared", "-rdynamic", *object_files, "-o", shared_library]
-    logger.info(f"Compile Assembly to Binary: \"{' '.join(command)}\"")
+    logger.info(f"Compile Object Files to Shared Library: \"{' '.join(command)}\"")
     result = subprocess.run(command)
     assert result.returncode == 0
+
+    kernel_assembly_file = test_output_path / f"{kernel_name}.s"
+    compile_source_file_to_assembly(kernel_source_file, include_paths, kernel_assembly_file)
 
     return shared_library
