@@ -1,4 +1,12 @@
+# ruff: noqa: E402
 from __future__ import annotations
+
+import os
+
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS "] = "1"
 
 import pytest
 
@@ -21,6 +29,39 @@ from mosaic.backends.x86.kernels import matrix_multiplication
 from mosaic.backends.x86.compile import compile_shared_library
 
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
+
+
+def compute_gflops(input_a_shape, input_b_shape, time_in_milliseconds):
+    return ((2 * math.prod(input_a_shape[-2:]) * input_b_shape[-1]) / (time_in_milliseconds / 1e3)) / 1e9
+
+
+def run_numpy(num_iterations, input_a_shape, input_b_shape):
+    logger.info("Run Numpy")
+    import torch
+
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
+
+    def run(np_input_a, np_input_b):
+        output = np_input_a @ np_input_b
+        return output
+
+    execution_times = []
+    for i in range(num_iterations):
+        start = time.time_ns()
+
+        np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
+
+        run(np_input_a, np_input_b)
+        end = time.time_ns()
+        execution_times.append(end - start)
+
+    execution_times = np.asarray(execution_times) / 1e6
+    logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
+    logger.info(f"Minimum Execution Time: {execution_times.min()} milliseconds")
+    logger.info(f"Maximum Execution Time: {execution_times.max()} milliseconds")
+    return execution_times
 
 
 def run_torch(num_iterations, input_a_shape, input_b_shape):
@@ -153,7 +194,7 @@ def run_cnp_kernel(
 def run_matrix_multiplication(
     test_output_path,
     num_iterations: int,
-    compare_against_torch: bool,
+    compare_against_others: bool,
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
@@ -163,11 +204,6 @@ def run_matrix_multiplication(
     scalar_b_layout,
     enable_profiling=False,
 ):
-    fig, ax = plt.subplots()
-    if compare_against_torch:
-        torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
-        ax.plot(torch_execution_times, color="red")
-
     cnp_execution_times = run_cnp_kernel(
         num_iterations,
         test_output_path,
@@ -181,7 +217,19 @@ def run_matrix_multiplication(
         enable_profiling=enable_profiling,
     )
 
+    fig, ax = plt.subplots()
     ax.plot(cnp_execution_times, color="green")
+
+    if compare_against_others:
+        torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
+        numpy_execution_times = run_numpy(num_iterations, input_a_shape, input_b_shape)
+
+        ax.plot(torch_execution_times, color="red")
+        ax.plot(numpy_execution_times, color="blue")
+
+        logger.info(f"{compute_gflops(input_a_shape, input_b_shape, torch_execution_times)} GFLOPS (torch)")
+        logger.info(f"{compute_gflops(input_a_shape, input_b_shape, numpy_execution_times)} GFLOPS (numpy)")
+    logger.info(f"{compute_gflops(input_a_shape, input_b_shape, cnp_execution_times)} GFLOPS (composit)")
 
     def center_y_axis(axes):
         y_max = np.abs(axes.get_ylim()).max()
@@ -193,7 +241,7 @@ def run_matrix_multiplication(
 
 
 @pytest.mark.parametrize("num_iterations", [1000])
-@pytest.mark.parametrize("compare_against_torch", [False])
+@pytest.mark.parametrize("compare_against_others", [False])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 128, 128)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 64, 64)])
@@ -204,7 +252,7 @@ def run_matrix_multiplication(
 def test_matrix_multiplication(
     request,
     num_iterations,
-    compare_against_torch: bool,
+    compare_against_others: bool,
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
@@ -221,7 +269,7 @@ def test_matrix_multiplication(
     run_matrix_multiplication(
         test_output_path,
         num_iterations,
-        compare_against_torch,
+        compare_against_others,
         use_avx_manually,
         input_a_shape,
         l1_cache_a_shape,
@@ -233,7 +281,7 @@ def test_matrix_multiplication(
 
 
 @pytest.mark.parametrize("num_iterations", [1000])
-@pytest.mark.parametrize("compare_against_torch", [False])
+@pytest.mark.parametrize("compare_against_others", [False])
 @pytest.mark.parametrize("use_avx_manually", [False, True])
 @pytest.mark.parametrize("input_a_shape", [(1, 4, 128, 128)])
 @pytest.mark.parametrize("l1_cache_a_shape", [(1, 1, 64, 64)])
@@ -244,7 +292,7 @@ def test_matrix_multiplication(
 def test_batched_matrix_multiplication(
     request,
     num_iterations,
-    compare_against_torch: bool,
+    compare_against_others: bool,
     use_avx_manually: bool,
     input_a_shape: tuple[int, ...],
     l1_cache_a_shape: tuple[int, ...],
@@ -261,7 +309,7 @@ def test_batched_matrix_multiplication(
     run_matrix_multiplication(
         test_output_path,
         num_iterations,
-        compare_against_torch,
+        compare_against_others,
         use_avx_manually,
         input_a_shape,
         l1_cache_a_shape,
@@ -288,7 +336,7 @@ if __name__ == "__main__":
     run_matrix_multiplication(
         FILE_DIR / "test_output" / "custom",
         num_iterations=25,
-        compare_against_torch=True,
+        compare_against_others=True,
         use_avx_manually=True,
         input_a_shape=(batch_size, sequence_size, m_size, k_size),
         l1_cache_a_shape=(batch_size, sequence_size, tile_m_size, tile_k_size),
@@ -296,5 +344,5 @@ if __name__ == "__main__":
         l1_cache_b_shape=(batch_size, sequence_size, tile_k_size, tile_n_size),
         l1_cache_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
         scalar_b_layout=TransposedLayout(order=(0, 1, 3, 2)),
-        enable_profiling=True,
+        enable_profiling=False,
     )
