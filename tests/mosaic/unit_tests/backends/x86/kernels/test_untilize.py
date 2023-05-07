@@ -46,7 +46,7 @@ def run_cnp_kernel(
     array_tile_config = create_array_tile_config(tile_view)
 
     logger.info("Generate kernels")
-    kernel_name = untilize.generate_kernel(test_output_path, array_tile_config, input_var.dtype)
+    kernel_name = untilize.generate_kernel_source_file(test_output_path, array_tile_config, input_var.dtype)
 
     logger.info("Compile kernel as shared library")
     shared_library_file = compile_shared_library(test_output_path, kernel_name)

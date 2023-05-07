@@ -119,7 +119,7 @@ def run_cnp_kernel(
     output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
     logger.info("Generate kernel")
-    kernel_name = binary_operation.generate_kernel(
+    kernel_name = binary_operation.generate_kernel_source_file(
         test_output_path,
         input_a_array_tile_config,
         input_b_array_tile_config,

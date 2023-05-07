@@ -82,7 +82,7 @@ def run_cnp_kernel(
     logger.info(output_array_tile_config)
 
     logger.info("Generate kernel")
-    kernel_name = transpose.generate_kernel(
+    kernel_name = transpose.generate_kernel_source_file(
         test_output_path,
         input_array_tile_config,
         output_array_tile_config,

@@ -20,7 +20,7 @@ float _maxf(float input_a, float input_b) {
 """
 
 
-def generate_kernel(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
+def generate_kernel_source_file(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
     kwargs = dict(
         mean_coefficient=1.0 / (math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape))
     )
@@ -55,14 +55,12 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
             c.NewLine(),
             c.Text(max_function),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

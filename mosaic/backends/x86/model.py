@@ -334,30 +334,30 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         if instruction_class_name == "Constant":
             continue
         elif instruction_class_name == "Variable":
-            node_to_kernel_name[node] = tilize.generate_kernel(
+            node_to_kernel_name[node] = tilize.generate_kernel_source_file(
                 test_output_path,
                 output_array_tile_config,
                 graph.nodes[node]["dtypes"][0],
             )
         elif instruction_class_name == "matmul":
-            node_to_kernel_name[node] = matrix_multiplication.generate_kernel(
+            node_to_kernel_name[node] = matrix_multiplication.generate_kernel_source_file(
                 test_output_path,
                 *input_array_tile_configs,
                 output_array_tile_config,
                 use_avx_manually=True,
             )
         elif instruction_class_name in {"exp", "sqrt", "gelu"}:
-            node_to_kernel_name[node] = unary_operation.generate_kernel(
+            node_to_kernel_name[node] = unary_operation.generate_kernel_source_file(
                 test_output_path, *input_array_tile_configs, instruction_class_name
             )
         elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
-            node_to_kernel_name[node] = binary_operation.generate_kernel(
+            node_to_kernel_name[node] = binary_operation.generate_kernel_source_file(
                 test_output_path, *input_array_tile_configs, instruction_class_name
             )
         elif instruction_class_name in {"reshape"}:
             node_to_kernel_name[node] = None
         elif instruction_class_name in {"sum", "mean", "max"}:
-            node_to_kernel_name[node] = reduce.generate_kernel(
+            node_to_kernel_name[node] = reduce.generate_kernel_source_file(
                 test_output_path,
                 *input_array_tile_configs,
                 output_array_tile_config,
@@ -366,9 +366,9 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         elif instruction_class_name in {"embedding"}:
             node_to_kernel_name[node] = node_to_kernel_name[node] = node_to_kernel_name[
                 node
-            ] = embedding.generate_kernel(test_output_path, output_array_tile_config)
+            ] = embedding.generate_kernel_source_file(test_output_path, output_array_tile_config)
         elif instruction_class_name in {"transpose"}:
-            node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel(
+            node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel_source_file(
                 test_output_path, *input_array_tile_configs, output_array_tile_config, instruction.axes
             )
         else:

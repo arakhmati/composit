@@ -20,7 +20,7 @@ operation_to_python_operator = {
 }
 
 
-def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: ArrayTileConfig, operation):
+def generate_kernel_source_file(path, input_a_array_tile_config, input_b_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_a_array_tile_config,
@@ -56,14 +56,12 @@ def generate_kernel(path, input_a_array_tile_config, input_b_array_tile_config: 
             c.NewLine(),
             c.NewLine(),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.void_function(
                 name=c.Identifier(kernel_name),
                 arguments=arguments,
                 body_function=body_function,
                 **body_function_kwargs,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

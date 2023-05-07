@@ -357,6 +357,7 @@ class Function:
 
     _inline: bool = False
     _static: bool = False
+    _extern_c: bool = False
 
     def set_indentation_level(self, indentation_level=0):
         self.body.set_indentation_level(indentation_level)
@@ -374,6 +375,9 @@ class Function:
         if self._static:
             string = f"static {string}"
 
+        if self._extern_c:
+            string = f'extern "C" {string}'
+
         return string
 
     def inline(self):
@@ -381,6 +385,9 @@ class Function:
 
     def static(self):
         return replace(self, _static=True)
+
+    def extern_c(self):
+        return replace(self, _extern_c=True)
 
 
 def void_function(name, arguments, body_function, *args, **kwargs):

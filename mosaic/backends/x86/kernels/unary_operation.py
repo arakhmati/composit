@@ -27,7 +27,7 @@ static inline float geluf(float input) {
 """
 
 
-def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
+def generate_kernel_source_file(path, input_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_config,
@@ -52,14 +52,12 @@ def generate_kernel(path, input_array_tile_config: ArrayTileConfig, operation):
             c.NewLine(),
             c.Text(gelu_function),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

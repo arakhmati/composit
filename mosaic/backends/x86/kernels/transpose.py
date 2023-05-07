@@ -12,7 +12,7 @@ InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMEN
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_kernel(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, axes):
+def generate_kernel_source_file(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, axes):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_config,
@@ -37,14 +37,12 @@ def generate_kernel(path, input_array_tile_config, output_array_tile_config: Arr
             c.Include("stdint.h"),
             c.NewLine(),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

@@ -93,7 +93,7 @@ def run_cnp_kernel(
     output_array_tile_config = create_array_tile_config(tile_views[output_var])
 
     logger.info("Generate kernel")
-    kernel_name = embedding.generate_kernel(test_output_path, output_array_tile_config)
+    kernel_name = embedding.generate_kernel_source_file(test_output_path, output_array_tile_config)
 
     logger.info("Compile kernel as shared library")
     shared_library_file = compile_shared_library(test_output_path, kernel_name)

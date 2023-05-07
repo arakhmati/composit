@@ -73,10 +73,7 @@ def test_matrix_multiplication_with_bias(
 
     input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var)
     mosaic_model = compile_to_mosaic_model(
-        output_var,
-        input_var_to_scheme=input_var_to_scheme,
-        output_path=test_output_path,
-        reuse_buffers=True,
+        output_var, input_var_to_scheme=input_var_to_scheme, output_path=test_output_path, reuse_buffers=True
     )
     mosaic_output = evaluate_mosaic_model(mosaic_model, output_var, inputs={input_var: np_input})
     assert np.allclose(cnp_output, mosaic_output)

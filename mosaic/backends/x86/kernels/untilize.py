@@ -9,7 +9,7 @@ from mosaic.backends.x86.kernel_name import create_kernel_name
 from mosaic.backends.ctypes import get_ctype_string_from_numpy_dtype
 
 
-def generate_kernel(path, array_tile_config: ArrayTileConfig, dtype):
+def generate_kernel_source_file(path, array_tile_config: ArrayTileConfig, dtype):
     kernel_name = create_kernel_name(pathlib.Path(__file__).stem, array_tile_config, dtype)
 
     ctype_string = get_ctype_string_from_numpy_dtype(dtype)
@@ -33,14 +33,12 @@ def generate_kernel(path, array_tile_config: ArrayTileConfig, dtype):
             c.Include("stdint.h"),
             c.NewLine(),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

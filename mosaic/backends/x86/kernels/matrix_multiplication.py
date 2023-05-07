@@ -33,7 +33,7 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
 )
 
 
-def generate_kernel(
+def generate_kernel_source_file(
     path,
     input_a_array_tile_config,
     input_b_array_tile_config,
@@ -78,14 +78,12 @@ def generate_kernel(
             c.NewLine(),
             mm256_reduce_add_ps,
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_a_var, input_b_var, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()

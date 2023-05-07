@@ -13,7 +13,7 @@ WeightsType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNM
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_kernel(
+def generate_kernel_source_file(
     path,
     output_array_tile_config: ArrayTileConfig,
 ):
@@ -38,14 +38,12 @@ def generate_kernel(
             c.Include("stdint.h"),
             c.NewLine(),
             c.NewLine(),
-            c.Text('extern "C" {'),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, weights, output_var],
                 body=body,
-            ),
-            c.Text("}"),
+            ).extern_c(),
         ],
     )
     file.save()
