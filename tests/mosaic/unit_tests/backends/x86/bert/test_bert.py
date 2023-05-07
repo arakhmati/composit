@@ -38,7 +38,7 @@ def get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_s
 
 def create_composit_parameters(model):
     return {
-        cnp.nn.variable(name=name, shape=value.shape, dtype=np.float32): value
+        cnp.asarray(array=value, name=name)
         for name, value in convert_parameters_to_numpy(model).items()
         if "position_embeddings" not in name
     }
@@ -84,7 +84,7 @@ def composit_model(
             input_ids_var,
             token_type_ids_var,
             None,
-            {var.node.name: var for var in parameters.keys()},
+            {var.node.name: var for var in parameters},
             num_encoders=num_encoders,
             sequence_size=sequence_size,
             num_attention_heads=num_attention_heads,
@@ -94,7 +94,7 @@ def composit_model(
     # Use solver to figure out the tile levels
     input_var_to_scheme = {
         var: create_hierarchy(var, create_tile_shape(var, head_size))
-        for var in [input_ids_var, token_type_ids_var] + list(parameters.keys())
+        for var in [input_ids_var, token_type_ids_var] + list(parameters)
     }
 
     return output_var, (input_ids_var, token_type_ids_var), input_var_to_scheme
@@ -121,7 +121,7 @@ def setup_test(
         output_path=test_output_path,
         reuse_buffers=reuse_buffers,
     )
-    return mosaic_model, output_var, (input_ids_var, token_type_ids_var, composit_parameters), transformers_model
+    return mosaic_model, output_var, (input_ids_var, token_type_ids_var), transformers_model
 
 
 @pytest.mark.parametrize("num_inputs", [1])
@@ -143,7 +143,7 @@ def test_evaluates_correctly(
     vocab_size,
     reuse_buffers,
 ):
-    mosaic_model, output_var, (input_ids_var, token_type_ids_var, parameters), _ = setup_test(
+    mosaic_model, output_var, (input_ids_var, token_type_ids_var), _ = setup_test(
         request,
         batch_size,
         num_encoders,
@@ -158,20 +158,9 @@ def test_evaluates_correctly(
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-        inputs = {
-            input_ids_var: input_ids,
-            token_type_ids_var: token_type_ids,
-            **parameters,
-        }
-
-        golden_output, cache = cnp.nn.evaluate(
-            output_var,
-            inputs=inputs,
-            return_cache=True,
-        )
-
+        inputs = {input_ids_var: input_ids, token_type_ids_var: token_type_ids}
+        golden_output = cnp.nn.evaluate(output_var, inputs=inputs)
         output = evaluate_mosaic_model(mosaic_model, output_var, inputs=inputs)
-
         assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
 
@@ -196,7 +185,7 @@ def test_benchmark(
 ):
     torch.set_num_threads(1)
 
-    mosaic_model, output_var, (input_ids_var, token_type_ids_var, parameters), transformers_model = setup_test(
+    mosaic_model, output_var, (input_ids_var, token_type_ids_var), transformers_model = setup_test(
         request,
         batch_size,
         num_encoders,
@@ -210,17 +199,8 @@ def test_benchmark(
     input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
     token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-    inputs = {
-        input_ids_var: input_ids,
-        token_type_ids_var: token_type_ids,
-        **parameters,
-    }
-
-    golden_output, cache = cnp.nn.evaluate(
-        output_var,
-        inputs=inputs,
-        return_cache=True,
-    )
+    inputs = {input_ids_var: input_ids, token_type_ids_var: token_type_ids}
+    golden_output = cnp.nn.evaluate(output_var, inputs=inputs)
     output = evaluate_mosaic_model(mosaic_model, output_var, inputs=inputs)
     assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
