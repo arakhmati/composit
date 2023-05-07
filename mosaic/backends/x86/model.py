@@ -4,6 +4,7 @@ import enum
 import math
 import pathlib
 
+import numpy as np
 import toolz
 
 from loguru import logger
@@ -26,7 +27,7 @@ from mosaic.backends.x86.kernels import (
     tilize,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, from_tilized_array
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, from_tilized_array, to_tilized_array
 from mosaic.tilelab.tile_view import propagate_tile_views
 
 
@@ -57,6 +58,11 @@ class ConstantBufferDescriptor(PClass):
 
     def __hash__(self):
         return hash(self.name)
+
+    def __eq__(self, other: "ConstantBufferDescriptor"):
+        return (
+            self.name == other.name and self.buffer_type == other.buffer_type and np.allclose(self.array, other.array)
+        )
 
     def __repr__(self):
         return f"ConstantBufferDescriptor(name={self.name}, buffer_type={self.buffer_type}, array={self.array})"
@@ -234,12 +240,24 @@ def allocate_buffers(graph):
     buffer_descriptor_to_buffer = {}
     for buffer_descriptor, (size, dtype) in buffer_descriptor_to_size.items():
         array = create_aligned_array((size,), dtype=dtype)
-        if buffer_descriptor.buffer_type == BufferType.ConstantInput:
-            array[:] = buffer_descriptor.array
-        else:
-            array[:] = 0
+        array[:] = 0
         buffer_descriptor_to_buffer[buffer_descriptor] = Buffer(array=array)
     buffer_descriptor_to_buffer = pmap(buffer_descriptor_to_buffer)
+    return buffer_descriptor_to_buffer
+
+
+def populate_constant_buffers(graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
+    constant_nodes_with_attributes = (
+        (node, attributes)
+        for node, attributes in graph.nodes(data=True)
+        if class_name(attributes["instruction"]) == "Constant"
+    )
+    for node, attributes in constant_nodes_with_attributes:
+        output_index = 0
+        array_tile_config = node_output_to_array_tile_config[(node, output_index)]
+        buffer_descriptor = first(attributes["buffer_descriptors"])
+        buffer = buffer_descriptor_to_buffer[buffer_descriptor]
+        buffer.array[:] = to_tilized_array(buffer_descriptor.array, array_tile_config)
     return buffer_descriptor_to_buffer
 
 
@@ -313,7 +331,9 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         ]
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
-        if instruction_class_name in {"Variable", "Constant"}:
+        if instruction_class_name == "Constant":
+            continue
+        elif instruction_class_name == "Variable":
             node_to_kernel_name[node] = tilize.generate_kernel(
                 test_output_path,
                 output_array_tile_config,
@@ -443,14 +463,16 @@ def compile_to_mosaic_model(
     reuse_buffers,
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
+    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
+    node_to_run_kernel = generate_and_compile_kernels(graph, output_path, node_output_to_array_tile_config)
     buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
+    buffer_descriptor_to_buffer = populate_constant_buffers(
+        buffer_graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config
+    )
 
     # from composit.multidigraph import visualize_graph
     # visualize_graph(buffer_graph, visualize_node=visualize_node, timeout=5)
-
-    node_output_to_array_tile_config = propagate_array_tile_config(buffer_graph, input_var_to_scheme)
-    node_to_run_kernel = generate_and_compile_kernels(buffer_graph, output_path, node_output_to_array_tile_config)
 
     mosaic_model = Model(
         buffer_graph=buffer_graph,

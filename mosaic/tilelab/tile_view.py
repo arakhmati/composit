@@ -169,8 +169,13 @@ def propagate_tile_views(
         input_tile_views = [cache[operand] for operand in get_operands(graph, node)]
 
         if instruction_class_name == "Constant":
+            shape = graph.nodes[node]["shapes"][0]
             tile_view = create_tile_view(
-                (), [TileLevel(level_name="tile", tile_shape=()), ScalarTileLevel(level_name="scalar", rank=0)]
+                shape,
+                [
+                    TileLevel(level_name="tile", tile_shape=shape),
+                    ScalarTileLevel(level_name="scalar", rank=len(shape)),
+                ],
             )
         elif instruction_class_name == "embedding":
             tile_view = _embedding(input_tile_views[0], input_tile_views[1])
