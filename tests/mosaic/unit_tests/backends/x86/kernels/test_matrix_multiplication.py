@@ -31,8 +31,8 @@ from mosaic.backends.x86.compile import compile_shared_library
 FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
 
-def compute_gflops(input_a_shape, input_b_shape, time_in_milliseconds):
-    return ((2 * math.prod(input_a_shape[-2:]) * input_b_shape[-1]) / (time_in_milliseconds / 1e3)) / 1e9
+def compute_gflops(input_a_shape, input_b_shape, execution_times):
+    return ((2 * math.prod(input_a_shape[-2:]) * input_b_shape[-1]) / (execution_times.mean() / 1e3)) / 1e9
 
 
 def run_numpy(num_iterations, input_a_shape, input_b_shape):

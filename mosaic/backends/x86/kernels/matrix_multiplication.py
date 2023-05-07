@@ -17,9 +17,9 @@ OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 Vector256Type = c.Type("__m256")
 
 
-mm256_reduce_add_ps = c.Text(
+mm256_reduce_add_ps = c.Lambda(
     """ \
-static inline float _mm256_reduce_add_ps(__m256 x) {
+auto _mm256_reduce_add_ps = [](const auto& x) {
     /* ( x3+x7, x2+x6, x1+x5, x0+x4 ) */
     const __m128 x128 = _mm_add_ps(_mm256_extractf128_ps(x, 1), _mm256_castps256_ps128(x));
     /* ( -, -, x1+x3+x5+x7, x0+x2+x4+x6 ) */
@@ -28,7 +28,7 @@ static inline float _mm256_reduce_add_ps(__m256 x) {
     const __m128 x32 = _mm_add_ss(x64, _mm_shuffle_ps(x64, x64, 0x55));
     /* Conversion to float is a no-op on x86-64 */
     return _mm_cvtss_f32(x32);
-}
+};
 """
 )
 
@@ -75,8 +75,6 @@ def generate_kernel_source_file(
         [
             *includes,
             c.NewLine(),
-            c.NewLine(),
-            mm256_reduce_add_ps,
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
@@ -254,6 +252,7 @@ def generate_body(
                 )
 
                 outer_loop_body_after = c.block(
+                    mm256_reduce_add_ps,
                     c.Statement(
                         c.add_in_place(
                             output_var[

@@ -13,13 +13,6 @@ InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMEN
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-max_function = """     
-float _maxf(float input_a, float input_b) {
-    return input_a > input_b ? input_a : input_b;
-}
-"""
-
-
 def generate_kernel_source_file(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
     kwargs = dict(
         mean_coefficient=1.0 / (math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape))
@@ -52,8 +45,6 @@ def generate_kernel_source_file(path, input_array_tile_config, output_array_tile
             c.Include("math.h"),
             c.Include("stdint.h"),
             c.NewLine(),
-            c.NewLine(),
-            c.Text(max_function),
             c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
@@ -153,6 +144,7 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
             compute_offset(offsets["output"], output_indices, output_num_tiles_per_axis, 1)
         )
 
+        lambdas = []
         if operation == "sum":
             reduction_step = operator.add(output_var[output_index], input_var[input_index])
         elif operation == "mean":
@@ -160,12 +152,17 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
                 output_var[output_index], input_var[input_index] * c.literal(kwargs["mean_coefficient"])
             )
         elif operation == "max":
+            lambdas = [
+                c.Lambda(
+                    "auto _maxf = [](auto input_a, auto input_b) { return input_a > input_b ? input_a : input_b; };"
+                )
+            ]
             reduction_step = c.invoke("_maxf", output_var[output_index], input_var[input_index])
         else:
             raise NotImplementedError
 
         inner_loop_body = c.block(
-            declare_index, declare_output_index, c.assign(output_var[output_index], reduction_step)
+            declare_index, declare_output_index, *lambdas, c.assign(output_var[output_index], reduction_step)
         )
 
     loop = inner_loop_body

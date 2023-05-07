@@ -400,6 +400,14 @@ def void_function(name, arguments, body_function, *args, **kwargs):
 
 
 @dataclass
+class Lambda:
+    content: str
+
+    def __repr__(self):
+        return self.content
+
+
+@dataclass
 class FunctionCall:
     function_name: Identifier
     arguments: list[Union[Identifier, Expression]]
@@ -480,6 +488,7 @@ __all__ = [
     "ForLoop",
     "Function",
     "void_function",
+    "Lambda",
     "FunctionCall",
     "invoke",
     "Include",

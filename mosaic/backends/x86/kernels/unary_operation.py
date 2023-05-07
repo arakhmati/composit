@@ -17,15 +17,6 @@ operation_to_c_function = {
     "gelu": "geluf",
 }
 
-gelu_function = """     
-static inline float cdf(float input) {
-    return 0.5 * (1 + erff(input / sqrtf(2)));
-}
-static inline float geluf(float input) {
-    return input * cdf(input);
-}
-"""
-
 
 def generate_kernel_source_file(path, input_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
@@ -50,8 +41,6 @@ def generate_kernel_source_file(path, input_array_tile_config: ArrayTileConfig, 
             c.Include("stdint.h"),
             c.NewLine(),
             c.NewLine(),
-            c.Text(gelu_function),
-            c.NewLine(),
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
@@ -71,6 +60,13 @@ def generate_body(
 ):
     input_var, output_var = arguments
 
+    lambdas = []
+    if operation == "gelu":
+        lambdas = [
+            c.Lambda("auto cdf = [](float input) { return 0.5 * (1 + erff(input / sqrtf(2))); };"),
+            c.Lambda("auto geluf = [&cdf](float input) { return input * cdf(input); };"),
+        ]
+
     index = c.variable(c.Type("uint32_t"), "index")
     num_iterations = math.prod(input_array_tile_config.shape)
 
@@ -81,4 +77,4 @@ def generate_body(
         c.block(c.assign(output_var[index], c.invoke(operation_to_c_function[operation], input_var[index]))),
     )
 
-    return c.block(loop)
+    return c.block(*lambdas, loop)
