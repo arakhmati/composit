@@ -245,10 +245,9 @@ def matmul_kernel(avx_size):
 
 def test_matmul_kernel_file():
     avx_size = c.variable(c.AUTO.constexpr(), "AVX_SIZE")
-    file = c.File(
-        "matmul.hpp",
-        [
-            c.Include("immintrin.h"),
+    file = c.Module(
+        includes=[c.Include("immintrin.h")],
+        members=[
             c.NewLine(),
             avx_size << c.literal(8),
             c.NewLine(),

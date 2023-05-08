@@ -1,6 +1,5 @@
 import math
 import pathlib
-from typing import Union
 
 import codegen as c
 from mosaic.tilelab.layout import TransposedLayout
@@ -10,7 +9,7 @@ from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 from mosaic.backends.x86.constants import AVX_SIZE, MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 
-OffsetType = Union[c.Variable, c.Expression]
+OffsetType = c.Variable | c.Expression
 
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
@@ -72,7 +71,7 @@ def generate_module(
 
     module = c.Module(
         includes=includes,
-        functions=[
+        members=[
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),

@@ -21,7 +21,7 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
 
     module = c.Module(
         includes=[c.Include("math.h"), c.Include("stdint.h")],
-        functions=[
+        members=[
             c.void_function(
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],

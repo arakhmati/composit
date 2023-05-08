@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-from typing import Union
 
 import numpy as np
 from pyrsistent import immutable, PClass, field
@@ -68,7 +67,7 @@ def create_from_numpy_compute_instruction(
     *operands,
     instruction,
     dtype_to_override=None,
-) -> Union[PersistentArray, tuple[PersistentArray]]:
+) -> PersistentArray | tuple[PersistentArray]:
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):

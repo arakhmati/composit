@@ -1,5 +1,4 @@
 import enum
-import pathlib
 from dataclasses import dataclass, replace
 from typing import Union, Any, Optional
 
@@ -454,32 +453,16 @@ class Text:
 
 
 @dataclass
-class File:
-    name: Union[str, pathlib.Path]
-    elements: list[Union[Include, Variable, Function]]
-
-    def __repr__(self):
-        delimiter = "\n"
-        return f"{concatenate_as_string(self.elements, delimiter)}\n"
-
-    def save(self):
-        with open(self.name, "w") as f:
-            f.write(str(self))
-
-
-@dataclass
 class Module:
     includes: list[Include]
-    functions: list[Function]
+    members: list[Function | Statement]
 
     def __repr__(self):
         delimiter = "\n"
-        return (
-            f"{concatenate_as_string(self.includes, delimiter)}\n{concatenate_as_string(self.functions, delimiter)}\n"
-        )
+        return f"{concatenate_as_string(self.includes, delimiter)}\n{concatenate_as_string(self.members, delimiter)}\n"
 
     def __add__(self, other):
-        return Module(includes=list(set(self.includes + other.includes)), functions=self.functions + other.functions)
+        return Module(includes=list(set(self.includes + other.includes)), members=self.members + other.members)
 
     def __iadd__(self, other):
         return self + other
@@ -518,7 +501,6 @@ __all__ = [
     "invoke",
     "Include",
     "NewLine",
-    "File",
     "Module",
     "Text",
 ]

@@ -503,7 +503,7 @@ def generate_and_compile_run_model(
     graph, test_output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
 ):
     node_to_kernel_name = {}
-    module = c.Module(includes=[], functions=[])
+    module = c.Module(includes=[], members=[])
     kernel_names_in_module = set()
 
     for node, attributes in graph.nodes(data=True):
@@ -561,7 +561,7 @@ def generate_and_compile_run_model(
     model_name = "run_model"
     module += c.Module(
         includes=[],
-        functions=[
+        members=[
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(model_name),

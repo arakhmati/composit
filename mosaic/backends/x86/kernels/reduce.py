@@ -42,7 +42,7 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
 
     module = c.Module(
         includes=[c.Include("math.h"), c.Include("stdint.h")],
-        functions=[
+        members=[
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
