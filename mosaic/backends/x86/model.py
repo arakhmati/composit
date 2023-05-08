@@ -12,9 +12,10 @@ from pyrsistent import pmap, pvector, PClass, field
 from toolz import first
 
 from composit.introspection import class_name
-from composit.multidigraph import topological_traversal, compose_all
+from composit.multidigraph import topological_traversal, compose_all, MultiDiGraph
 from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
+from composit.persistent_array import Node
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
 from mosaic.backends.x86.kernels import (
@@ -25,9 +26,10 @@ from mosaic.backends.x86.kernels import (
     transpose,
     embedding,
     tilize,
+    untilize,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, from_tilized_array, to_tilized_array
+from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_tilized_array
 from mosaic.tilelab.tile_view import propagate_tile_views
 
 
@@ -76,10 +78,10 @@ class BufferManager(PClass):
 def intermediate_buffer_descriptor_factory():
     buffer_id = 0
 
-    def create_intermediate_buffer_descriptor():
+    def create_intermediate_buffer_descriptor(dtype):
         nonlocal buffer_id
         buffer_descriptor = BufferDescriptor(
-            name=f"intermediate_buffer_descriptor_{buffer_id}", buffer_type=BufferType.Intermediate
+            name=f"intermediate_buffer_descriptor_{buffer_id}_{dtype}", buffer_type=BufferType.Intermediate
         )
         buffer_id += 1
         return buffer_descriptor
@@ -91,15 +93,15 @@ create_intermediate_buffer_descriptor = intermediate_buffer_descriptor_factory()
 
 
 def create_constant_input_buffer_descriptor(name, array):
-    return ConstantBufferDescriptor(name=name, buffer_type=BufferType.ConstantInput, array=array)
+    return ConstantBufferDescriptor(name=f"constant_{name}", buffer_type=BufferType.ConstantInput, array=array)
 
 
 def create_variable_input_buffer_descriptor(name):
-    return BufferDescriptor(name=name, buffer_type=BufferType.VariableInput)
+    return BufferDescriptor(name=f"variable_{name}", buffer_type=BufferType.VariableInput)
 
 
 def try_returning_buffer_descriptor_to_queue(
-    graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
+    graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
 ):
     for predecessor, _ in graph.in_edges(node):
         if isinstance(graph.nodes[predecessor]["instruction"], (Constant, Variable)):
@@ -112,6 +114,8 @@ def try_returning_buffer_descriptor_to_queue(
         if node_to_users[predecessor] == 0 and "buffer_descriptors" in graph.nodes[predecessor]:
             buffer_descriptor = first(graph.nodes[predecessor]["buffer_descriptors"])
             if buffer_descriptor_to_current_node[buffer_descriptor] == predecessor:
+                dtype = first(graph.nodes[predecessor]["dtypes"])
+                buffer_descriptor_stack = dtype_to_buffer_descriptor_stack.setdefault(dtype, deque(maxlen=None))
                 buffer_descriptor_stack.append(buffer_descriptor)
 
     return node_to_users
@@ -122,7 +126,7 @@ def is_instruction_a_no_operation(instruction):
 
 
 def can_instruction_reuse_buffer(instruction):
-    return class_name(instruction) not in {"matmul", "mean", "sum", "transpose"}
+    return class_name(instruction) not in {"Tilize", "Untilize", "matmul", "mean", "sum", "transpose"}
 
 
 def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_current_node):
@@ -130,6 +134,11 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
         return graph, node_to_users, buffer_descriptor_to_current_node
 
     (successor,) = graph.successors(node)
+
+    dtype = first(graph.nodes[node]["dtypes"])
+    successor_dtype = first(graph.nodes[successor]["dtypes"])
+    if dtype != successor_dtype:
+        return graph, node_to_users, buffer_descriptor_to_current_node
 
     successor_instruction = graph.nodes[successor]["instruction"]
     if not can_instruction_reuse_buffer(successor_instruction):
@@ -148,7 +157,7 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
 
 
 def populate_buffer_descriptors(graph, reuse_buffers=False):
-    buffer_descriptor_stack = deque(maxlen=None)
+    dtype_to_buffer_descriptor_stack = {}
     node_to_users = pmap()
     buffer_descriptor_to_current_node = pmap()
 
@@ -174,17 +183,19 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
 
         if "buffer_descriptors" in graph.nodes[node]:
             node_to_users = try_returning_buffer_descriptor_to_queue(
-                graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
+                graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
             )
             continue
 
+        dtype = first(graph.nodes[node]["dtypes"])
         if reuse_buffers:
+            buffer_descriptor_stack = dtype_to_buffer_descriptor_stack.setdefault(dtype, deque(maxlen=None))
             if not buffer_descriptor_stack:
-                buffer_descriptor = create_intermediate_buffer_descriptor()
+                buffer_descriptor = create_intermediate_buffer_descriptor(dtype)
             else:
                 buffer_descriptor = buffer_descriptor_stack.pop()
         else:
-            buffer_descriptor = create_intermediate_buffer_descriptor()
+            buffer_descriptor = create_intermediate_buffer_descriptor(dtype)
 
         graph = graph.add_node(node, buffer_descriptors=tuple([buffer_descriptor]))
         buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, node)
@@ -193,7 +204,7 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
                 graph, node, node_to_users, buffer_descriptor_to_current_node
             )
         node_to_users = try_returning_buffer_descriptor_to_queue(
-            graph, node, node_to_users, buffer_descriptor_to_current_node, buffer_descriptor_stack
+            graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
         )
 
     return graph
@@ -319,6 +330,54 @@ def propagate_array_tile_config(graph, input_var_to_scheme):
     return node_output_to_array_tile_config
 
 
+class Tilize(PClass):
+    def __call__(self, input_tensor):
+        return input_tensor
+
+
+class Untilize(PClass):
+    def __call__(self, input_tensor):
+        return input_tensor
+
+
+def insert_tilize_and_untilize_instructions(graph, node_output_to_array_tile_config):
+    new_graph = MultiDiGraph()
+    operand_to_new_operand = {}
+    for node in topological_traversal(graph):
+        attributes = graph.nodes[node]
+
+        new_graph = new_graph.add_node(node, **attributes)
+        operand_to_new_operand[(node, 0)] = (node, 0)
+
+        if class_name(graph.nodes[node]["instruction"]) == "Variable":
+            tilize_node = Node(name=f"tilize_{node.name}")
+            new_graph = new_graph.add_node(
+                tilize_node, instruction=Tilize(), shapes=attributes["shapes"], dtypes=attributes["dtypes"]
+            )
+            new_graph = new_graph.add_edge(node, tilize_node, source_output_index=0, sink_input_index=0)
+            operand_to_new_operand[(node, 0)] = (tilize_node, 0)
+            node_output_to_array_tile_config[(tilize_node, 0)] = node_output_to_array_tile_config[(node, 0)]
+        elif graph.out_degree(node) == 0:
+            untilize_node = Node(name=f"untilize_{node.name}")
+            new_graph = new_graph.add_node(
+                untilize_node, instruction=Untilize(), shapes=attributes["shapes"], dtypes=attributes["dtypes"]
+            )
+            new_graph = new_graph.add_edge(node, untilize_node, source_output_index=0, sink_input_index=0)
+            node_output_to_array_tile_config[(untilize_node, 0)] = node_output_to_array_tile_config[(node, 0)]
+
+        for source, sink, edge_attributes in graph.in_edges(node, data=True):
+            operand = (source, edge_attributes["source_output_index"])
+            (new_source, new_source_output_index) = operand_to_new_operand[operand]
+            new_graph = new_graph.add_edge(
+                new_source,
+                node,
+                source_output_index=new_source_output_index,
+                sink_input_index=edge_attributes["sink_input_index"],
+            )
+
+    return new_graph, node_output_to_array_tile_config
+
+
 def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config):
     node_to_kernel_name = {}
     for node in graph:
@@ -331,10 +390,16 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         ]
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
-        if instruction_class_name == "Constant":
+        if instruction_class_name in {"Constant", "Variable"}:
             continue
-        elif instruction_class_name == "Variable":
+        elif instruction_class_name == "Tilize":
             node_to_kernel_name[node] = tilize.generate_kernel_source_file(
+                test_output_path,
+                output_array_tile_config,
+                graph.nodes[node]["dtypes"][0],
+            )
+        elif instruction_class_name == "Untilize":
+            node_to_kernel_name[node] = untilize.generate_kernel_source_file(
                 test_output_path,
                 output_array_tile_config,
                 graph.nodes[node]["dtypes"][0],
@@ -390,38 +455,6 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
     return pmap(node_to_run_kernel)
 
 
-# def compare(buffer_graph, node, buffer_descriptor_to_buffer, node_output_to_array_tile_config, cache):
-#     shape = buffer_graph.nodes[node]["shapes"][0]
-#     volume = math.prod(shape)
-#     buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[node]["buffer_descriptors"])]
-#     array_tile_config = node_output_to_array_tile_config[(node, 0)]
-#     kernel_array = from_tilized_array(buffer.array[:volume], array_tile_config)
-#     cache_array = cache[cnp.nn.variable(name=node.name, shape=())]
-#     logger.info(f"Comparing: {node.name}")
-#
-#     allclose = np.allclose(kernel_array, cache_array, atol=1e-4, rtol=1e-5)
-#
-#     if not allclose:
-#         input_array_tile_configs = [
-#             node_output_to_array_tile_config[(input_node, 0)] for input_node, _ in get_operands(buffer_graph, node)
-#         ]
-#         logger.info(input_array_tile_configs)
-#         logger.info(kernel_array.shape)
-#         logger.info(cache_array.shape)
-#         logger.info(kernel_array)
-#         logger.info(cache_array)
-#
-#     assert allclose
-
-
-def initialize_variable_buffers(buffer_graph, inputs, node_to_run_kernel, buffer_descriptor_to_buffer):
-    for input_var, array in inputs.items():
-        input_node = input_var.node
-        buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
-        run_kernel = node_to_run_kernel[input_node]
-        run_kernel(cast_numpy_array_to_pointer(array.flatten()), buffer.data())
-
-
 class Model(PClass):
     buffer_graph = field()
     node_to_run_kernel = field()
@@ -429,8 +462,46 @@ class Model(PClass):
     node_output_to_array_tile_config = field()
 
 
-def evaluate_mosaic_model(model, output_var, inputs):
-    initialize_variable_buffers(model.buffer_graph, inputs, model.node_to_run_kernel, model.buffer_descriptor_to_buffer)
+def compile_to_mosaic_model(
+    *output_vars,
+    input_var_to_scheme,
+    output_path,
+    reuse_buffers,
+):
+    graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
+    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
+    graph, node_output_to_array_tile_config = insert_tilize_and_untilize_instructions(
+        graph, node_output_to_array_tile_config
+    )
+    node_to_run_kernel = generate_and_compile_kernels(graph, output_path, node_output_to_array_tile_config)
+    buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
+    buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
+    buffer_descriptor_to_buffer = populate_constant_buffers(
+        buffer_graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config
+    )
+
+    # from composit.multidigraph import visualize_graph
+    # visualize_graph(buffer_graph, visualize_node=visualize_node, timeout=5)
+
+    mosaic_model = Model(
+        buffer_graph=buffer_graph,
+        node_to_run_kernel=node_to_run_kernel,
+        buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
+        node_output_to_array_tile_config=node_output_to_array_tile_config,
+    )
+
+    return mosaic_model
+
+
+def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer):
+    for input_var, array in inputs.items():
+        input_node = input_var.node
+        buffer = buffer_descriptor_to_buffer[first(buffer_graph.nodes[input_node]["buffer_descriptors"])]
+        buffer.array[:] = array.flatten()
+
+
+def evaluate_mosaic_model(model: Model, output_var, inputs):
+    initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
 
     nodes_to_evaluate = filter(
         lambda node: model.buffer_graph.in_degree(node) > 0 and node in model.node_to_run_kernel,
@@ -450,35 +521,8 @@ def evaluate_mosaic_model(model, output_var, inputs):
         run_kernel = model.node_to_run_kernel[node]
         run_kernel(*input_pointers, output_pointer)
 
-    output_node = output_var.node
-    array_tile_config = model.node_output_to_array_tile_config[(output_node, 0)]
-    buffer = model.buffer_descriptor_to_buffer[first(model.buffer_graph.nodes[output_node]["buffer_descriptors"])]
-    return from_tilized_array(buffer.array, array_tile_config)
-
-
-def compile_to_mosaic_model(
-    *output_vars,
-    input_var_to_scheme,
-    output_path,
-    reuse_buffers,
-):
-    graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
-    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
-    node_to_run_kernel = generate_and_compile_kernels(graph, output_path, node_output_to_array_tile_config)
-    buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
-    buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
-    buffer_descriptor_to_buffer = populate_constant_buffers(
-        buffer_graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config
-    )
-
-    # from composit.multidigraph import visualize_graph
-    # visualize_graph(buffer_graph, visualize_node=visualize_node, timeout=5)
-
-    mosaic_model = Model(
-        buffer_graph=buffer_graph,
-        node_to_run_kernel=node_to_run_kernel,
-        buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
-        node_output_to_array_tile_config=node_output_to_array_tile_config,
-    )
-
-    return mosaic_model
+    output_node = first(model.buffer_graph.successors(output_var.node))
+    buffer_descriptor = first(model.buffer_graph.nodes[output_node]["buffer_descriptors"])
+    buffer = model.buffer_descriptor_to_buffer[buffer_descriptor]
+    shape = first(model.buffer_graph.nodes[output_node]["shapes"])
+    return np.reshape(buffer.array[: math.prod(shape)], shape)
