@@ -20,7 +20,7 @@ operation_to_python_operator = {
 }
 
 
-def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_type, operation):
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, operation):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_configs[0],
@@ -49,77 +49,11 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
     return kernel_name, module
 
 
-def generate_kernel_source_file(path, input_a_array_tile_config, input_b_array_tile_config: ArrayTileConfig, operation):
-    kernel_name = create_kernel_name(
-        pathlib.Path(__file__).stem,
-        input_a_array_tile_config,
-        input_b_array_tile_config,
-        operation,
-    )
-
-    input_a_var = c.variable(InputType, "input_a_var")
-    input_b_var = c.variable(InputType, "input_b_var")
-    output_var = c.variable(OutputType, "output_var")
-    arguments = (input_a_var, input_b_var, output_var)
-
-    if input_a_array_tile_config == input_b_array_tile_config:
-        body_function = generate_optimized_body
-        body_function_kwargs = dict(
-            input_a_array_tile_config=input_a_array_tile_config,
-            operation=operation,
-        )
-    else:
-        body_function = generate_body
-        body_function_kwargs = dict(
-            input_a_array_tile_config=input_a_array_tile_config,
-            input_b_array_tile_config=input_b_array_tile_config,
-            operation=operation,
-            offsets=dict(a=c.literal(0), b=c.literal(0)),
-        )
-
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            c.Include("math.h"),
-            c.Include("stdint.h"),
-            c.NewLine(),
-            c.NewLine(),
-            c.NewLine(),
-            c.void_function(
-                name=c.Identifier(kernel_name),
-                arguments=arguments,
-                body_function=body_function,
-                **body_function_kwargs,
-            ).extern_c(),
-        ],
-    )
-    file.save()
-    return kernel_name
-
-
 def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     for axis, index in enumerate(indices):
         offset = offset + index * c.literal(math.prod(num_tiles_per_axis[axis + 1 :]))
     offset = offset * c.literal(next_level_volume)
     return offset
-
-
-def generate_optimized_body(arguments, *, input_a_array_tile_config, operation):
-    input_a_var, input_b_var, output_var = arguments
-
-    index = c.variable(c.Type("uint32_t"), "index")
-    num_iterations = math.prod(input_a_array_tile_config.shape)
-
-    loop = c.ForLoop(
-        c.Declare(index, c.literal(0)),
-        index < c.literal(num_iterations),
-        c.add_in_place(index, c.literal(1)),
-        c.block(
-            c.assign(output_var[index], operation_to_python_operator[operation](input_a_var[index], input_b_var[index]))
-        ),
-    )
-
-    return c.block(loop)
 
 
 def generate_body(arguments, *, input_a_array_tile_config, input_b_array_tile_config, operation, offsets):

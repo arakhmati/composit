@@ -1,3 +1,4 @@
+import pathlib
 import subprocess
 from typing import Collection
 from pathlib import Path
@@ -51,18 +52,18 @@ def compile_source_file_to_object_file(source_file: Path, include_paths: Collect
     assert result.returncode == 0
 
 
-def compile_shared_library(test_output_path, kernel_name, enable_tracy=False):
+def compile_shared_library(kernel_source_file: pathlib.Path, enable_tracy=False):
+    output_path = kernel_source_file.parent
     include_paths = [
         "-I",
-        str(test_output_path),
+        str(output_path),
     ]
-    kernel_source_file = test_output_path / f"{kernel_name}.cpp"
-    kernel_object_file = test_output_path / f"{kernel_name}.o"
+    kernel_object_file = kernel_source_file.with_suffix(".o")
     object_files = [kernel_object_file]
 
     if enable_tracy:
         FLAGS.append("-DTRACY_ENABLE")
-        tracy_object_file = test_output_path / "tracy.o"
+        tracy_object_file = output_path / "tracy.o"
 
         tracy_include_path = ["-I", "vendor/tracy/public"]
         include_paths.extend(tracy_include_path)
@@ -75,7 +76,7 @@ def compile_shared_library(test_output_path, kernel_name, enable_tracy=False):
     compile_source_file_to_object_file(kernel_source_file, include_paths, kernel_object_file)
 
     object_files = [str(object_file) for object_file in object_files]
-    shared_library = test_output_path / f"{kernel_name}.so"
+    shared_library = kernel_source_file.with_suffix(".so")
     shared_library.unlink(missing_ok=True)
     shared_library = str(shared_library)
     command = ["g++", "-fPIC", "-shared", "-rdynamic", *object_files, "-o", shared_library]
@@ -83,7 +84,7 @@ def compile_shared_library(test_output_path, kernel_name, enable_tracy=False):
     result = subprocess.run(command)
     assert result.returncode == 0
 
-    kernel_assembly_file = test_output_path / f"{kernel_name}.s"
+    kernel_assembly_file = kernel_source_file.with_suffix(".s")
     compile_source_file_to_assembly(kernel_source_file, include_paths, kernel_assembly_file)
 
     return shared_library

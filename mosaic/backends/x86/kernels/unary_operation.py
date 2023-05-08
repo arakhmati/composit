@@ -3,7 +3,6 @@ import pathlib
 
 import codegen as c
 
-from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 
@@ -18,7 +17,8 @@ operation_to_c_function = {
 }
 
 
-def generate_kernel_source_file(path, input_array_tile_config: ArrayTileConfig, operation):
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, operation):
+    input_array_tile_config, *_ = input_array_tile_configs
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         input_array_tile_config,
@@ -28,35 +28,25 @@ def generate_kernel_source_file(path, input_array_tile_config: ArrayTileConfig, 
     input_var = c.variable(InputType, "input_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = generate_body(
-        input_array_tile_config,
-        operation=operation,
-        arguments=[input_var, output_var],
-    )
-
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            c.Include("math.h"),
-            c.Include("stdint.h"),
-            c.NewLine(),
-            c.NewLine(),
-            c.Function(
-                return_type=c.Type("void"),
+    module = c.Module(
+        includes=[c.Include("math.h"), c.Include("stdint.h")],
+        functions=[
+            c.void_function(
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
-                body=body,
-            ).extern_c(),
+                body_function=generate_body,
+                input_array_tile_config=input_array_tile_config,
+                operation=operation,
+            ).extern_c()
         ],
     )
-    file.save()
-    return kernel_name
+    return kernel_name, module
 
 
 def generate_body(
+    arguments,
     input_array_tile_config,
     operation,
-    arguments,
 ):
     input_var, output_var = arguments
 

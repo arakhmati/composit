@@ -36,37 +36,6 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
     return kernel_name, module
 
 
-def generate_kernel_source_file(path, array_tile_config: ArrayTileConfig, dtype):
-    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, array_tile_config, dtype)
-
-    ctype_string = get_ctype_string_from_numpy_dtype(dtype)
-    InputType = c.Type(ctype_string).const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
-    OutputType = c.Type(ctype_string).pointer().restrict().aligned(MEMORY_ALIGNMENT)
-
-    input_var = c.variable(InputType, "input_var")
-    output_var = c.variable(OutputType, "output_var")
-
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            c.Include("math.h"),
-            c.Include("stdint.h"),
-            c.NewLine(),
-            c.NewLine(),
-            c.void_function(
-                name=c.Identifier(kernel_name),
-                arguments=[input_var, output_var],
-                body_function=generate_body,
-                array_tile_config=array_tile_config,
-                offset=c.literal(0),
-                original_shape=array_tile_config.shape,
-            ).extern_c(),
-        ],
-    )
-    file.save()
-    return kernel_name
-
-
 def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     for axis, index in enumerate(indices):
         offset = offset + index * c.literal(math.prod(num_tiles_per_axis[axis + 1 :]))

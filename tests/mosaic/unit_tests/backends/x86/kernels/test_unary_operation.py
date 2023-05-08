@@ -100,14 +100,18 @@ def run_cnp_kernel(
     output_array_tile_config = create_array_tile_config(tile_view)
 
     logger.info("Generate kernel")
-    kernel_name = unary_operation.generate_kernel_source_file(
-        test_output_path,
-        input_array_tile_config,
+    kernel_name, kernel_module = unary_operation.generate_module(
+        [input_array_tile_config],
+        output_array_tile_config,
+        [input_var.dtype],
+        input_var.dtype,
         operation,
     )
+    source_file_name = (test_output_path / kernel_name).with_suffix(".cpp")
+    kernel_module.save(source_file_name)
 
     logger.info("Compile kernel as shared library")
-    shared_library_file = compile_shared_library(test_output_path, kernel_name)
+    shared_library_file = compile_shared_library(source_file_name)
 
     logger.info("Load kernel")
     shared_library = cdll.LoadLibrary(shared_library_file)

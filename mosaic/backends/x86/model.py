@@ -94,12 +94,17 @@ def intermediate_buffer_descriptor_factory():
 create_intermediate_buffer_descriptor = intermediate_buffer_descriptor_factory()
 
 
+def normalize_name(name):
+    name = name.replace(".", "_")
+    return name
+
+
 def create_constant_input_buffer_descriptor(name, array):
-    return ConstantBufferDescriptor(name=name, buffer_type=BufferType.ConstantInput, array=array)
+    return ConstantBufferDescriptor(name=normalize_name(name), buffer_type=BufferType.ConstantInput, array=array)
 
 
 def create_variable_input_buffer_descriptor(name):
-    return BufferDescriptor(name=name, buffer_type=BufferType.VariableInput)
+    return BufferDescriptor(name=normalize_name(name), buffer_type=BufferType.VariableInput)
 
 
 def try_returning_buffer_descriptor_to_queue(
@@ -380,11 +385,74 @@ def insert_tilize_and_untilize_instructions(graph, node_output_to_array_tile_con
     return new_graph, node_output_to_array_tile_config
 
 
+def get_kernel_name_and_module(
+    instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+):
+    instruction_class_name = class_name(instruction)
+
+    kernel_name = None
+    kernel_module = None
+    if instruction_class_name in {"Constant", "Variable"}:
+        pass
+    elif instruction_class_name == "Tilize":
+        kernel_name, kernel_module = tilize.generate_module(
+            input_array_tile_configs,
+            output_array_tile_config,
+            input_dtypes,
+            output_dtype,
+        )
+    elif instruction_class_name == "Untilize":
+        kernel_name, kernel_module = untilize.generate_module(
+            input_array_tile_configs,
+            output_array_tile_config,
+            input_dtypes,
+            output_dtype,
+        )
+    elif instruction_class_name == "matmul":
+        kernel_name, kernel_module = matrix_multiplication.generate_module(
+            input_array_tile_configs,
+            output_array_tile_config,
+            input_dtypes,
+            output_dtype,
+            use_avx_manually=True,
+        )
+    elif instruction_class_name in {"exp", "sqrt", "gelu"}:
+        kernel_name, kernel_module = unary_operation.generate_module(
+            input_array_tile_configs,
+            output_array_tile_config,
+            input_dtypes,
+            output_dtype,
+            instruction_class_name,
+        )
+    elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
+        kernel_name, kernel_module = binary_operation.generate_module(
+            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction_class_name
+        )
+    elif instruction_class_name in {"reshape"}:
+        pass
+    elif instruction_class_name in {"sum", "mean", "max"}:
+        kernel_name, kernel_module = reduce.generate_module(
+            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction_class_name
+        )
+    elif instruction_class_name in {"embedding"}:
+        kernel_name, kernel_module = embedding.generate_module(
+            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+        )
+    elif instruction_class_name in {"transpose"}:
+        kernel_name, kernel_module = transpose.generate_module(
+            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction.axes
+        )
+    else:
+        raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
+    return kernel_name, kernel_module
+
+
 def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config):
     node_to_kernel_name = {}
-    for node in graph:
-        instruction = graph.nodes[node]["instruction"]
-        instruction_class_name = class_name(instruction)
+    kernel_name_to_kernel_module = {}
+
+    for node, attributes in graph.nodes(data=True):
+        instruction = attributes["instruction"]
 
         input_array_tile_configs = [
             node_output_to_array_tile_config[(input_node, output_index)]
@@ -392,61 +460,29 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         ]
         output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
 
-        if instruction_class_name in {"Constant", "Variable"}:
-            continue
-        elif instruction_class_name == "Tilize":
-            node_to_kernel_name[node] = tilize.generate_kernel_source_file(
-                test_output_path,
-                output_array_tile_config,
-                graph.nodes[node]["dtypes"][0],
-            )
-        elif instruction_class_name == "Untilize":
-            node_to_kernel_name[node] = untilize.generate_kernel_source_file(
-                test_output_path,
-                output_array_tile_config,
-                graph.nodes[node]["dtypes"][0],
-            )
-        elif instruction_class_name == "matmul":
-            node_to_kernel_name[node] = matrix_multiplication.generate_kernel_source_file(
-                test_output_path,
-                *input_array_tile_configs,
-                output_array_tile_config,
-                use_avx_manually=True,
-            )
-        elif instruction_class_name in {"exp", "sqrt", "gelu"}:
-            node_to_kernel_name[node] = unary_operation.generate_kernel_source_file(
-                test_output_path, *input_array_tile_configs, instruction_class_name
-            )
-        elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
-            node_to_kernel_name[node] = binary_operation.generate_kernel_source_file(
-                test_output_path, *input_array_tile_configs, instruction_class_name
-            )
-        elif instruction_class_name in {"reshape"}:
-            node_to_kernel_name[node] = None
-        elif instruction_class_name in {"sum", "mean", "max"}:
-            node_to_kernel_name[node] = reduce.generate_kernel_source_file(
-                test_output_path,
-                *input_array_tile_configs,
-                output_array_tile_config,
-                instruction_class_name,
-            )
-        elif instruction_class_name in {"embedding"}:
-            node_to_kernel_name[node] = node_to_kernel_name[node] = node_to_kernel_name[
-                node
-            ] = embedding.generate_kernel_source_file(test_output_path, output_array_tile_config)
-        elif instruction_class_name in {"transpose"}:
-            node_to_kernel_name[node] = node_to_kernel_name[node] = transpose.generate_kernel_source_file(
-                test_output_path, *input_array_tile_configs, output_array_tile_config, instruction.axes
-            )
-        else:
-            raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
+        input_dtypes = [
+            graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
+        ]
+        output_dtype = attributes["dtypes"][0]
+
+        kernel_name, kernel_module = get_kernel_name_and_module(
+            instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+        )
+
+        node_to_kernel_name[node] = kernel_name
+        if kernel_module is not None:
+            kernel_name_to_kernel_module[kernel_name] = kernel_module
 
     kernel_name_to_run_kernel = {}
     for kernel_name in set(node_to_kernel_name.values()):
         if kernel_name is None:
             kernel_name_to_run_kernel[kernel_name] = lambda *_: None
         else:
-            shared_library_file = compile_shared_library(test_output_path, kernel_name)
+            source_file_name = (test_output_path / kernel_name).with_suffix(".cpp")
+            kernel_module = kernel_name_to_kernel_module[kernel_name]
+            kernel_module.save(source_file_name)
+
+            shared_library_file = compile_shared_library(source_file_name)
             shared_library = cdll.LoadLibrary(shared_library_file)
             run_kernel = getattr(shared_library, kernel_name)
             kernel_name_to_run_kernel[kernel_name] = run_kernel
@@ -466,12 +502,12 @@ class ModelWithoutKernelFusion(PClass):
 def generate_and_compile_run_model(
     graph, test_output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
 ):
-    module = c.Module(includes=[], functions=[])
     node_to_kernel_name = {}
+    module = c.Module(includes=[], functions=[])
+    kernel_names_in_module = set()
 
     for node, attributes in graph.nodes(data=True):
         instruction = attributes["instruction"]
-        instruction_class_name = class_name(instruction)
 
         input_array_tile_configs = [
             node_output_to_array_tile_config[(input_node, output_index)]
@@ -484,42 +520,14 @@ def generate_and_compile_run_model(
         ]
         output_dtype = attributes["dtypes"][0]
 
-        if instruction_class_name in {"Constant", "Variable"}:
-            continue
-        elif instruction_class_name == "Tilize":
-            kernel_name, kernel_module = tilize.generate_module(
-                input_array_tile_configs,
-                output_array_tile_config,
-                input_dtypes,
-                output_dtype,
-            )
-        elif instruction_class_name == "Untilize":
-            kernel_name, kernel_module = untilize.generate_module(
-                input_array_tile_configs,
-                output_array_tile_config,
-                input_dtypes,
-                output_dtype,
-            )
-        elif instruction_class_name == "matmul":
-            kernel_name, kernel_module = matrix_multiplication.generate_module(
-                input_array_tile_configs,
-                output_array_tile_config,
-                input_dtypes,
-                output_dtype,
-                use_avx_manually=True,
-            )
-        elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
-            kernel_name, kernel_module = binary_operation.generate_module(
-                input_array_tile_configs,
-                output_array_tile_config,
-                input_dtypes,
-                output_dtype,
-                instruction_class_name,
-            )
-        else:
-            raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
-        module += kernel_module
+        kernel_name, kernel_module = get_kernel_name_and_module(
+            instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+        )
+
         node_to_kernel_name[node] = kernel_name
+        if kernel_name not in kernel_names_in_module and kernel_name is not None:
+            module += kernel_module
+            kernel_names_in_module.add(kernel_name)
 
     arguments = []
     buffer_descriptor_to_variable = {}
@@ -538,13 +546,15 @@ def generate_and_compile_run_model(
         lambda node: graph.in_degree(node) > 0,
         topological_traversal(graph),
     ):
+        kernel_name = node_to_kernel_name[node]
+        if kernel_name is None:
+            continue
+
         input_vars = [
             buffer_descriptor_to_variable[first(graph.nodes[input_node]["buffer_descriptors"])]
             for input_node, _ in get_operands(graph, node)
         ]
         output_var = buffer_descriptor_to_variable[first(graph.nodes[node]["buffer_descriptors"])]
-
-        kernel_name = node_to_kernel_name[node]
         invocation = c.invoke(kernel_name, *input_vars, output_var)
         statements.append(c.Statement(invocation))
 
@@ -561,9 +571,10 @@ def generate_and_compile_run_model(
         ],
     )
 
-    module.save((test_output_path / model_name).with_suffix(".cpp"))
+    model_source_file = (test_output_path / model_name).with_suffix(".cpp")
+    module.save(model_source_file)
 
-    shared_library_file = compile_shared_library(test_output_path, model_name)
+    shared_library_file = compile_shared_library(model_source_file)
     shared_library = cdll.LoadLibrary(shared_library_file)
     run_model = getattr(shared_library, model_name)
     return run_model
@@ -580,7 +591,7 @@ def compile_to_mosaic_model(
     input_var_to_scheme,
     output_path,
     reuse_buffers: bool,
-    fuse_kernels: bool = False,
+    fuse_kernels: bool,
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
     node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)

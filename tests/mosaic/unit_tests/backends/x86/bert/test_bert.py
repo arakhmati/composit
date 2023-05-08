@@ -101,7 +101,15 @@ def composit_model(
 
 
 def setup_test(
-    request, batch_size, num_encoders, sequence_size, num_attention_heads, head_size, vocab_size, reuse_buffers
+    request,
+    batch_size,
+    num_encoders,
+    sequence_size,
+    num_attention_heads,
+    head_size,
+    vocab_size,
+    reuse_buffers,
+    fuse_kernels,
 ):
     np.random.seed(0)
     torch.manual_seed(0)
@@ -120,6 +128,7 @@ def setup_test(
         input_var_to_scheme=input_var_to_scheme,
         output_path=test_output_path,
         reuse_buffers=reuse_buffers,
+        fuse_kernels=fuse_kernels,
     )
     return mosaic_model, output_var, (input_ids_var, token_type_ids_var), transformers_model
 
@@ -132,6 +141,7 @@ def setup_test(
 @pytest.mark.parametrize("head_size", [32])
 @pytest.mark.parametrize("vocab_size", [16])
 @pytest.mark.parametrize("reuse_buffers", [False, True])
+@pytest.mark.parametrize("fuse_kernels", [False])
 def test_evaluates_correctly(
     request,
     num_inputs,
@@ -142,6 +152,7 @@ def test_evaluates_correctly(
     head_size,
     vocab_size,
     reuse_buffers,
+    fuse_kernels,
 ):
     mosaic_model, output_var, (input_ids_var, token_type_ids_var), _ = setup_test(
         request,
@@ -152,6 +163,7 @@ def test_evaluates_correctly(
         head_size,
         vocab_size,
         reuse_buffers,
+        fuse_kernels,
     )
 
     for _ in range(num_inputs):
@@ -194,6 +206,7 @@ def test_benchmark(
         head_size,
         vocab_size,
         reuse_buffers,
+        fuse_kernels=False,
     )
 
     input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)

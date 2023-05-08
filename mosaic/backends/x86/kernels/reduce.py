@@ -13,7 +13,8 @@ InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMEN
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_kernel_source_file(path, input_array_tile_config, output_array_tile_config: ArrayTileConfig, operation):
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, operation):
+    input_array_tile_config, *_ = input_array_tile_configs
     kwargs = dict(
         mean_coefficient=1.0 / (math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape))
     )
@@ -31,31 +32,26 @@ def generate_kernel_source_file(path, input_array_tile_config, output_array_tile
     body = initialize_output(output_array_tile_config, operation=operation, arguments=[input_var, output_var])
 
     body += generate_body(
-        input_array_tile_config,
-        output_array_tile_config,
-        operation=operation,
         arguments=[input_var, output_var],
+        input_array_tile_config=input_array_tile_config,
+        output_array_tile_config=output_array_tile_config,
+        operation=operation,
         offsets=dict(input=c.literal(0), output=c.literal(0)),
         **kwargs,
     )
 
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            c.Include("math.h"),
-            c.Include("stdint.h"),
-            c.NewLine(),
-            c.NewLine(),
+    module = c.Module(
+        includes=[c.Include("math.h"), c.Include("stdint.h")],
+        functions=[
             c.Function(
                 return_type=c.Type("void"),
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body=body,
-            ).extern_c(),
+            ).extern_c()
         ],
     )
-    file.save()
-    return kernel_name
+    return kernel_name, module
 
 
 def initialize_output(output_array_tile_config, operation, arguments):
@@ -89,7 +85,7 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_body(input_array_tile_config, output_array_tile_config, operation, arguments, offsets, **kwargs):
+def generate_body(arguments, input_array_tile_config, output_array_tile_config, operation, offsets, **kwargs):
     input_var, output_var = arguments
 
     level_name = input_array_tile_config.level_name
@@ -128,10 +124,10 @@ def generate_body(input_array_tile_config, output_array_tile_config, operation, 
 
         inner_loop_body = c.block(declare_next_input_offset, declare_next_output_offset)
         inner_loop_body += generate_body(
-            input_array_tile_config[tuple(0 for _ in range(len(input_array_tile_config.shape)))],
-            output_array_tile_config[tuple(0 for _ in range(len(output_array_tile_config.shape)))],
-            operation=operation,
             arguments=arguments,
+            input_array_tile_config=input_array_tile_config.next_level(),
+            output_array_tile_config=output_array_tile_config.next_level(),
+            operation=operation,
             offsets=dict(input=next_input_offset, output=next_output_offset),
             **kwargs,
         )

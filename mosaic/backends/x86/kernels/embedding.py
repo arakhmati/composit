@@ -3,7 +3,6 @@ import pathlib
 
 import codegen as c
 
-from mosaic.tilelab.tile import ArrayTileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 
@@ -13,10 +12,7 @@ WeightsType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNM
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_kernel_source_file(
-    path,
-    output_array_tile_config: ArrayTileConfig,
-):
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
         output_array_tile_config,
@@ -26,33 +22,23 @@ def generate_kernel_source_file(
     weights = c.variable(WeightsType, "weights")
     output_var = c.variable(OutputType, "output_var")
 
-    body = generate_body(
-        output_array_tile_config,
-        arguments=[input_var, weights, output_var],
-    )
-
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            c.Include("math.h"),
-            c.Include("stdint.h"),
-            c.NewLine(),
-            c.NewLine(),
-            c.Function(
-                return_type=c.Type("void"),
+    module = c.Module(
+        includes=[c.Include("math.h"), c.Include("stdint.h")],
+        functions=[
+            c.void_function(
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, weights, output_var],
-                body=body,
-            ).extern_c(),
+                body_function=generate_body,
+                output_array_tile_config=output_array_tile_config,
+            ).extern_c()
         ],
     )
-    file.save()
-    return kernel_name
+    return kernel_name, module
 
 
 def generate_body(
-    output_array_tile_config,
     arguments,
+    output_array_tile_config,
 ):
     input_var, weights, output_var = arguments
     batch_size, sequence_size, hidden_size = output_array_tile_config.shape

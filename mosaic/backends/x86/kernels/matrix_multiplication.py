@@ -37,7 +37,7 @@ def generate_module(
     input_array_tile_configs,
     output_array_tile_config,
     input_dtypes,
-    output_type,
+    output_dtype,
     *,
     use_avx_manually: bool,
     enable_tracy: bool = False,
@@ -63,8 +63,15 @@ def generate_module(
         enable_tracy=enable_tracy,
     )
 
+    includes = [
+        c.Include("immintrin.h"),
+        c.Include("stdint.h"),
+    ]
+    if enable_tracy:
+        includes.append(c.Include("tracy/Tracy.hpp"))
+
     module = c.Module(
-        includes=[c.Include("immintrin.h"), c.Include("stdint.h")],
+        includes=includes,
         functions=[
             c.Function(
                 return_type=c.Type("void"),
@@ -75,61 +82,6 @@ def generate_module(
         ],
     )
     return kernel_name, module
-
-
-def generate_kernel_source_file(
-    path,
-    input_a_array_tile_config,
-    input_b_array_tile_config,
-    output_array_tile_config,
-    *,
-    use_avx_manually: bool,
-    enable_tracy: bool = False,
-):
-    kernel_name = create_kernel_name(
-        pathlib.Path(__file__).stem,
-        input_a_array_tile_config,
-        input_b_array_tile_config,
-        use_avx_manually,
-    )
-
-    input_a_var = c.variable(InputType, "input_a_var")
-    input_b_var = c.variable(InputType, "input_b_var")
-    output_var = c.variable(OutputType, "output_var")
-
-    body = initialize_output(output_array_tile_config, output_var)
-
-    body += generate_body(
-        arguments=[input_a_var, input_b_var, output_var],
-        input_a_array_tile_config=input_a_array_tile_config,
-        input_b_array_tile_config=input_b_array_tile_config,
-        offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
-        use_avx_manually=use_avx_manually,
-        enable_tracy=enable_tracy,
-    )
-    includes = [
-        c.Include("immintrin.h"),
-        c.Include("stdint.h"),
-    ]
-    if enable_tracy:
-        includes.append(c.Include("tracy/Tracy.hpp"))
-
-    file = c.File(
-        (path / pathlib.Path(kernel_name)).with_suffix(".cpp"),
-        [
-            *includes,
-            c.NewLine(),
-            c.NewLine(),
-            c.Function(
-                return_type=c.Type("void"),
-                name=c.Identifier(kernel_name),
-                arguments=[input_a_var, input_b_var, output_var],
-                body=body,
-            ).extern_c(),
-        ],
-    )
-    file.save()
-    return kernel_name
 
 
 def initialize_output(output_array_tile_config, output_var):

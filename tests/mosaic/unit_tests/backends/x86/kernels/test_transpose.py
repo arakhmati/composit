@@ -82,15 +82,18 @@ def run_cnp_kernel(
     logger.info(output_array_tile_config)
 
     logger.info("Generate kernel")
-    kernel_name = transpose.generate_kernel_source_file(
-        test_output_path,
-        input_array_tile_config,
+    kernel_name, kernel_module = transpose.generate_module(
+        [input_array_tile_config],
         output_array_tile_config,
+        [input_var.dtype],
+        output_var.dtype,
         axes,
     )
+    source_file_name = (test_output_path / kernel_name).with_suffix(".cpp")
+    kernel_module.save(source_file_name)
 
     logger.info("Compile kernel as shared library")
-    shared_library_file = compile_shared_library(test_output_path, kernel_name)
+    shared_library_file = compile_shared_library(source_file_name)
 
     logger.info("Load kernel")
     shared_library = cdll.LoadLibrary(shared_library_file)
