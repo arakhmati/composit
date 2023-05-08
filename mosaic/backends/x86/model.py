@@ -11,6 +11,7 @@ from loguru import logger
 from pyrsistent import pmap, pvector, PClass, field
 from toolz import first
 
+import codegen as c
 from composit.introspection import class_name
 from composit.multidigraph import topological_traversal, compose_all, MultiDiGraph
 from composit.nn import Variable
@@ -18,6 +19,7 @@ from composit.numpy.core import Constant, get_operands
 from composit.persistent_array import Node
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
+from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernels import (
     matrix_multiplication,
     unary_operation,
@@ -93,11 +95,11 @@ create_intermediate_buffer_descriptor = intermediate_buffer_descriptor_factory()
 
 
 def create_constant_input_buffer_descriptor(name, array):
-    return ConstantBufferDescriptor(name=f"constant_{name}", buffer_type=BufferType.ConstantInput, array=array)
+    return ConstantBufferDescriptor(name=name, buffer_type=BufferType.ConstantInput, array=array)
 
 
 def create_variable_input_buffer_descriptor(name):
-    return BufferDescriptor(name=f"variable_{name}", buffer_type=BufferType.VariableInput)
+    return BufferDescriptor(name=name, buffer_type=BufferType.VariableInput)
 
 
 def try_returning_buffer_descriptor_to_queue(
@@ -455,25 +457,136 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
     return pmap(node_to_run_kernel)
 
 
-class Model(PClass):
+class ModelWithoutKernelFusion(PClass):
     buffer_graph = field()
     node_to_run_kernel = field()
     buffer_descriptor_to_buffer = field()
-    node_output_to_array_tile_config = field()
+
+
+def generate_and_compile_run_model(
+    graph, test_output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
+):
+    module = c.Module(includes=[], functions=[])
+    node_to_kernel_name = {}
+
+    for node, attributes in graph.nodes(data=True):
+        instruction = attributes["instruction"]
+        instruction_class_name = class_name(instruction)
+
+        input_array_tile_configs = [
+            node_output_to_array_tile_config[(input_node, output_index)]
+            for input_node, output_index in get_operands(graph, node)
+        ]
+        output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
+
+        input_dtypes = [
+            graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
+        ]
+        output_dtype = attributes["dtypes"][0]
+
+        if instruction_class_name in {"Constant", "Variable"}:
+            continue
+        elif instruction_class_name == "Tilize":
+            kernel_name, kernel_module = tilize.generate_module(
+                input_array_tile_configs,
+                output_array_tile_config,
+                input_dtypes,
+                output_dtype,
+            )
+        elif instruction_class_name == "Untilize":
+            kernel_name, kernel_module = untilize.generate_module(
+                input_array_tile_configs,
+                output_array_tile_config,
+                input_dtypes,
+                output_dtype,
+            )
+        elif instruction_class_name == "matmul":
+            kernel_name, kernel_module = matrix_multiplication.generate_module(
+                input_array_tile_configs,
+                output_array_tile_config,
+                input_dtypes,
+                output_dtype,
+                use_avx_manually=True,
+            )
+        elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
+            kernel_name, kernel_module = binary_operation.generate_module(
+                input_array_tile_configs,
+                output_array_tile_config,
+                input_dtypes,
+                output_dtype,
+                instruction_class_name,
+            )
+        else:
+            raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
+        module += kernel_module
+        node_to_kernel_name[node] = kernel_name
+
+    arguments = []
+    buffer_descriptor_to_variable = {}
+    for buffer_descriptor in buffer_descriptor_to_buffer:
+        FloatPointer = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
+        if buffer_descriptor.buffer_type == BufferType.VariableInput:
+            FloatPointer = FloatPointer.const()
+
+        variable = c.variable(FloatPointer, buffer_descriptor.name)
+        arguments.append(variable)
+        buffer_descriptor_to_variable[buffer_descriptor] = variable
+    logger.info(arguments)
+
+    statements = []
+    for node in filter(
+        lambda node: graph.in_degree(node) > 0,
+        topological_traversal(graph),
+    ):
+        input_vars = [
+            buffer_descriptor_to_variable[first(graph.nodes[input_node]["buffer_descriptors"])]
+            for input_node, _ in get_operands(graph, node)
+        ]
+        output_var = buffer_descriptor_to_variable[first(graph.nodes[node]["buffer_descriptors"])]
+
+        kernel_name = node_to_kernel_name[node]
+        invocation = c.invoke(kernel_name, *input_vars, output_var)
+        statements.append(c.Statement(invocation))
+
+    model_name = "run_model"
+    module += c.Module(
+        includes=[],
+        functions=[
+            c.Function(
+                return_type=c.Type("void"),
+                name=c.Identifier(model_name),
+                arguments=arguments,
+                body=c.block(*statements),
+            ).extern_c()
+        ],
+    )
+
+    module.save((test_output_path / model_name).with_suffix(".cpp"))
+
+    shared_library_file = compile_shared_library(test_output_path, model_name)
+    shared_library = cdll.LoadLibrary(shared_library_file)
+    run_model = getattr(shared_library, model_name)
+    return run_model
+
+
+class ModelWithKernelFusion(PClass):
+    buffer_graph = field()
+    run_model = field()
+    buffer_descriptor_to_buffer = field()
 
 
 def compile_to_mosaic_model(
     *output_vars,
     input_var_to_scheme,
     output_path,
-    reuse_buffers,
+    reuse_buffers: bool,
+    fuse_kernels: bool = False,
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
     node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
     graph, node_output_to_array_tile_config = insert_tilize_and_untilize_instructions(
         graph, node_output_to_array_tile_config
     )
-    node_to_run_kernel = generate_and_compile_kernels(graph, output_path, node_output_to_array_tile_config)
     buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
     buffer_descriptor_to_buffer = populate_constant_buffers(
@@ -483,14 +596,22 @@ def compile_to_mosaic_model(
     # from composit.multidigraph import visualize_graph
     # visualize_graph(buffer_graph, visualize_node=visualize_node, timeout=5)
 
-    mosaic_model = Model(
+    if fuse_kernels:
+        run_model = generate_and_compile_run_model(
+            buffer_graph, output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
+        )
+        return ModelWithKernelFusion(
+            buffer_graph=buffer_graph,
+            run_model=run_model,
+            buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
+        )
+
+    node_to_run_kernel = generate_and_compile_kernels(buffer_graph, output_path, node_output_to_array_tile_config)
+    return ModelWithoutKernelFusion(
         buffer_graph=buffer_graph,
         node_to_run_kernel=node_to_run_kernel,
         buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
-        node_output_to_array_tile_config=node_output_to_array_tile_config,
     )
-
-    return mosaic_model
 
 
 def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffer):
@@ -500,12 +621,11 @@ def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffe
         buffer.array[:] = array.flatten()
 
 
-def evaluate_mosaic_model(model: Model, output_var, inputs):
+def evaluate_mosaic_model_without_kernel_fusion(model: ModelWithoutKernelFusion, output_var, inputs):
     initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
 
     nodes_to_evaluate = filter(
-        lambda node: model.buffer_graph.in_degree(node) > 0 and node in model.node_to_run_kernel,
-        topological_traversal(model.buffer_graph),
+        lambda node: model.buffer_graph.in_degree(node) > 0, topological_traversal(model.buffer_graph)
     )
 
     for node in nodes_to_evaluate:
@@ -526,3 +646,23 @@ def evaluate_mosaic_model(model: Model, output_var, inputs):
     buffer = model.buffer_descriptor_to_buffer[buffer_descriptor]
     shape = first(model.buffer_graph.nodes[output_node]["shapes"])
     return np.reshape(buffer.array[: math.prod(shape)], shape)
+
+
+def evaluate_mosaic_model_with_kernel_fusion(model: ModelWithKernelFusion, output_var, inputs):
+    initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
+
+    buffers = [model.buffer_descriptor_to_buffer[key] for key in model.buffer_descriptor_to_buffer]
+    pointers = [buffer.data() for buffer in buffers]
+    model.run_model(*pointers)
+
+    output_node = first(model.buffer_graph.successors(output_var.node))
+    buffer_descriptor = first(model.buffer_graph.nodes[output_node]["buffer_descriptors"])
+    buffer = model.buffer_descriptor_to_buffer[buffer_descriptor]
+    shape = first(model.buffer_graph.nodes[output_node]["shapes"])
+    return np.reshape(buffer.array[: math.prod(shape)], shape)
+
+
+def evaluate_mosaic_model(model: ModelWithoutKernelFusion | ModelWithKernelFusion, output_var, inputs):
+    if isinstance(model, ModelWithKernelFusion):
+        return evaluate_mosaic_model_with_kernel_fusion(model, output_var, inputs)
+    return evaluate_mosaic_model_without_kernel_fusion(model, output_var, inputs)

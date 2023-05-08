@@ -84,7 +84,7 @@ def create_from_numpy_compute_instruction(
     )
     dtypes = tuple(dtype_to_override or inferred_dtype for inferred_dtype in inferred_dtypes)
 
-    name = f"{class_name(instruction)}-{random_string()}"
+    name = f"{class_name(instruction)}_{random_string()}"
     new_node = Node(name=name)
     graph = graph.add_node(new_node, instruction=instruction, shapes=shapes, dtypes=dtypes)
     for index, operand in enumerate(operands):

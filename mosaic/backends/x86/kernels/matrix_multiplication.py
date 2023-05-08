@@ -33,6 +33,50 @@ auto _mm256_reduce_add_ps = [](const auto& x) {
 )
 
 
+def generate_module(
+    input_array_tile_configs,
+    output_array_tile_config,
+    input_dtypes,
+    output_type,
+    *,
+    use_avx_manually: bool,
+    enable_tracy: bool = False,
+):
+    kernel_name = create_kernel_name(
+        pathlib.Path(__file__).stem,
+        input_array_tile_configs[0],
+        input_array_tile_configs[1],
+        use_avx_manually,
+    )
+
+    input_a_var = c.variable(InputType, "input_a_var")
+    input_b_var = c.variable(InputType, "input_b_var")
+    output_var = c.variable(OutputType, "output_var")
+
+    body = initialize_output(output_array_tile_config, output_var)
+    body += generate_body(
+        arguments=[input_a_var, input_b_var, output_var],
+        input_a_array_tile_config=input_array_tile_configs[0],
+        input_b_array_tile_config=input_array_tile_configs[1],
+        offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
+        use_avx_manually=use_avx_manually,
+        enable_tracy=enable_tracy,
+    )
+
+    module = c.Module(
+        includes=[c.Include("immintrin.h"), c.Include("stdint.h")],
+        functions=[
+            c.Function(
+                return_type=c.Type("void"),
+                name=c.Identifier(kernel_name),
+                arguments=[input_a_var, input_b_var, output_var],
+                body=body,
+            ).extern_c()
+        ],
+    )
+    return kernel_name, module
+
+
 def generate_kernel_source_file(
     path,
     input_a_array_tile_config,
@@ -56,9 +100,9 @@ def generate_kernel_source_file(
     body = initialize_output(output_array_tile_config, output_var)
 
     body += generate_body(
-        input_a_array_tile_config,
-        input_b_array_tile_config,
         arguments=[input_a_var, input_b_var, output_var],
+        input_a_array_tile_config=input_a_array_tile_config,
+        input_b_array_tile_config=input_b_array_tile_config,
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
         use_avx_manually=use_avx_manually,
         enable_tracy=enable_tracy,
@@ -115,11 +159,11 @@ def input_b_is_transposed(array_tile_config):
 
 
 def generate_body(
+    arguments,
+    *,
     input_a_array_tile_config,
     input_b_array_tile_config,
-    arguments,
     offsets,
-    *,
     use_avx_manually: bool,
     enable_tracy: bool = False,
 ):
@@ -199,9 +243,9 @@ def generate_body(
             outer_loop_body_before = c.block(declare_next_a_offset)
 
         inner_loop_body += generate_body(
-            input_a_array_tile_config[tuple(0 for _ in range(len(input_a_array_tile_config.shape)))],
-            input_b_array_tile_config[tuple(0 for _ in range(len(input_b_array_tile_config.shape)))],
             arguments=arguments,
+            input_a_array_tile_config=input_a_array_tile_config.next_level(),
+            input_b_array_tile_config=input_b_array_tile_config.next_level(),
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
             use_avx_manually=use_avx_manually,
         )

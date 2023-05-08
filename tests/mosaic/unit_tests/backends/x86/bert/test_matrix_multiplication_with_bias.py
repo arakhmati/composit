@@ -47,11 +47,13 @@ def specify_input_var_to_scheme(input_var, weights_var, bias_var):
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_size", [128])
 @pytest.mark.parametrize("hidden_size", [768])
+@pytest.mark.parametrize("fuse_kernels", [False, True])
 def test_matrix_multiplication_with_bias(
     request,
     batch_size: int,
     sequence_size: int,
     hidden_size: int,
+    fuse_kernels: bool,
 ):
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
@@ -73,7 +75,11 @@ def test_matrix_multiplication_with_bias(
 
     input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var)
     mosaic_model = compile_to_mosaic_model(
-        output_var, input_var_to_scheme=input_var_to_scheme, output_path=test_output_path, reuse_buffers=True
+        output_var,
+        input_var_to_scheme=input_var_to_scheme,
+        output_path=test_output_path,
+        reuse_buffers=True,
+        fuse_kernels=fuse_kernels,
     )
     mosaic_output = evaluate_mosaic_model(mosaic_model, output_var, inputs={input_var: np_input})
     assert np.allclose(cnp_output, mosaic_output)

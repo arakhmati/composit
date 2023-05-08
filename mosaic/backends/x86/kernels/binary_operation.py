@@ -20,6 +20,35 @@ operation_to_python_operator = {
 }
 
 
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_type, operation):
+    kernel_name = create_kernel_name(
+        pathlib.Path(__file__).stem,
+        input_array_tile_configs[0],
+        input_array_tile_configs[1],
+        operation,
+    )
+
+    input_a_var = c.variable(InputType, "input_a_var")
+    input_b_var = c.variable(InputType, "input_b_var")
+    output_var = c.variable(OutputType, "output_var")
+
+    module = c.Module(
+        includes=[c.Include("math.h"), c.Include("stdint.h")],
+        functions=[
+            c.void_function(
+                name=c.Identifier(kernel_name),
+                arguments=[input_a_var, input_b_var, output_var],
+                body_function=generate_body,
+                input_a_array_tile_config=input_array_tile_configs[0],
+                input_b_array_tile_config=input_array_tile_configs[1],
+                operation=operation,
+                offsets=dict(a=c.literal(0), b=c.literal(0)),
+            ).extern_c()
+        ],
+    )
+    return kernel_name, module
+
+
 def generate_kernel_source_file(path, input_a_array_tile_config, input_b_array_tile_config: ArrayTileConfig, operation):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,

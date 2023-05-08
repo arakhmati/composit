@@ -9,6 +9,32 @@ from mosaic.backends.x86.kernel_name import create_kernel_name
 from mosaic.backends.ctypes import get_ctype_string_from_numpy_dtype
 
 
+def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype):
+    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, output_array_tile_config, output_dtype)
+
+    ctype_string = get_ctype_string_from_numpy_dtype(output_dtype)
+    InputType = c.Type(ctype_string).const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
+    OutputType = c.Type(ctype_string).pointer().restrict().aligned(MEMORY_ALIGNMENT)
+
+    input_var = c.variable(InputType, "input_var")
+    output_var = c.variable(OutputType, "output_var")
+
+    module = c.Module(
+        includes=[c.Include("math.h"), c.Include("stdint.h")],
+        functions=[
+            c.void_function(
+                name=c.Identifier(kernel_name),
+                arguments=[input_var, output_var],
+                body_function=generate_body,
+                array_tile_config=output_array_tile_config,
+                offset=c.literal(0),
+                original_shape=output_array_tile_config.shape,
+            ).extern_c()
+        ],
+    )
+    return kernel_name, module
+
+
 def generate_kernel_source_file(path, array_tile_config: ArrayTileConfig, dtype):
     kernel_name = create_kernel_name(pathlib.Path(__file__).stem, array_tile_config, dtype)
 
@@ -20,8 +46,8 @@ def generate_kernel_source_file(path, array_tile_config: ArrayTileConfig, dtype)
     output_var = c.variable(OutputType, "output_var")
 
     body = generate_body(
-        array_tile_config,
         arguments=[input_var, output_var],
+        array_tile_config=array_tile_config,
         offset=c.literal(0),
         original_shape=array_tile_config.shape,
     )
@@ -76,7 +102,7 @@ def compute_original_indices(indices, tile_shape):
     return [index * c.literal(tile_shape[axis]) for axis, index in enumerate(indices)]
 
 
-def generate_body(array_tile_config, arguments, offset, original_shape, all_indices=None):
+def generate_body(arguments, array_tile_config, offset, original_shape, all_indices=None):
     if all_indices is None:
         all_indices = []
 
@@ -99,8 +125,8 @@ def generate_body(array_tile_config, arguments, offset, original_shape, all_indi
 
         inner_loop_body = c.block(declare_next_offset)
         inner_loop_body += generate_body(
-            array_tile_config[tuple(0 for _ in range(len(array_tile_config.shape)))],
-            arguments=[input_var, output_var],
+            arguments=arguments,
+            array_tile_config=array_tile_config.next_level(),
             offset=next_offset,
             original_shape=original_shape,
             all_indices=all_indices,

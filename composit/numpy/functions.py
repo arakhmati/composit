@@ -111,7 +111,7 @@ def asarray(array, name=None):
         array = np.asarray(array)
 
     if name is None:
-        name = random_string()
+        name = f"array_{random_string()}"
 
     return create_ndarray(name, array)
 

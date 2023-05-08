@@ -433,6 +433,9 @@ class Include:
     def __repr__(self):
         return f"#include <{self.file_name}>"
 
+    def __hash__(self):
+        return hash(self.file_name)
+
 
 @dataclass
 class NewLine:
@@ -461,6 +464,28 @@ class File:
 
     def save(self):
         with open(self.name, "w") as f:
+            f.write(str(self))
+
+
+@dataclass
+class Module:
+    includes: list[Include]
+    functions: list[Function]
+
+    def __repr__(self):
+        delimiter = "\n"
+        return (
+            f"{concatenate_as_string(self.includes, delimiter)}\n{concatenate_as_string(self.functions, delimiter)}\n"
+        )
+
+    def __add__(self, other):
+        return Module(includes=list(set(self.includes + other.includes)), functions=self.functions + other.functions)
+
+    def __iadd__(self, other):
+        return self + other
+
+    def save(self, file_name):
+        with open(file_name, "w") as f:
             f.write(str(self))
 
 
@@ -494,5 +519,6 @@ __all__ = [
     "Include",
     "NewLine",
     "File",
+    "Module",
     "Text",
 ]
