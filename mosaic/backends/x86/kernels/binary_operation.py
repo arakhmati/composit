@@ -101,13 +101,16 @@ def generate_body(arguments, *, input_a_array_tile_config, input_b_array_tile_co
         declare_index = a_index << (compute_offset(offsets["a"], a_indices, a_num_tiles_per_axis, 1))
         declare_b_index = b_index << (compute_offset(offsets["b"], b_indices, b_num_tiles_per_axis, 1))
 
-        inner_loop_body = c.block(
-            declare_index,
-            declare_b_index,
-            c.assign(
+        if operation == "divide":
+            binary_operation = c.assign(
+                output_var[a_index], input_a_var[a_index] * (c.literal(1.0) / input_b_var[b_index])
+            )
+        else:
+            binary_operation = c.assign(
                 output_var[a_index], operation_to_python_operator[operation](input_a_var[a_index], input_b_var[b_index])
-            ),
-        )
+            )
+
+        inner_loop_body = c.block(declare_index, declare_b_index, binary_operation)
 
     loop = inner_loop_body
     for a_axis, (a_index, num_a_iterations) in enumerate(zip(reversed(a_indices), reversed(a_ranges))):
