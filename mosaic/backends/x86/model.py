@@ -638,9 +638,7 @@ def initialize_variable_buffers(buffer_graph, inputs, buffer_descriptor_to_buffe
         buffer.array[:] = array.flatten()
 
 
-def evaluate_mosaic_model_without_kernel_fusion(model: ModelWithoutKernelFusion, output_var, inputs):
-    initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
-
+def evaluate_mosaic_model_without_kernel_fusion(model: ModelWithoutKernelFusion):
     nodes_to_evaluate = filter(
         lambda node: model.buffer_graph.in_degree(node) > 0, topological_traversal(model.buffer_graph)
     )
@@ -658,28 +656,24 @@ def evaluate_mosaic_model_without_kernel_fusion(model: ModelWithoutKernelFusion,
         run_kernel = model.node_to_run_kernel[node]
         run_kernel(*input_pointers, output_pointer)
 
-    output_node = first(model.buffer_graph.successors(output_var.node))
-    buffer_descriptor = first(model.buffer_graph.nodes[output_node]["buffer_descriptors"])
-    buffer = model.buffer_descriptor_to_buffer[buffer_descriptor]
-    shape = first(model.buffer_graph.nodes[output_node]["shapes"])
-    return np.reshape(buffer.array[: math.prod(shape)], shape)
 
-
-def evaluate_mosaic_model_with_kernel_fusion(model: ModelWithKernelFusion, output_var, inputs):
-    initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
-
+def evaluate_mosaic_model_with_kernel_fusion(model: ModelWithKernelFusion):
     buffers = [model.buffer_descriptor_to_buffer[key] for key in sorted(model.buffer_descriptor_to_buffer)]
     pointers = [buffer.data() for buffer in buffers]
     model.run_model(*pointers)
 
+
+def evaluate_mosaic_model(model: ModelWithoutKernelFusion | ModelWithKernelFusion, output_var, inputs):
+    initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
+
+    if isinstance(model, ModelWithKernelFusion):
+        evaluate_mosaic_model_with_kernel_fusion(model)
+    else:
+        evaluate_mosaic_model_without_kernel_fusion(model)
+
     output_node = first(model.buffer_graph.successors(output_var.node))
     buffer_descriptor = first(model.buffer_graph.nodes[output_node]["buffer_descriptors"])
     buffer = model.buffer_descriptor_to_buffer[buffer_descriptor]
     shape = first(model.buffer_graph.nodes[output_node]["shapes"])
-    return np.reshape(buffer.array[: math.prod(shape)], shape)
-
-
-def evaluate_mosaic_model(model: ModelWithoutKernelFusion | ModelWithKernelFusion, output_var, inputs):
-    if isinstance(model, ModelWithKernelFusion):
-        return evaluate_mosaic_model_with_kernel_fusion(model, output_var, inputs)
-    return evaluate_mosaic_model_without_kernel_fusion(model, output_var, inputs)
+    dtype = first(model.buffer_graph.nodes[output_node]["dtypes"])
+    return np.frombuffer(memoryview(buffer.array), count=math.prod(shape), dtype=dtype).reshape(shape)
