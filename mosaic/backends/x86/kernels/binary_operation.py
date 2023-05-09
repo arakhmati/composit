@@ -28,8 +28,8 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
         operation,
     )
 
-    input_a_var = c.variable(InputType, "input_a_var")
-    input_b_var = c.variable(InputType, "input_b_var")
+    input_var = c.variable(InputType, "input_var")
+    broadcasted_input_var = c.variable(InputType, "broadcasted_input_var")
     output_var = c.variable(OutputType, "output_var")
 
     module = c.Module(
@@ -37,96 +37,109 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
         members=[
             c.void_function(
                 name=c.Identifier(kernel_name),
-                arguments=[input_a_var, input_b_var, output_var],
+                arguments=[input_var, broadcasted_input_var, output_var],
                 body_function=generate_body,
-                input_a_array_tile_config=input_array_tile_configs[0],
-                input_b_array_tile_config=input_array_tile_configs[1],
+                input_tile_config=input_array_tile_configs[0],
+                broadcasted_input_tile_config=input_array_tile_configs[1],
                 operation=operation,
-                offsets=dict(a=c.literal(0), b=c.literal(0)),
+                offsets=dict(input=c.literal(0), broadcasted_input=c.literal(0)),
             ).extern_c()
         ],
     )
     return kernel_name, module
 
 
-def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
-    for axis, index in enumerate(indices):
-        offset = offset + index * c.literal(math.prod(num_tiles_per_axis[axis + 1 :]))
-    offset = offset * c.literal(next_level_volume)
-    return offset
+def compute_index(offset, indices):
+    return sum(indices, offset)
 
 
-def generate_body(arguments, *, input_a_array_tile_config, input_b_array_tile_config, operation, offsets):
-    input_a_var, input_b_var, output_var = arguments
+def compute_offset(sequence, axis, offset):
+    return math.prod(sequence[axis:]) * offset
 
-    level_name = input_a_array_tile_config.level_name
 
-    a_num_tiles_per_axis = input_a_array_tile_config.num_tiles_per_axis()
-    b_num_tiles_per_axis = input_b_array_tile_config.num_tiles_per_axis()
+def generate_body(arguments, *, input_tile_config, broadcasted_input_tile_config, operation, offsets):
+    input_var, broadcasted_input_var, output_var = arguments
 
-    a_ranges = tuple(num_tiles for num_tiles in a_num_tiles_per_axis)
-    b_ranges = tuple(num_tiles for num_tiles in b_num_tiles_per_axis)
+    level_name = input_tile_config.level_name
 
-    a_indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_a_{axis}") for axis, _ in enumerate(a_ranges)]
-    b_indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_b_{axis}") for axis, _ in enumerate(b_ranges)]
+    ranges = tuple(num_tiles for num_tiles in input_tile_config.num_tiles_per_axis())
+    broadcasted_ranges = tuple(num_tiles for num_tiles in broadcasted_input_tile_config.num_tiles_per_axis())
 
-    if isinstance(input_a_array_tile_config, ArrayTileConfig):
-        next_a_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_a_offset")
-        next_b_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_b_offset")
+    indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_{axis}") for axis, _ in enumerate(ranges)]
+    broadcasted_indices = [
+        c.variable(c.Type("uint32_t"), f"{level_name}_broadcasted_index_{axis}")
+        for axis, _ in enumerate(broadcasted_ranges)
+    ]
 
-        declare_next_a_offset = next_a_offset << (
-            compute_offset(
-                offsets["a"], a_indices, a_num_tiles_per_axis, math.prod(input_a_array_tile_config.tile_shape)
-            )
+    tile_volume = math.prod(input_tile_config.tile_shape)
+    broadcasted_tile_volume = math.prod(broadcasted_input_tile_config.tile_shape)
+
+    if isinstance(input_tile_config, ArrayTileConfig):
+        next_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_offset")
+        next_broadcasted_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_broadcasted_offset")
+
+        declare_next_offset = next_offset << (compute_index(offsets["input"], indices))
+
+        declare_next_broadcasted_offset = next_broadcasted_offset << (
+            compute_index(offsets["broadcasted_input"], broadcasted_indices)
         )
 
-        declare_next_b_offset = next_b_offset << (
-            compute_offset(
-                offsets["b"], b_indices, b_num_tiles_per_axis, math.prod(input_b_array_tile_config.tile_shape)
-            )
-        )
-
-        inner_loop_body = c.block(declare_next_a_offset, declare_next_b_offset)
+        inner_loop_body = c.block(declare_next_offset, declare_next_broadcasted_offset)
         inner_loop_body += generate_body(
             arguments,
-            input_a_array_tile_config=input_a_array_tile_config.next_level(),
-            input_b_array_tile_config=input_b_array_tile_config.next_level(),
+            input_tile_config=input_tile_config.next_level(),
+            broadcasted_input_tile_config=broadcasted_input_tile_config.next_level(),
             operation=operation,
-            offsets=dict(a=next_a_offset, b=next_b_offset),
+            offsets=dict(input=next_offset, broadcasted_input=next_broadcasted_offset),
         )
     else:
-        a_index = c.variable(c.Type("uint32_t"), "a_index")
-        b_index = c.variable(c.Type("uint32_t"), "b_index")
+        index = c.variable(c.Type("uint32_t"), "index")
+        broadcasted_index = c.variable(c.Type("uint32_t"), "broadcasted_index")
 
-        declare_index = a_index << (compute_offset(offsets["a"], a_indices, a_num_tiles_per_axis, 1))
-        declare_b_index = b_index << (compute_offset(offsets["b"], b_indices, b_num_tiles_per_axis, 1))
+        declare_index = index << (compute_index(offsets["input"], indices))
+        declare_broadcasted_index = broadcasted_index << (
+            compute_index(offsets["broadcasted_input"], broadcasted_indices)
+        )
 
         if operation == "divide":
             binary_operation = c.assign(
-                output_var[a_index], input_a_var[a_index] * (c.literal(1.0) / input_b_var[b_index])
+                output_var[index], input_var[index] * (c.literal(1.0) / broadcasted_input_var[broadcasted_index])
             )
         else:
             binary_operation = c.assign(
-                output_var[a_index], operation_to_python_operator[operation](input_a_var[a_index], input_b_var[b_index])
+                output_var[index],
+                operation_to_python_operator[operation](input_var[index], broadcasted_input_var[broadcasted_index]),
             )
 
-        inner_loop_body = c.block(declare_index, declare_b_index, binary_operation)
+        inner_loop_body = c.block(declare_index, declare_broadcasted_index, binary_operation)
 
     loop = inner_loop_body
-    for a_axis, (a_index, num_a_iterations) in enumerate(zip(reversed(a_indices), reversed(a_ranges))):
-        b_axis = len(b_ranges) - 1 - a_axis
-        if b_axis >= 0:
-            b_index = b_indices[b_axis]
-            num_b_iterations = b_ranges[b_axis]
-            declare_b_index = c.block(b_index << (a_index if num_a_iterations == num_b_iterations else c.literal(0)))
-            body = declare_b_index + loop
+    for reversed_axis, (index, num_iterations) in enumerate(zip(reversed(indices), reversed(ranges))):
+        axis = len(indices) - reversed_axis - 1
+        increment = compute_offset(ranges, axis + 1, tile_volume)
+        limit = compute_offset(ranges, axis, tile_volume)
+
+        broadcasted_axis = len(broadcasted_ranges) - reversed_axis - 1
+        if broadcasted_axis >= 0:
+            broadcast_increment = compute_offset(broadcasted_ranges, broadcasted_axis + 1, broadcasted_tile_volume)
+            broadcast_factor = increment // broadcast_increment
+            broadcasted_index = broadcasted_indices[broadcasted_axis]
+            num_broadcasted_iterations = broadcasted_ranges[broadcasted_axis]
+            if num_broadcasted_iterations == 1:
+                broadcasted_index_value = c.literal(0)
+            elif num_broadcasted_iterations == num_iterations:
+                broadcasted_index_value = index / c.literal(broadcast_factor)
+            else:
+                raise NotImplementedError
+            declare_broadcasted_index = c.block(broadcasted_index << broadcasted_index_value)
+            body = declare_broadcasted_index + loop
         else:
             body = loop
 
         loop = c.ForLoop(
-            c.Declare(a_index, c.literal(0)),
-            a_index < c.literal(num_a_iterations),
-            c.add_in_place(a_index, c.literal(1)),
+            c.Declare(index, c.literal(0)),
+            index < c.literal(limit),
+            c.add_in_place(index, c.literal(increment)),
             body,
         )
         loop = c.block(loop)

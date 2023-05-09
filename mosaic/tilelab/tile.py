@@ -61,6 +61,10 @@ class AtomicTileConfig(PClass):
     layout = field()
 
     @property
+    def tile_shape(self):
+        return tuple(1 for _ in self.shape)
+
+    @property
     def hierarchy(self):
         return [ScalarTileLevel(level_name=self.level_name, rank=len(self.shape), layout=self.layout)]
 
