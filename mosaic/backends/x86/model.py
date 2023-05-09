@@ -54,6 +54,9 @@ class BufferDescriptor(PClass):
     def __repr__(self):
         return f"BufferDescriptor(name={self.name}, buffer_type={self.buffer_type})"
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 
 class ConstantBufferDescriptor(PClass):
     name: str = field()
@@ -70,6 +73,9 @@ class ConstantBufferDescriptor(PClass):
 
     def __repr__(self):
         return f"ConstantBufferDescriptor(name={self.name}, buffer_type={self.buffer_type}, array={self.array})"
+
+    def __lt__(self, other):
+        return self.name < other.name
 
 
 class BufferManager(PClass):
@@ -531,7 +537,7 @@ def generate_and_compile_run_model(
 
     arguments = []
     buffer_descriptor_to_variable = {}
-    for buffer_descriptor in buffer_descriptor_to_buffer:
+    for buffer_descriptor in sorted(buffer_descriptor_to_buffer):
         FloatPointer = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
         if buffer_descriptor.buffer_type == BufferType.VariableInput:
             FloatPointer = FloatPointer.const()
@@ -662,7 +668,7 @@ def evaluate_mosaic_model_without_kernel_fusion(model: ModelWithoutKernelFusion,
 def evaluate_mosaic_model_with_kernel_fusion(model: ModelWithKernelFusion, output_var, inputs):
     initialize_variable_buffers(model.buffer_graph, inputs, model.buffer_descriptor_to_buffer)
 
-    buffers = [model.buffer_descriptor_to_buffer[key] for key in model.buffer_descriptor_to_buffer]
+    buffers = [model.buffer_descriptor_to_buffer[key] for key in sorted(model.buffer_descriptor_to_buffer)]
     pointers = [buffer.data() for buffer in buffers]
     model.run_model(*pointers)
 

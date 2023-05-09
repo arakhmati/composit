@@ -1,6 +1,7 @@
 import pytest
 
 import pathlib
+import random
 
 import numpy as np
 import torch
@@ -55,6 +56,10 @@ def test_matrix_multiplication_with_bias(
     hidden_size: int,
     fuse_kernels: bool,
 ):
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
     test_output_path.mkdir(parents=True, exist_ok=True)

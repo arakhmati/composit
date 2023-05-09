@@ -13,7 +13,6 @@ from networkx.classes.reportviews import (
     InMultiEdgeView,
     OutMultiEdgeView,
 )
-from toolz import functoolz
 
 from composit.string import random_string
 
@@ -300,7 +299,6 @@ def to_networkx(graph) -> "networkx.MultiDiGraph":
     return nx_graph
 
 
-@functoolz.memoize
 def compose_all(*graphs) -> "MultiDiGraph":
     new_graph, *_ = tuple(graphs)
 
