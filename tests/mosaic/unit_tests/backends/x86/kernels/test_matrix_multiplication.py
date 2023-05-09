@@ -37,10 +37,6 @@ def compute_gflops(input_a_shape, input_b_shape, execution_times):
 
 def run_numpy(num_iterations, input_a_shape, input_b_shape):
     logger.info("Run Numpy")
-    import torch
-
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
 
     def run(np_input_a, np_input_b):
         output = np_input_a @ np_input_b
@@ -69,6 +65,7 @@ def run_torch(num_iterations, input_a_shape, input_b_shape):
     import torch
 
     torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
 
     def run(np_input_a, np_input_b):
         torch_a = torch.from_numpy(np_input_a)
@@ -88,6 +85,39 @@ def run_torch(num_iterations, input_a_shape, input_b_shape):
         np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
         run(np_input_a, np_input_b)
 
+        end = time.time_ns()
+        execution_times.append(end - start)
+
+    execution_times = np.asarray(execution_times) / 1e6
+    logger.info(f"Average Execution Time: {execution_times.mean()} milliseconds")
+    logger.info(f"Minimum Execution Time: {execution_times.min()} milliseconds")
+    logger.info(f"Maximum Execution Time: {execution_times.max()} milliseconds")
+    return execution_times
+
+
+def run_python(num_iterations, input_a_shape, input_b_shape):
+    logger.info("Run Python")
+
+    def run(np_input_a, np_input_b):
+        output = np.zeros((input_a_shape[0], input_b_shape[1]), dtype=np_input_a.dtype)
+        for m in range(input_a_shape[0]):
+            for n in range(input_b_shape[1]):
+                for k in range(input_a_shape[1]):
+                    output[m, n] += np_input_a[m, k] * np_input_b[k, n]
+        return output
+
+    np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+    np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
+    assert np.allclose(run(np_input_a, np_input_b), np_input_a @ np_input_b, atol=1e-5, rtol=1e-6)
+
+    execution_times = []
+    for i in range(num_iterations):
+        start = time.time_ns()
+
+        np_input_a = np.random.uniform(-0.5, 0.5, input_a_shape).astype(np.float32)
+        np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
+
+        run(np_input_a, np_input_b)
         end = time.time_ns()
         execution_times.append(end - start)
 
@@ -321,6 +351,56 @@ def test_batched_matrix_multiplication(
         l1_cache_b_layout,
         scalar_b_layout,
     )
+
+
+def test_modular_benchmark(request):
+    np.random.seed(0)
+
+    test_name = request.node.name
+    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
+
+    m_size = k_size = n_size = 512
+    tile_m_size = tile_k_size = tile_n_size = 64
+    python_m_size = python_k_size = python_n_size = 128
+
+    num_iterations = 2
+    use_avx_manually = True
+    input_a_shape = (m_size, k_size)
+    l1_cache_a_shape = (tile_m_size, tile_k_size)
+    input_b_shape = (k_size, n_size)
+    l1_cache_b_shape = (tile_k_size, tile_n_size)
+    l1_cache_b_layout = TransposedLayout(order=(1, 0))
+    scalar_b_layout = TransposedLayout(order=(1, 0))
+    enable_profiling = False
+
+    cnp_execution_times = run_cnp_kernel(
+        num_iterations,
+        test_output_path,
+        input_a_shape,
+        input_b_shape,
+        l1_cache_a_shape=l1_cache_a_shape,
+        l1_cache_b_shape=l1_cache_b_shape,
+        l1_cache_b_layout=l1_cache_b_layout,
+        scalar_b_layout=scalar_b_layout,
+        use_avx_manually=use_avx_manually,
+        enable_profiling=enable_profiling,
+    )
+
+    numpy_execution_times = run_numpy(num_iterations, input_a_shape, input_b_shape)
+    torch_execution_times = run_torch(num_iterations, input_a_shape, input_b_shape)
+    python_execution_times = run_python(num_iterations, (python_m_size, python_k_size), (python_k_size, python_n_size))
+
+    python_flops = compute_gflops(
+        (python_m_size, python_k_size), (python_k_size, python_n_size), python_execution_times
+    )
+    numpy_flops = compute_gflops(input_a_shape, input_b_shape, numpy_execution_times)
+    torch_flops = compute_gflops(input_a_shape, input_b_shape, torch_execution_times)
+    composit_flops = compute_gflops(input_a_shape, input_b_shape, cnp_execution_times)
+
+    logger.info(f"python:   {python_flops:.5f} GFLOP/s")
+    logger.info(f"numpy:    {numpy_flops:.5f} GFLOP/s, a {numpy_flops / python_flops:.5f}x speedup over python")
+    logger.info(f"torch:    {torch_flops:.5f} GFLOP/s, a {torch_flops / python_flops:.5f}x speedup over python")
+    logger.info(f"composit: {composit_flops:.5f} GFLOP/s, a {composit_flops / python_flops:.5f}x speedup over python")
 
 
 if __name__ == "__main__":
