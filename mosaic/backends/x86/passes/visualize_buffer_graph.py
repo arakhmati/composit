@@ -4,7 +4,7 @@ from pyrsistent import pmap, pvector
 from toolz import first
 
 from composit.multidigraph import visualize_graph
-from mosaic.backends.x86.types import BufferType
+from mosaic.backends.x86.types import BufferDescriptor, ConstantBufferDescriptor
 
 
 def iterate_buffer_descriptors_to_nodes(graph):
@@ -21,11 +21,7 @@ def iterate_buffer_descriptors_to_nodes(graph):
 
 @toolz.memoize
 def create_buffer_descriptor_to_color_and_style(graph):
-    nodes = filter(
-        lambda buffer_descriptor: buffer_descriptor.buffer_type == BufferType.Intermediate,
-        iterate_buffer_descriptors_to_nodes(graph),
-    )
-    nodes = list(nodes)
+    nodes = list(iterate_buffer_descriptors_to_nodes(graph))
 
     import colorsys
 
@@ -38,19 +34,15 @@ def create_buffer_descriptor_to_color_and_style(graph):
 def visualize_node(graphviz_graph, graph, node):
     buffer_descriptor_to_color_and_style = create_buffer_descriptor_to_color_and_style(graph)
     buffer_descriptor = first(graph.nodes[node]["buffer_descriptors"])
-    if buffer_descriptor.buffer_type == BufferType.Intermediate:
-        color, style = buffer_descriptor_to_color_and_style[buffer_descriptor]
-        fontcolor = "white"
-    elif buffer_descriptor.buffer_type == BufferType.ConstantInput:
+    if isinstance(buffer_descriptor, ConstantBufferDescriptor):
         color = "black"
         fontcolor = "white"
         style = "filled"
-    elif buffer_descriptor.buffer_type == BufferType.VariableInput:
-        color = "black"
-        fontcolor = "black"
-        style = "solid"
+    elif isinstance(buffer_descriptor, BufferDescriptor):
+        color, style = buffer_descriptor_to_color_and_style[buffer_descriptor]
+        fontcolor = "white"
     else:
-        raise ValueError("Unrecognized BufferType")
+        raise ValueError("Unrecognized BufferDescriptor")
     graphviz_graph.node(
         node.name, label=f"{node} @ {buffer_descriptor.name}", color=color, style=style, fontcolor=fontcolor
     )

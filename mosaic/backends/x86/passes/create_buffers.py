@@ -7,11 +7,9 @@ from toolz import first
 
 from composit.introspection import class_name
 from composit.multidigraph import topological_traversal
-from composit.nn import Variable
 from composit.numpy.core import Constant, get_operands
 
 from mosaic.backends.x86.types import (
-    BufferType,
     BufferDescriptor,
     ConstantBufferDescriptor,
     Buffer,
@@ -25,9 +23,7 @@ def intermediate_buffer_descriptor_factory():
 
     def create_intermediate_buffer_descriptor(dtype):
         nonlocal buffer_id
-        buffer_descriptor = BufferDescriptor(
-            name=f"intermediate_buffer_descriptor_{buffer_id}_{dtype}", buffer_type=BufferType.Intermediate
-        )
+        buffer_descriptor = BufferDescriptor(name=f"intermediate_buffer_descriptor_{buffer_id}_{dtype}")
         buffer_id += 1
         return buffer_descriptor
 
@@ -43,18 +39,22 @@ def normalize_name(name):
 
 
 def create_constant_input_buffer_descriptor(name, array):
-    return ConstantBufferDescriptor(name=normalize_name(name), buffer_type=BufferType.ConstantInput, array=array)
+    return ConstantBufferDescriptor(name=normalize_name(name), array=array)
 
 
-def create_variable_input_buffer_descriptor(name):
-    return BufferDescriptor(name=normalize_name(name), buffer_type=BufferType.VariableInput)
+def is_instruction_a_no_operation(instruction):
+    return class_name(instruction) in {"reshape"}
+
+
+def can_instruction_reuse_buffer(instruction):
+    return class_name(instruction) not in {"Tilize", "Untilize", "matmul", "mean", "sum", "transpose"}
 
 
 def try_returning_buffer_descriptor_to_queue(
     graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
 ):
     for predecessor, _ in graph.in_edges(node):
-        if isinstance(graph.nodes[predecessor]["instruction"], (Constant, Variable)):
+        if isinstance(graph.nodes[predecessor]["instruction"], Constant):
             continue
 
         if predecessor not in node_to_users:
@@ -69,14 +69,6 @@ def try_returning_buffer_descriptor_to_queue(
                 buffer_descriptor_stack.append(buffer_descriptor)
 
     return node_to_users
-
-
-def is_instruction_a_no_operation(instruction):
-    return class_name(instruction) in {"reshape"}
-
-
-def can_instruction_reuse_buffer(instruction):
-    return class_name(instruction) not in {"Tilize", "Untilize", "matmul", "mean", "sum", "transpose"}
 
 
 def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_current_node):
@@ -121,9 +113,6 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
                 node,
                 buffer_descriptors=tuple([create_constant_input_buffer_descriptor(node.name, array=instruction.array)]),
             )
-            continue
-        elif isinstance(instruction, Variable):
-            graph = graph.add_node(node, buffer_descriptors=tuple([create_variable_input_buffer_descriptor(node.name)]))
             continue
         elif is_instruction_a_no_operation(instruction):
             graph = graph.add_node(

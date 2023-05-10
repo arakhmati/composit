@@ -1,6 +1,5 @@
 from ctypes import cdll
 
-from loguru import logger
 from pyrsistent import pmap
 from toolz import first
 
@@ -20,7 +19,6 @@ from mosaic.backends.x86.kernels import (
     tilize,
     untilize,
 )
-from mosaic.backends.x86.types import BufferType
 
 
 def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype):
@@ -157,17 +155,13 @@ def generate_and_compile_run_model(graph, test_output_path, node_output_to_tile_
             module += kernel_module
             kernel_names_in_module.add(kernel_name)
 
+    FloatPointer = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
     arguments = []
     buffer_descriptor_to_variable = {}
     for buffer_descriptor in sorted(buffer_descriptor_to_buffer):
-        FloatPointer = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
-        if buffer_descriptor.buffer_type == BufferType.VariableInput:
-            FloatPointer = FloatPointer.const()
-
         variable = c.variable(FloatPointer, buffer_descriptor.name)
         arguments.append(variable)
         buffer_descriptor_to_variable[buffer_descriptor] = variable
-    logger.info(arguments)
 
     statements = []
     for node in filter(
