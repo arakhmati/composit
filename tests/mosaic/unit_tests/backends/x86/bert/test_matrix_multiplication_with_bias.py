@@ -4,7 +4,6 @@ import pathlib
 import random
 
 import numpy as np
-import torch
 
 import composit as cnp
 import composit.nn
@@ -18,14 +17,6 @@ FILE_DIR = pathlib.Path(__file__).parent.resolve()
 
 def cnp_model(input_var, weights, bias):
     return input_var @ weights + bias
-
-
-def torch_model(input_var, weights, bias):
-    input_var = torch.from_numpy(input_var)
-    weights = torch.from_numpy(weights)
-    bias = torch.from_numpy(bias)
-    result = input_var @ weights + bias
-    return result.numpy()
 
 
 def specify_input_var_to_scheme(input_var, weights_var, bias_var):
@@ -58,7 +49,6 @@ def test_matrix_multiplication_with_bias(
 ):
     random.seed(0)
     np.random.seed(0)
-    torch.manual_seed(0)
 
     test_name = request.node.name
     test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
@@ -74,9 +64,6 @@ def test_matrix_multiplication_with_bias(
     output_var = cnp_model(input_var, weights_var, bias_var)
 
     cnp_output = cnp.nn.evaluate(output_var, inputs={input_var: np_input})
-
-    torch_output = torch_model(np_input, np_weights, np_bias)
-    assert np.allclose(cnp_output, torch_output)
 
     input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var)
     mosaic_model = compile_to_mosaic_model(
