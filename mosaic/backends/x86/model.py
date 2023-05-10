@@ -31,7 +31,7 @@ from mosaic.backends.x86.kernels import (
     untilize,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, create_array_tile_config, to_tilized_array
+from mosaic.tilelab.tile import create_aligned_array, create_tile_config, to_tilized_array
 from mosaic.tilelab.tile_view import propagate_tile_views
 
 
@@ -270,7 +270,7 @@ def allocate_buffers(graph):
     return buffer_descriptor_to_buffer
 
 
-def populate_constant_buffers(graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config):
+def populate_constant_buffers(graph, buffer_descriptor_to_buffer, node_output_to_tile_config):
     constant_nodes_with_attributes = (
         (node, attributes)
         for node, attributes in graph.nodes(data=True)
@@ -278,10 +278,10 @@ def populate_constant_buffers(graph, buffer_descriptor_to_buffer, node_output_to
     )
     for node, attributes in constant_nodes_with_attributes:
         output_index = 0
-        array_tile_config = node_output_to_array_tile_config[(node, output_index)]
+        tile_config = node_output_to_tile_config[(node, output_index)]
         buffer_descriptor = first(attributes["buffer_descriptors"])
         buffer = buffer_descriptor_to_buffer[buffer_descriptor]
-        buffer.array[:] = to_tilized_array(buffer_descriptor.array, array_tile_config)
+        buffer.array[:] = to_tilized_array(buffer_descriptor.array, tile_config)
     return buffer_descriptor_to_buffer
 
 
@@ -334,13 +334,11 @@ def visualize_node(graphviz_graph, graph, node):
     )
 
 
-def propagate_array_tile_config(graph, input_var_to_scheme):
+def propagate_tile_config(graph, input_var_to_scheme):
     tile_views = propagate_tile_views(graph, inputs=input_var_to_scheme)
 
-    node_output_to_array_tile_config = {
-        node_output: create_array_tile_config(tile_view) for node_output, tile_view in tile_views
-    }
-    return node_output_to_array_tile_config
+    node_output_to_tile_config = {node_output: create_tile_config(tile_view) for node_output, tile_view in tile_views}
+    return node_output_to_tile_config
 
 
 class Tilize(PClass):
@@ -353,7 +351,7 @@ class Untilize(PClass):
         return input_tensor
 
 
-def insert_tilize_and_untilize_instructions(graph, node_output_to_array_tile_config):
+def insert_tilize_and_untilize_instructions(graph, node_output_to_tile_config):
     new_graph = MultiDiGraph()
     operand_to_new_operand = {}
     for node in topological_traversal(graph):
@@ -369,14 +367,14 @@ def insert_tilize_and_untilize_instructions(graph, node_output_to_array_tile_con
             )
             new_graph = new_graph.add_edge(node, tilize_node, source_output_index=0, sink_input_index=0)
             operand_to_new_operand[(node, 0)] = (tilize_node, 0)
-            node_output_to_array_tile_config[(tilize_node, 0)] = node_output_to_array_tile_config[(node, 0)]
+            node_output_to_tile_config[(tilize_node, 0)] = node_output_to_tile_config[(node, 0)]
         elif graph.out_degree(node) == 0:
             untilize_node = Node(name=f"untilize_{node.name}")
             new_graph = new_graph.add_node(
                 untilize_node, instruction=Untilize(), shapes=attributes["shapes"], dtypes=attributes["dtypes"]
             )
             new_graph = new_graph.add_edge(node, untilize_node, source_output_index=0, sink_input_index=0)
-            node_output_to_array_tile_config[(untilize_node, 0)] = node_output_to_array_tile_config[(node, 0)]
+            node_output_to_tile_config[(untilize_node, 0)] = node_output_to_tile_config[(node, 0)]
 
         for source, sink, edge_attributes in graph.in_edges(node, data=True):
             operand = (source, edge_attributes["source_output_index"])
@@ -388,12 +386,10 @@ def insert_tilize_and_untilize_instructions(graph, node_output_to_array_tile_con
                 sink_input_index=edge_attributes["sink_input_index"],
             )
 
-    return new_graph, node_output_to_array_tile_config
+    return new_graph, node_output_to_tile_config
 
 
-def get_kernel_name_and_module(
-    instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
-):
+def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype):
     instruction_class_name = class_name(instruction)
 
     kernel_name = None
@@ -402,69 +398,69 @@ def get_kernel_name_and_module(
         pass
     elif instruction_class_name == "Tilize":
         kernel_name, kernel_module = tilize.generate_module(
-            input_array_tile_configs,
-            output_array_tile_config,
+            input_tile_configs,
+            output_tile_config,
             input_dtypes,
             output_dtype,
         )
     elif instruction_class_name == "Untilize":
         kernel_name, kernel_module = untilize.generate_module(
-            input_array_tile_configs,
-            output_array_tile_config,
+            input_tile_configs,
+            output_tile_config,
             input_dtypes,
             output_dtype,
         )
     elif instruction_class_name == "matmul":
         kernel_name, kernel_module = matrix_multiplication.generate_module(
-            input_array_tile_configs,
-            output_array_tile_config,
+            input_tile_configs,
+            output_tile_config,
             input_dtypes,
             output_dtype,
             use_avx_manually=True,
         )
     elif instruction_class_name in {"exp", "sqrt", "gelu"}:
         kernel_name, kernel_module = unary_operation.generate_module(
-            input_array_tile_configs,
-            output_array_tile_config,
+            input_tile_configs,
+            output_tile_config,
             input_dtypes,
             output_dtype,
             instruction_class_name,
         )
     elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
         kernel_name, kernel_module = binary_operation.generate_module(
-            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction_class_name
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction_class_name
         )
     elif instruction_class_name in {"reshape"}:
         pass
     elif instruction_class_name in {"sum", "mean", "max"}:
         kernel_name, kernel_module = reduce.generate_module(
-            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction_class_name
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction_class_name
         )
     elif instruction_class_name in {"embedding"}:
         kernel_name, kernel_module = embedding.generate_module(
-            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
     elif instruction_class_name in {"transpose"}:
         kernel_name, kernel_module = transpose.generate_module(
-            input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, instruction.axes
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction.axes
         )
     else:
         raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
     return kernel_name, kernel_module
 
 
-def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_tile_config):
+def generate_and_compile_kernels(graph, test_output_path, node_output_to_tile_config):
     node_to_kernel_name = {}
     kernel_name_to_kernel_module = {}
 
     for node, attributes in graph.nodes(data=True):
         instruction = attributes["instruction"]
 
-        input_array_tile_configs = [
-            node_output_to_array_tile_config[(input_node, output_index)]
+        input_tile_configs = [
+            node_output_to_tile_config[(input_node, output_index)]
             for input_node, output_index in get_operands(graph, node)
         ]
-        output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
+        output_tile_config = node_output_to_tile_config[(node, 0)]
 
         input_dtypes = [
             graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
@@ -472,7 +468,7 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_array_t
         output_dtype = attributes["dtypes"][0]
 
         kernel_name, kernel_module = get_kernel_name_and_module(
-            instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+            instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
 
         node_to_kernel_name[node] = kernel_name
@@ -505,9 +501,7 @@ class ModelWithoutKernelFusion(PClass):
     buffer_descriptor_to_buffer = field()
 
 
-def generate_and_compile_run_model(
-    graph, test_output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
-):
+def generate_and_compile_run_model(graph, test_output_path, node_output_to_tile_config, buffer_descriptor_to_buffer):
     node_to_kernel_name = {}
     module = c.Module(includes=[], members=[])
     kernel_names_in_module = set()
@@ -515,11 +509,11 @@ def generate_and_compile_run_model(
     for node, attributes in graph.nodes(data=True):
         instruction = attributes["instruction"]
 
-        input_array_tile_configs = [
-            node_output_to_array_tile_config[(input_node, output_index)]
+        input_tile_configs = [
+            node_output_to_tile_config[(input_node, output_index)]
             for input_node, output_index in get_operands(graph, node)
         ]
-        output_array_tile_config = node_output_to_array_tile_config[(node, 0)]
+        output_tile_config = node_output_to_tile_config[(node, 0)]
 
         input_dtypes = [
             graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
@@ -527,7 +521,7 @@ def generate_and_compile_run_model(
         output_dtype = attributes["dtypes"][0]
 
         kernel_name, kernel_module = get_kernel_name_and_module(
-            instruction, input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype
+            instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
 
         node_to_kernel_name[node] = kernel_name
@@ -600,14 +594,12 @@ def compile_to_mosaic_model(
     fuse_kernels: bool,
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
-    node_output_to_array_tile_config = propagate_array_tile_config(graph, input_var_to_scheme)
-    graph, node_output_to_array_tile_config = insert_tilize_and_untilize_instructions(
-        graph, node_output_to_array_tile_config
-    )
+    node_output_to_tile_config = propagate_tile_config(graph, input_var_to_scheme)
+    graph, node_output_to_tile_config = insert_tilize_and_untilize_instructions(graph, node_output_to_tile_config)
     buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
     buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
     buffer_descriptor_to_buffer = populate_constant_buffers(
-        buffer_graph, buffer_descriptor_to_buffer, node_output_to_array_tile_config
+        buffer_graph, buffer_descriptor_to_buffer, node_output_to_tile_config
     )
 
     # from composit.multidigraph import visualize_graph
@@ -615,7 +607,7 @@ def compile_to_mosaic_model(
 
     if fuse_kernels:
         run_model = generate_and_compile_run_model(
-            buffer_graph, output_path, node_output_to_array_tile_config, buffer_descriptor_to_buffer
+            buffer_graph, output_path, node_output_to_tile_config, buffer_descriptor_to_buffer
         )
         return ModelWithKernelFusion(
             buffer_graph=buffer_graph,
@@ -623,7 +615,7 @@ def compile_to_mosaic_model(
             buffer_descriptor_to_buffer=buffer_descriptor_to_buffer,
         )
 
-    node_to_run_kernel = generate_and_compile_kernels(buffer_graph, output_path, node_output_to_array_tile_config)
+    node_to_run_kernel = generate_and_compile_kernels(buffer_graph, output_path, node_output_to_tile_config)
     return ModelWithoutKernelFusion(
         buffer_graph=buffer_graph,
         node_to_run_kernel=node_to_run_kernel,

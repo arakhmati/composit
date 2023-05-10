@@ -15,7 +15,7 @@ import composit.nn
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, create_tile_view, ScalarTileLevel
-from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array
+from mosaic.tilelab.tile import create_tile_config, to_tilized_array
 from mosaic.backends.x86.kernels import untilize
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -43,12 +43,12 @@ def run_cnp_kernel(
     )
 
     logger.info("Create tile metadata")
-    array_tile_config = create_array_tile_config(tile_view)
+    tile_config = create_tile_config(tile_view)
 
     logger.info("Generate kernels")
     kernel_name, kernel_module = untilize.generate_module(
-        [array_tile_config],
-        array_tile_config,
+        [tile_config],
+        tile_config,
         [input_var.dtype],
         input_var.dtype,
     )
@@ -63,7 +63,7 @@ def run_cnp_kernel(
     run_kernel = getattr(shared_library, kernel_name)
 
     def run(np_input):
-        input_flat_array = to_tilized_array(np_input, array_tile_config)
+        input_flat_array = to_tilized_array(np_input, tile_config)
         output_flat_array = np.zeros(input_var.shape, dtype=input_flat_array.dtype)
         run_kernel(cast_numpy_array_to_pointer(input_flat_array), cast_numpy_array_to_pointer(output_flat_array))
         return output_flat_array

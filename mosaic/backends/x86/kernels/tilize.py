@@ -4,14 +4,14 @@ import pathlib
 import codegen as c
 from mosaic.tilelab.layout import TransposedLayout
 
-from mosaic.tilelab.tile import ArrayTileConfig
+from mosaic.tilelab.tile import TileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 from mosaic.backends.ctypes import get_ctype_string_from_numpy_dtype
 
 
-def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype):
-    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, output_array_tile_config, output_dtype)
+def generate_module(input_tile_configs, output_tile_config, input_dtypes, output_dtype):
+    kernel_name = create_kernel_name(pathlib.Path(__file__).stem, output_tile_config, output_dtype)
 
     ctype_string = get_ctype_string_from_numpy_dtype(output_dtype)
     InputType = c.Type(ctype_string).const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
@@ -27,9 +27,9 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, output_var],
                 body_function=generate_body,
-                array_tile_config=output_array_tile_config,
+                tile_config=output_tile_config,
                 offset=c.literal(0),
-                original_shape=output_array_tile_config.shape,
+                original_shape=output_tile_config.shape,
             ).extern_c()
         ],
     )
@@ -74,37 +74,37 @@ def transpose_sequence(sequence, axes):
     return tuple(new_sequence)
 
 
-def generate_body(arguments, *, array_tile_config, offset, original_shape, all_indices=None):
+def generate_body(arguments, *, tile_config, offset, original_shape, all_indices=None):
     if all_indices is None:
         all_indices = []
 
     input_var, output_var = arguments
 
-    level_name = array_tile_config.level_name
+    level_name = tile_config.level_name
 
-    num_tiles_per_axis = array_tile_config.num_tiles_per_axis()
+    num_tiles_per_axis = tile_config.num_tiles_per_axis()
     ranges = tuple(num_tiles for num_tiles in num_tiles_per_axis)
     indices = [c.variable(c.Type("uint32_t"), f"{level_name}_index_{axis}") for axis, _ in enumerate(ranges)]
     original_indices = list(indices)
 
-    if isinstance(array_tile_config.layout, TransposedLayout):
-        order = array_tile_config.layout.order
+    if isinstance(tile_config.layout, TransposedLayout):
+        order = tile_config.layout.order
         num_tiles_per_axis = transpose_sequence(num_tiles_per_axis, order)
         ranges = transpose_sequence(ranges, order)
         indices = transpose_sequence(indices, order)
 
-    if isinstance(array_tile_config, ArrayTileConfig):
-        all_indices += [compute_original_indices(original_indices, array_tile_config.tile_shape)]
+    if isinstance(tile_config, TileConfig):
+        all_indices += [compute_original_indices(original_indices, tile_config.tile_shape)]
         next_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_offset")
 
         declare_next_offset = next_offset << (
-            compute_offset(offset, indices, num_tiles_per_axis, math.prod(array_tile_config.tile_shape))
+            compute_offset(offset, indices, num_tiles_per_axis, math.prod(tile_config.tile_shape))
         )
 
         inner_loop_body = c.block(declare_next_offset)
         inner_loop_body += generate_body(
             arguments,
-            array_tile_config=array_tile_config.next_level(),
+            tile_config=tile_config.next_level(),
             offset=next_offset,
             original_shape=original_shape,
             all_indices=all_indices,

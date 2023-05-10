@@ -4,7 +4,7 @@ import pathlib
 import codegen as c
 from mosaic.tilelab.layout import TransposedLayout
 
-from mosaic.tilelab.tile import ArrayTileConfig
+from mosaic.tilelab.tile import TileConfig
 from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 from mosaic.backends.x86.constants import AVX_SIZE, MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
@@ -33,8 +33,8 @@ auto _mm256_reduce_add_ps = [](const auto& x) {
 
 
 def generate_module(
-    input_array_tile_configs,
-    output_array_tile_config,
+    input_tile_configs,
+    output_tile_config,
     input_dtypes,
     output_dtype,
     *,
@@ -43,8 +43,8 @@ def generate_module(
 ):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
-        input_array_tile_configs[0],
-        input_array_tile_configs[1],
+        input_tile_configs[0],
+        input_tile_configs[1],
         use_avx_manually,
     )
 
@@ -52,11 +52,11 @@ def generate_module(
     input_b_var = c.variable(InputType, "input_b_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = initialize_output(output_array_tile_config, output_var)
+    body = initialize_output(output_tile_config, output_var)
     body += generate_body(
         arguments=[input_a_var, input_b_var, output_var],
-        input_a_array_tile_config=input_array_tile_configs[0],
-        input_b_array_tile_config=input_array_tile_configs[1],
+        input_a_tile_config=input_tile_configs[0],
+        input_b_tile_config=input_tile_configs[1],
         offsets=dict(input_a_var=c.literal(0), input_b_var=c.literal(0), output_var=c.literal(0)),
         use_avx_manually=use_avx_manually,
         enable_tracy=enable_tracy,
@@ -83,9 +83,9 @@ def generate_module(
     return kernel_name, module
 
 
-def initialize_output(output_array_tile_config, output_var):
+def initialize_output(output_tile_config, output_var):
     index = c.variable(c.Type("uint32_t"), "index")
-    num_iterations = math.prod(output_array_tile_config.shape)
+    num_iterations = math.prod(output_tile_config.shape)
 
     value = c.literal(0)
     loop = c.ForLoop(
@@ -98,11 +98,11 @@ def initialize_output(output_array_tile_config, output_var):
     return c.block(loop)
 
 
-def input_b_is_transposed(array_tile_config):
-    if not isinstance(array_tile_config.layout, TransposedLayout):
+def input_b_is_transposed(tile_config):
+    if not isinstance(tile_config.layout, TransposedLayout):
         return False
 
-    order = tuple(array_tile_config.layout.order)
+    order = tuple(tile_config.layout.order)
     contiguous_order = tuple(range(len(order)))
     if order[:-2] == contiguous_order[:-2] and order[-2:] != contiguous_order[-2:]:
         return True
@@ -112,15 +112,15 @@ def input_b_is_transposed(array_tile_config):
 def generate_body(
     arguments,
     *,
-    input_a_array_tile_config,
-    input_b_array_tile_config,
+    input_a_tile_config,
+    input_b_tile_config,
     offsets,
     use_avx_manually: bool,
     enable_tracy: bool = False,
 ):
     input_a_var, input_b_var, output_var = arguments
 
-    level_name = input_a_array_tile_config.level_name
+    level_name = input_a_tile_config.level_name
 
     inner_loop_increment = c.literal(1)
     outer_loop_body_after = c.block()
@@ -130,16 +130,14 @@ def generate_body(
     n = c.variable(c.Type("uint32_t"), f"{level_name}_n")
     k = c.variable(c.Type("uint32_t"), f"{level_name}_k")
 
-    a_ranges = tuple(num_tiles for num_tiles in input_a_array_tile_config.num_tiles_per_axis())
-    *_, n_range = (num_tiles for num_tiles in input_b_array_tile_config.num_tiles_per_axis())
+    a_ranges = tuple(num_tiles for num_tiles in input_a_tile_config.num_tiles_per_axis())
+    *_, n_range = (num_tiles for num_tiles in input_b_tile_config.num_tiles_per_axis())
 
     *b_sizes, m_size, k_size, n_size = a_ranges + (n_range,)
     b_size = math.prod(b_sizes)
 
-    if isinstance(input_a_array_tile_config, ArrayTileConfig):
-        output_tile_volume = math.prod(
-            [*input_a_array_tile_config.tile_shape[:-1], input_b_array_tile_config.tile_shape[-1]]
-        )
+    if isinstance(input_a_tile_config, TileConfig):
+        output_tile_volume = math.prod([*input_a_tile_config.tile_shape[:-1], input_b_tile_config.tile_shape[-1]])
 
         next_a_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_a_offset")
         next_b_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_b_offset")
@@ -147,8 +145,8 @@ def generate_body(
 
         declare_next_a_offset = next_a_offset << (
             offsets["input_a_var"]
-            + (b * c.literal(m_size) * c.literal(k_size) * c.literal(math.prod(input_a_array_tile_config.tile_shape)))
-            + ((m * c.literal(k_size) + k) * c.literal(math.prod(input_a_array_tile_config.tile_shape)))
+            + (b * c.literal(m_size) * c.literal(k_size) * c.literal(math.prod(input_a_tile_config.tile_shape)))
+            + ((m * c.literal(k_size) + k) * c.literal(math.prod(input_a_tile_config.tile_shape)))
         )
         declare_next_output_offset = next_output_offset << (
             offsets["output_var"]
@@ -156,16 +154,11 @@ def generate_body(
             + ((m * c.literal(n_size) + n) * c.literal(output_tile_volume))
         )
 
-        if input_b_is_transposed(input_b_array_tile_config):
+        if input_b_is_transposed(input_b_tile_config):
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
-                + (
-                    b
-                    * c.literal(n_size)
-                    * c.literal(k_size)
-                    * c.literal(math.prod(input_b_array_tile_config.tile_shape))
-                )
-                + ((n * c.literal(k_size) + k) * c.literal(math.prod(input_b_array_tile_config.tile_shape)))
+                + (b * c.literal(n_size) * c.literal(k_size) * c.literal(math.prod(input_b_tile_config.tile_shape)))
+                + ((n * c.literal(k_size) + k) * c.literal(math.prod(input_b_tile_config.tile_shape)))
             )
             inner_loop_index = k
             inner_loop_size = c.literal(k_size)
@@ -177,13 +170,8 @@ def generate_body(
         else:
             declare_next_b_offset = next_b_offset << (
                 offsets["input_b_var"]
-                + (
-                    b
-                    * c.literal(k_size)
-                    * c.literal(n_size)
-                    * c.literal(math.prod(input_b_array_tile_config.tile_shape))
-                )
-                + ((k * c.literal(n_size) + n) * c.literal(math.prod(input_b_array_tile_config.tile_shape)))
+                + (b * c.literal(k_size) * c.literal(n_size) * c.literal(math.prod(input_b_tile_config.tile_shape)))
+                + ((k * c.literal(n_size) + n) * c.literal(math.prod(input_b_tile_config.tile_shape)))
             )
             inner_loop_index = n
             inner_loop_size = c.literal(n_size)
@@ -195,14 +183,14 @@ def generate_body(
 
         inner_loop_body += generate_body(
             arguments=arguments,
-            input_a_array_tile_config=input_a_array_tile_config.next_level(),
-            input_b_array_tile_config=input_b_array_tile_config.next_level(),
+            input_a_tile_config=input_a_tile_config.next_level(),
+            input_b_tile_config=input_b_tile_config.next_level(),
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
             use_avx_manually=use_avx_manually,
         )
 
     else:
-        if input_b_is_transposed(input_b_array_tile_config):
+        if input_b_is_transposed(input_b_tile_config):
             inner_loop_index = k
             inner_loop_size = c.literal(k_size)
             outer_loop_index = n

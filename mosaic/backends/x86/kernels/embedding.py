@@ -12,10 +12,10 @@ WeightsType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNM
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype):
+def generate_module(input_tile_configs, output_tile_config, input_dtypes, output_dtype):
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
-        output_array_tile_config,
+        output_tile_config,
     )
 
     input_var = c.variable(InputType, "input_var")
@@ -29,7 +29,7 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
                 name=c.Identifier(kernel_name),
                 arguments=[input_var, weights, output_var],
                 body_function=generate_body,
-                output_array_tile_config=output_array_tile_config,
+                output_tile_config=output_tile_config,
             ).extern_c()
         ],
     )
@@ -38,10 +38,10 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
 
 def generate_body(
     arguments,
-    output_array_tile_config,
+    output_tile_config,
 ):
     input_var, weights, output_var = arguments
-    batch_size, sequence_size, hidden_size = output_array_tile_config.shape
+    batch_size, sequence_size, hidden_size = output_tile_config.shape
 
     batch_size_index = c.variable(c.Type("uint32_t"), "batch_size_index")
     sequence_size_index = c.variable(c.Type("uint32_t"), "sequence_size_index")
@@ -50,7 +50,7 @@ def generate_body(
     word_index = input_var[batch_size_index * c.literal(sequence_size) + sequence_size_index]
     weights_index = word_index * c.literal(hidden_size) + hidden_size_index
 
-    tile_shape = output_array_tile_config.tile_shape
+    tile_shape = output_tile_config.tile_shape
     _, tile_sequence_size, tile_hidden_size = tile_shape
 
     output_index = (

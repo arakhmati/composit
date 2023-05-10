@@ -4,7 +4,7 @@ import pathlib
 
 import codegen as c
 
-from mosaic.tilelab.tile import ArrayTileConfig
+from mosaic.tilelab.tile import TileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 
@@ -13,28 +13,26 @@ InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMEN
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)
 
 
-def generate_module(input_array_tile_configs, output_array_tile_config, input_dtypes, output_dtype, operation):
-    input_array_tile_config, *_ = input_array_tile_configs
-    kwargs = dict(
-        mean_coefficient=1.0 / (math.prod(input_array_tile_config.shape) / math.prod(output_array_tile_config.shape))
-    )
+def generate_module(input_tile_configs, output_tile_config, input_dtypes, output_dtype, operation):
+    input_tile_config, *_ = input_tile_configs
+    kwargs = dict(mean_coefficient=1.0 / (math.prod(input_tile_config.shape) / math.prod(output_tile_config.shape)))
 
     kernel_name = create_kernel_name(
         pathlib.Path(__file__).stem,
-        input_array_tile_config,
-        output_array_tile_config,
+        input_tile_config,
+        output_tile_config,
         operation,
     )
 
     input_var = c.variable(InputType, "input_var")
     output_var = c.variable(OutputType, "output_var")
 
-    body = initialize_output(output_array_tile_config, operation=operation, arguments=[input_var, output_var])
+    body = initialize_output(output_tile_config, operation=operation, arguments=[input_var, output_var])
 
     body += generate_body(
         arguments=[input_var, output_var],
-        input_array_tile_config=input_array_tile_config,
-        output_array_tile_config=output_array_tile_config,
+        input_tile_config=input_tile_config,
+        output_tile_config=output_tile_config,
         operation=operation,
         offsets=dict(input=c.literal(0), output=c.literal(0)),
         **kwargs,
@@ -54,11 +52,11 @@ def generate_module(input_array_tile_configs, output_array_tile_config, input_dt
     return kernel_name, module
 
 
-def initialize_output(output_array_tile_config, operation, arguments):
+def initialize_output(output_tile_config, operation, arguments):
     input_var, output_var = arguments
 
     index = c.variable(c.Type("uint32_t"), "index")
-    num_iterations = math.prod(output_array_tile_config.shape)
+    num_iterations = math.prod(output_tile_config.shape)
 
     value = c.literal(0)
     if operation == "max":
@@ -85,13 +83,13 @@ def compute_offset(offset, indices, num_tiles_per_axis, next_level_volume):
     return offset
 
 
-def generate_body(arguments, input_array_tile_config, output_array_tile_config, operation, offsets, **kwargs):
+def generate_body(arguments, input_tile_config, output_tile_config, operation, offsets, **kwargs):
     input_var, output_var = arguments
 
-    level_name = input_array_tile_config.level_name
+    level_name = input_tile_config.level_name
 
-    input_num_tiles_per_axis = input_array_tile_config.num_tiles_per_axis()
-    output_num_tiles_per_axis = output_array_tile_config.num_tiles_per_axis()
+    input_num_tiles_per_axis = input_tile_config.num_tiles_per_axis()
+    output_num_tiles_per_axis = output_tile_config.num_tiles_per_axis()
 
     input_ranges = tuple(num_tiles for num_tiles in input_num_tiles_per_axis)
     output_ranges = tuple(num_tiles for num_tiles in output_num_tiles_per_axis)
@@ -103,13 +101,13 @@ def generate_body(arguments, input_array_tile_config, output_array_tile_config, 
         c.variable(c.Type("uint32_t"), f"{level_name}_index_output_{axis}") for axis, _ in enumerate(output_ranges)
     ]
 
-    if isinstance(input_array_tile_config, ArrayTileConfig):
+    if isinstance(input_tile_config, TileConfig):
         next_input_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_input_offset")
         next_output_offset = c.variable(c.Type("uint32_t"), f"{level_name}_next_output_offset")
 
         declare_next_input_offset = next_input_offset << (
             compute_offset(
-                offsets["input"], input_indices, input_num_tiles_per_axis, math.prod(input_array_tile_config.tile_shape)
+                offsets["input"], input_indices, input_num_tiles_per_axis, math.prod(input_tile_config.tile_shape)
             )
         )
 
@@ -118,15 +116,15 @@ def generate_body(arguments, input_array_tile_config, output_array_tile_config, 
                 offsets["output"],
                 output_indices,
                 output_num_tiles_per_axis,
-                math.prod(output_array_tile_config.tile_shape),
+                math.prod(output_tile_config.tile_shape),
             )
         )
 
         inner_loop_body = c.block(declare_next_input_offset, declare_next_output_offset)
         inner_loop_body += generate_body(
             arguments=arguments,
-            input_array_tile_config=input_array_tile_config.next_level(),
-            output_array_tile_config=output_array_tile_config.next_level(),
+            input_tile_config=input_tile_config.next_level(),
+            output_tile_config=output_tile_config.next_level(),
             operation=operation,
             offsets=dict(input=next_input_offset, output=next_output_offset),
             **kwargs,

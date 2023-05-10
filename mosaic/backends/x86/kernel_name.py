@@ -1,13 +1,13 @@
 import collections
 
-from mosaic.tilelab.tile import ArrayTileConfig
+from mosaic.tilelab.tile import TileConfig
 from mosaic.tilelab.tile_view import TileLevel, ScalarTileLevel
 
 
 def normalize_value(value):
     if isinstance(value, str):
         return value
-    elif isinstance(value, ArrayTileConfig):
+    elif isinstance(value, TileConfig):
         return f"{normalize_value(value.shape)}_{normalize_value(value.hierarchy)}"
     elif isinstance(value, TileLevel):
         return f"{value.level_name}_{normalize_value(value.tile_shape)}_{normalize_value(value.layout)}"

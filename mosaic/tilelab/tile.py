@@ -12,7 +12,7 @@ from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, TileView, ScalarTileLevel
 
 
-class ArrayTileConfig(PClass):
+class TileConfig(PClass):
     level_name = field()
     shape = field()
     layout = field()
@@ -47,7 +47,7 @@ class ArrayTileConfig(PClass):
             f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
         )
         first_child = self.next_level()
-        if isinstance(first_child, ArrayTileConfig):
+        if isinstance(first_child, TileConfig):
             first_child_repr = f"\n{first_child}"
         else:
             first_child_repr = ""
@@ -76,10 +76,10 @@ class AtomicTileConfig(PClass):
         return self.shape
 
 
-def create_array_tile_config(
+def create_tile_config(
     tile_view: TileView,
     offsets=None,
-) -> ArrayTileConfig:
+) -> TileConfig:
     shape = tile_view.shape
     hierarchy = tile_view.hierarchy
 
@@ -101,7 +101,7 @@ def create_array_tile_config(
         new_offsets = [offset + index for offset, index in zip(offsets, indices)]
 
         if len(remaining_hierarchy) > 1:
-            index_to_tile[tile_indices] = create_array_tile_config(
+            index_to_tile[tile_indices] = create_tile_config(
                 TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets
             )
         else:
@@ -112,14 +112,14 @@ def create_array_tile_config(
                 layout=leaf_level.layout,
             )
 
-    array_tile_config = ArrayTileConfig(
+    tile_config = TileConfig(
         level_name=tile_level.level_name,
         shape=shape,
         layout=tile_level.layout,
         index_to_tile=pmap(index_to_tile),
     )
 
-    return array_tile_config
+    return tile_config
 
 
 def create_aligned_array(shape, dtype, align=32):
@@ -130,11 +130,11 @@ def create_aligned_array(shape, dtype, align=32):
     return array
 
 
-def get_all_num_tiles_per_axis(array_tile_config):
-    if isinstance(array_tile_config, ArrayTileConfig):
-        return array_tile_config.num_tiles_per_axis() + get_all_num_tiles_per_axis(array_tile_config.next_level())
+def get_all_num_tiles_per_axis(tile_config):
+    if isinstance(tile_config, TileConfig):
+        return tile_config.num_tiles_per_axis() + get_all_num_tiles_per_axis(tile_config.next_level())
     else:
-        return array_tile_config.num_tiles_per_axis()
+        return tile_config.num_tiles_per_axis()
 
 
 def transpose_sequence(sequence, axes):
@@ -144,18 +144,18 @@ def transpose_sequence(sequence, axes):
     return tuple(new_sequence)
 
 
-def compute_shape_before_tilization(array_tile_config: ArrayTileConfig):
-    axes = list(range(len(array_tile_config.shape)))
-    all_num_tiles_per_axis = get_all_num_tiles_per_axis(array_tile_config)
+def compute_shape_before_tilization(tile_config: TileConfig):
+    axes = list(range(len(tile_config.shape)))
+    all_num_tiles_per_axis = get_all_num_tiles_per_axis(tile_config)
     tilized_shape = []
     for axis in axes:
         tilized_shape += all_num_tiles_per_axis[axis :: len(axes)]
     return tilized_shape
 
 
-def compute_tilize_transpose_order(array_tile_config):
-    axes = list(range(len(array_tile_config.shape)))
-    hierarchy = list(array_tile_config.hierarchy)
+def compute_tilize_transpose_order(tile_config):
+    axes = list(range(len(tile_config.shape)))
+    hierarchy = list(tile_config.hierarchy)
     result = []
     for level_index, level in enumerate(hierarchy):
         order = [level_index + axis * len(hierarchy) for axis in axes]
@@ -165,25 +165,25 @@ def compute_tilize_transpose_order(array_tile_config):
     return result
 
 
-def compute_untilize_transpose_order(array_tile_config):
-    axes = list(range(len(array_tile_config.shape)))
-    num_levels = len(array_tile_config.hierarchy)
+def compute_untilize_transpose_order(tile_config):
+    axes = list(range(len(tile_config.shape)))
+    num_levels = len(tile_config.hierarchy)
     order = [axis + level_index * len(axes) for axis in axes for level_index in range(num_levels)]
     return order
 
 
-def to_tilized_array(array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
+def to_tilized_array(array: np.array, tile_config: TileConfig) -> np.ndarray:
     tilized_array = create_aligned_array((math.prod(array.shape),), array.dtype)
-    shape_before = compute_shape_before_tilization(array_tile_config)
-    transpose_order = compute_tilize_transpose_order(array_tile_config)
+    shape_before = compute_shape_before_tilization(tile_config)
+    transpose_order = compute_tilize_transpose_order(tile_config)
     array = array.reshape(shape_before)
     array = array.transpose(transpose_order)
     tilized_array[:] = array.flatten()
     return tilized_array
 
 
-def from_tilized_array(array: np.array, array_tile_config: ArrayTileConfig) -> np.ndarray:
-    transpose_order = compute_untilize_transpose_order(array_tile_config)
-    array = array.reshape(get_all_num_tiles_per_axis(array_tile_config))
+def from_tilized_array(array: np.array, tile_config: TileConfig) -> np.ndarray:
+    transpose_order = compute_untilize_transpose_order(tile_config)
+    array = array.reshape(get_all_num_tiles_per_axis(tile_config))
     array = array.transpose(transpose_order)
-    return array.reshape(array_tile_config.shape)
+    return array.reshape(tile_config.shape)

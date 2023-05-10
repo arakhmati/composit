@@ -15,7 +15,7 @@ import composit as cnp
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views, ScalarTileLevel
-from mosaic.tilelab.tile import create_array_tile_config, to_tilized_array, from_tilized_array
+from mosaic.tilelab.tile import create_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import transpose
 from mosaic.backends.x86.compile import compile_shared_library
 
@@ -76,15 +76,15 @@ def run_cnp_kernel(
             ]
         },
     )
-    input_array_tile_config = create_array_tile_config(tile_views[input_var])
-    output_array_tile_config = create_array_tile_config(tile_views[output_var])
-    logger.info(input_array_tile_config)
-    logger.info(output_array_tile_config)
+    input_tile_config = create_tile_config(tile_views[input_var])
+    output_tile_config = create_tile_config(tile_views[output_var])
+    logger.info(input_tile_config)
+    logger.info(output_tile_config)
 
     logger.info("Generate kernel")
     kernel_name, kernel_module = transpose.generate_module(
-        [input_array_tile_config],
-        output_array_tile_config,
+        [input_tile_config],
+        output_tile_config,
         [input_var.dtype],
         output_var.dtype,
         axes,
@@ -100,13 +100,13 @@ def run_cnp_kernel(
     run_kernel = getattr(shared_library, kernel_name)
 
     def run(np_input):
-        input_flat_array = to_tilized_array(np_input, input_array_tile_config)
+        input_flat_array = to_tilized_array(np_input, input_tile_config)
         output_flat_array = np.zeros((math.prod(output_var.shape),), dtype=input_flat_array.dtype)
         run_kernel(
             cast_numpy_array_to_pointer(input_flat_array),
             cast_numpy_array_to_pointer(output_flat_array),
         )
-        return from_tilized_array(output_flat_array, output_array_tile_config)
+        return from_tilized_array(output_flat_array, output_tile_config)
 
     logger.info("Run Comparison")
     np_input = np.random.uniform(-0.5, 0.5, input_var.shape).astype(np.float32)
