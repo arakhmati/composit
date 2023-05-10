@@ -43,12 +43,12 @@ class Buffer(PClass):
 
 
 class ModelWithoutKernelFusion(PClass):
-    buffer_graph = field()
+    graph = field()
     node_to_run_kernel = field()
     buffer_descriptor_to_buffer = field()
 
 
 class ModelWithKernelFusion(PClass):
-    buffer_graph = field()
+    graph = field()
     run_model = field()
     buffer_descriptor_to_buffer = field()

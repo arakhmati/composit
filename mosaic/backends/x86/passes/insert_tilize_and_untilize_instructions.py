@@ -15,7 +15,7 @@ class Untilize(PClass):
         return input_tensor
 
 
-def insert_tilize_and_untilize_instructions(graph, node_output_to_tile_config):
+def insert_tilize_and_untilize_instructions(graph):
     new_graph = MultiDiGraph()
     operand_to_new_operand = {}
     for node in topological_traversal(graph):
@@ -27,18 +27,24 @@ def insert_tilize_and_untilize_instructions(graph, node_output_to_tile_config):
         if class_name(graph.nodes[node]["instruction"]) == "Variable":
             tilize_node = Node(name=f"tilize_{node.name}")
             new_graph = new_graph.add_node(
-                tilize_node, instruction=Tilize(), shapes=attributes["shapes"], dtypes=attributes["dtypes"]
+                tilize_node,
+                instruction=Tilize(),
+                shapes=attributes["shapes"],
+                dtypes=attributes["dtypes"],
+                tile_configs=attributes["tile_configs"],
             )
             new_graph = new_graph.add_edge(node, tilize_node, source_output_index=0, sink_input_index=0)
             operand_to_new_operand[(node, 0)] = (tilize_node, 0)
-            node_output_to_tile_config[(tilize_node, 0)] = node_output_to_tile_config[(node, 0)]
         elif graph.out_degree(node) == 0:
             untilize_node = Node(name=f"untilize_{node.name}")
             new_graph = new_graph.add_node(
-                untilize_node, instruction=Untilize(), shapes=attributes["shapes"], dtypes=attributes["dtypes"]
+                untilize_node,
+                instruction=Untilize(),
+                shapes=attributes["shapes"],
+                dtypes=attributes["dtypes"],
+                tile_configs=attributes["tile_configs"],
             )
             new_graph = new_graph.add_edge(node, untilize_node, source_output_index=0, sink_input_index=0)
-            node_output_to_tile_config[(untilize_node, 0)] = node_output_to_tile_config[(node, 0)]
 
         for source, sink, edge_attributes in graph.in_edges(node, data=True):
             operand = (source, edge_attributes["source_output_index"])
@@ -50,4 +56,4 @@ def insert_tilize_and_untilize_instructions(graph, node_output_to_tile_config):
                 sink_input_index=edge_attributes["sink_input_index"],
             )
 
-    return new_graph, node_output_to_tile_config
+    return new_graph

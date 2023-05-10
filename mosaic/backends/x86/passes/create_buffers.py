@@ -201,25 +201,22 @@ def allocate_buffers(graph):
     return buffer_descriptor_to_buffer
 
 
-def populate_constant_buffers(graph, buffer_descriptor_to_buffer, node_output_to_tile_config):
+def populate_constant_buffers(graph, buffer_descriptor_to_buffer):
     constant_nodes_with_attributes = (
         (node, attributes)
         for node, attributes in graph.nodes(data=True)
         if class_name(attributes["instruction"]) == "Constant"
     )
     for node, attributes in constant_nodes_with_attributes:
-        output_index = 0
-        tile_config = node_output_to_tile_config[(node, output_index)]
+        tile_config = first(attributes["tile_configs"])
         buffer_descriptor = first(attributes["buffer_descriptors"])
         buffer = buffer_descriptor_to_buffer[buffer_descriptor]
         buffer.array[:] = to_tilized_array(buffer_descriptor.array, tile_config)
     return buffer_descriptor_to_buffer
 
 
-def create_buffers(graph, node_output_to_tile_config, reuse_buffers):
-    buffer_graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
-    buffer_descriptor_to_buffer = allocate_buffers(buffer_graph)
-    buffer_descriptor_to_buffer = populate_constant_buffers(
-        buffer_graph, buffer_descriptor_to_buffer, node_output_to_tile_config
-    )
-    return buffer_graph, buffer_descriptor_to_buffer
+def create_buffers(graph, reuse_buffers):
+    graph = populate_buffer_descriptors(graph, reuse_buffers=reuse_buffers)
+    buffer_descriptor_to_buffer = allocate_buffers(graph)
+    buffer_descriptor_to_buffer = populate_constant_buffers(graph, buffer_descriptor_to_buffer)
+    return graph, buffer_descriptor_to_buffer

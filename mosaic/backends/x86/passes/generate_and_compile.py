@@ -81,7 +81,7 @@ def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_conf
     return kernel_name, kernel_module
 
 
-def generate_and_compile_kernels(graph, test_output_path, node_output_to_tile_config):
+def generate_and_compile_kernels(graph, test_output_path):
     node_to_kernel_name = {}
     kernel_name_to_kernel_module = {}
 
@@ -89,10 +89,10 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_tile_co
         instruction = attributes["instruction"]
 
         input_tile_configs = [
-            node_output_to_tile_config[(input_node, output_index)]
+            graph.nodes[input_node]["tile_configs"][output_index]
             for input_node, output_index in get_operands(graph, node)
         ]
-        output_tile_config = node_output_to_tile_config[(node, 0)]
+        output_tile_config = attributes["tile_configs"][0]
 
         input_dtypes = [
             graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
@@ -127,7 +127,7 @@ def generate_and_compile_kernels(graph, test_output_path, node_output_to_tile_co
     return pmap(node_to_run_kernel)
 
 
-def generate_and_compile_run_model(graph, test_output_path, node_output_to_tile_config, buffer_descriptor_to_buffer):
+def generate_and_compile_run_model(graph, test_output_path, buffer_descriptor_to_buffer):
     node_to_kernel_name = {}
     module = c.Module(includes=[], members=[])
     kernel_names_in_module = set()
@@ -136,10 +136,10 @@ def generate_and_compile_run_model(graph, test_output_path, node_output_to_tile_
         instruction = attributes["instruction"]
 
         input_tile_configs = [
-            node_output_to_tile_config[(input_node, output_index)]
+            graph.nodes[input_node]["tile_configs"][output_index]
             for input_node, output_index in get_operands(graph, node)
         ]
-        output_tile_config = node_output_to_tile_config[(node, 0)]
+        output_tile_config = attributes["tile_configs"][0]
 
         input_dtypes = [
             graph.nodes[input_node]["dtypes"][output_index] for input_node, output_index in get_operands(graph, node)
