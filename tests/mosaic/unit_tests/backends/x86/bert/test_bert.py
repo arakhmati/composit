@@ -10,7 +10,8 @@ from loguru import logger
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from mosaic.backends.x86.model import compile_to_mosaic_model, evaluate_mosaic_model
+from mosaic.backends.x86.passes.compile_to_mosaic_model import compile_to_mosaic_model
+from mosaic.backends.x86.passes.evaluate import evaluate_mosaic_model
 from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, ScalarTileLevel
 

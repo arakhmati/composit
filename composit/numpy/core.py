@@ -72,7 +72,7 @@ def create_from_numpy_compute_instruction(
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
             operands[index] = create_ndarray(
-                f"Scalar({operands[index]})", np.asarray(operands[index], operands[0].dtype)
+                f"scalar_{operands[index]}", np.asarray(operands[index], operands[0].dtype)
             )
 
     graph = merge_graphs(*tuple((operand.graph, operand.node) for operand in operands))
