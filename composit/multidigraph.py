@@ -98,11 +98,12 @@ class MultiDiGraph(PClass):
         return new_graph
 
     def add_edge(self, source, sink, key=None, **kwargs):
-        _node = self._node
         if source not in self:
-            _node = _node.set(source, pmap(kwargs))
+            self = self.add_node(source)
         if sink not in self:
-            _node = _node.set(sink, pmap(kwargs))
+            self = self.add_node(sink)
+
+        _node = self._node
 
         def _add_edge(node_to_neighbors, from_node, to_node, edge_key):
             neighbors = node_to_neighbors.get(from_node, pmap())
@@ -254,10 +255,10 @@ def visualize_graph(
     if graphviz_graph is None:
         graphviz_graph = graphviz.Digraph()
 
-    for node in topological_traversal(graph):
+    for node in graph:
         visualize_node(graphviz_graph, graph, node)
 
-    for node in topological_traversal(graph):
+    for node in graph:
         for edge in graph.in_edges(node, data=True, keys=True):
             visualize_edge(graphviz_graph, graph, edge)
 
@@ -270,6 +271,8 @@ def visualize_graph(
         time.sleep(timeout)
         os.remove(file_name)
         os.remove(f"{file_name}.svg")
+
+    return graphviz_graph
 
 
 def from_networkx(nx_graph: networkx.MultiDiGraph) -> MultiDiGraph:
