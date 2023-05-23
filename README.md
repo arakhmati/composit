@@ -1,5 +1,7 @@
-# Composit = Compose it + Composite
-Composit composes computational graphs using numpy-like API and then it breaks down composite tensors into tiles
+# Composit
+ML Framework for composing neural networks and mapping them to heterogeneous backends with as minimum levels of abstraction as possible
+
+![tests](https://github.com/arakhmati/composit/actions/workflows/python-app.yml/badge.svg)
 
 ## Installation Instructions
 ```bash
@@ -7,18 +9,3 @@ python -m venv venv
 source venv/bin/activate
 ./install.sh
 ```
-
-## Tests
-To get familiar with the code, read tests in this order:
-1. tests/unit_tests/numpy/test_functions.py
-2. tests/unit_tests/numpy/test_evaluate.py
-3. tests/unit_tests/numpy/test_chain_rule.py
-4. tests/unit_tests/numpy/test_train.py
-5. tests/unit_tests/numpy/test_module.py
-6. tests/integration_tests/test_bert.py
-7. tests/unit_tests/tilelab/test_tilelab.py
-8. tests/unit_tests/backends/x86/test_matmul.py
-
-Each test builds up on the concepts from the previous tests
-
-(TODO: add documentation for all of the concepts)
