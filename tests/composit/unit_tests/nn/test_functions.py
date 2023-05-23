@@ -29,14 +29,27 @@ def test_gelu():
     assert np.allclose(cnp.evaluate(result), torch_result)
 
 
-def test_convolution():
+def test_convolution_channels_first():
     image = cnp.random.random((1, 3, 28, 28))
-    filters = cnp.random.random((32, 3, 3, 3))
-    result = cnp.nn.convolution(image, filters)
+    filters = cnp.random.random((32, 3, 5, 5))
+    result = cnp.nn.convolution(image, filters, data_format="NCHW")
 
     torch_image = torch.from_numpy(cnp.evaluate(image))
     torch_filters = torch.from_numpy(cnp.evaluate(filters))
     torch_result = torch.nn.functional.conv2d(torch_image, torch_filters).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(cnp.evaluate(result), torch_result)
+
+
+def test_convolution_channels_last():
+    image = cnp.random.random((1, 28, 28, 3))
+    filters = cnp.random.random((32, 5, 5, 3))
+    result = cnp.nn.convolution(image, filters, data_format="NHWC")
+
+    torch_image = torch.from_numpy(cnp.evaluate(image).transpose((0, 3, 1, 2)))
+    torch_filters = torch.from_numpy(cnp.evaluate(filters).transpose((0, 3, 1, 2)))
+    torch_result = torch.nn.functional.conv2d(torch_image, torch_filters).numpy().transpose((0, 2, 3, 1))
 
     assert result.shape == torch_result.shape
     assert np.allclose(cnp.evaluate(result), torch_result)

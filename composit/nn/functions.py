@@ -23,10 +23,7 @@ def gelu(input_tensor):
     return vectorized_functions.gelu(input_tensor)
 
 
-@wrap_as_instruction()
-def convolution(image, filters):
-    # TODO: Make convolution generic for all dimensions?
-
+def convolution_channels_first(image, filters):
     batch_size, _, height, width = image.shape
     num_output_channels, num_input_channels, kernel_height, kernel_width = filters.shape
 
@@ -49,6 +46,47 @@ def convolution(image, filters):
                             @ filters[output_channel_index, input_channel_index].flatten()
                         )
     return output
+
+
+def convolution_channels_last(image, filters):
+    batch_size, height, width, _ = image.shape
+    num_output_channels, kernel_height, kernel_width, num_input_channels = filters.shape
+
+    output_height = (height - kernel_height) + 1
+    output_width = (width - kernel_width) + 1
+
+    filters = filters.reshape((num_output_channels, -1))
+
+    output = np.zeros((batch_size, output_height, output_width, num_output_channels))
+    for batch_index in range(batch_size):
+        for output_height_index in range(output_height):
+            for output_width_index in range(output_width):
+                image_patch = image[
+                    batch_index,
+                    output_height_index : output_height_index + kernel_height,
+                    output_width_index : output_width_index + kernel_width,
+                ].flatten()
+                for output_channel_index in range(num_output_channels):
+                    output[
+                        batch_index,
+                        output_height_index,
+                        output_width_index,
+                        output_channel_index,
+                    ] += (
+                        image_patch @ filters[output_channel_index]
+                    )
+
+    return output
+
+
+@wrap_as_instruction()
+def convolution(image, filters, data_format):
+    data_format_to_function = {
+        "NCHW": convolution_channels_first,
+        "NHWC": convolution_channels_last,
+    }
+    function = data_format_to_function[data_format]
+    return function(image, filters)
 
 
 @wrap_as_instruction()
