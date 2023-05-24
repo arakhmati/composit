@@ -23,14 +23,24 @@ def gelu(input_tensor):
     return vectorized_functions.gelu(input_tensor)
 
 
-def convolution_channels_first(image, filters):
+def convolution_channels_first(image, filters, strides, padding):
+    padding_height, padding_width = padding
+    image = np.pad(
+        image,
+        ((0, 0), (0, 0), (padding_height, padding_height), (padding_width, padding_width)),
+        mode="constant",
+        constant_values=0,
+    )
+
     batch_size, _, height, width = image.shape
     num_output_channels, num_input_channels, kernel_height, kernel_width = filters.shape
 
-    output_height = (height - kernel_height) + 1
-    output_width = (width - kernel_width) + 1
+    strides_height, strides_width = strides
 
-    output = np.zeros((batch_size, num_output_channels, output_height, output_width))
+    output_height = (height - kernel_height) // strides_height + 1
+    output_width = (width - kernel_width) // strides_width + 1
+
+    output = np.zeros((batch_size, num_output_channels, output_height, output_width), dtype=image.dtype)
     for batch_index in range(batch_size):
         for output_channel_index in range(num_output_channels):
             for input_channel_index in range(num_input_channels):
@@ -40,31 +50,42 @@ def convolution_channels_first(image, filters):
                             image[
                                 batch_index,
                                 input_channel_index,
-                                output_height_index : output_height_index + kernel_height,
-                                output_width_index : output_width_index + kernel_width,
+                                output_height_index * strides_height : output_height_index * strides_height
+                                + kernel_height,
+                                output_width_index * strides_width : output_width_index * strides_width + kernel_width,
                             ].flatten()
                             @ filters[output_channel_index, input_channel_index].flatten()
                         )
     return output
 
 
-def convolution_channels_last(image, filters):
+def convolution_channels_last(image, filters, strides, padding):
+    padding_height, padding_width = padding
+    image = np.pad(
+        image,
+        ((0, 0), (padding_height, padding_height), (padding_width, padding_width), (0, 0)),
+        mode="constant",
+        constant_values=0,
+    )
+
     batch_size, height, width, _ = image.shape
     num_output_channels, kernel_height, kernel_width, num_input_channels = filters.shape
 
-    output_height = (height - kernel_height) + 1
-    output_width = (width - kernel_width) + 1
+    strides_height, strides_width = strides
+
+    output_height = (height - kernel_height) // strides_height + 1
+    output_width = (width - kernel_width) // strides_width + 1
 
     filters = filters.reshape((num_output_channels, -1))
 
-    output = np.zeros((batch_size, output_height, output_width, num_output_channels))
+    output = np.zeros((batch_size, output_height, output_width, num_output_channels), dtype=image.dtype)
     for batch_index in range(batch_size):
         for output_height_index in range(output_height):
             for output_width_index in range(output_width):
                 image_patch = image[
                     batch_index,
-                    output_height_index : output_height_index + kernel_height,
-                    output_width_index : output_width_index + kernel_width,
+                    output_height_index * strides_height : output_height_index * strides_height + kernel_height,
+                    output_width_index * strides_width : output_width_index * strides_width + kernel_width,
                 ].flatten()
                 for output_channel_index in range(num_output_channels):
                     output[
@@ -80,13 +101,13 @@ def convolution_channels_last(image, filters):
 
 
 @wrap_as_instruction()
-def convolution(image, filters, data_format):
+def convolution(image, filters, *, data_format, strides=(1, 1), padding=(0, 0)):
     data_format_to_function = {
         "NCHW": convolution_channels_first,
         "NHWC": convolution_channels_last,
     }
     function = data_format_to_function[data_format]
-    return function(image, filters)
+    return function(image, filters, strides, padding)
 
 
 @wrap_as_instruction()
@@ -99,7 +120,7 @@ def average_pooling(image, *, kernel_size):
     output_height = (height - kernel_size[0]) + 1
     output_width = (width - kernel_size[1]) + 1
 
-    output = np.zeros((batch_size, num_channels, output_height, output_width))
+    output = np.zeros((batch_size, num_channels, output_height, output_width), dtype=image.dtype)
     for batch_index in range(batch_size):
         for channel_index in range(num_channels):
             for output_height_index in range(output_height):
@@ -125,7 +146,7 @@ def max_pooling(image, *, kernel_size):
     output_height = (height - kernel_size[0]) + 1
     output_width = (width - kernel_size[1]) + 1
 
-    output = np.zeros((batch_size, num_channels, output_height, output_width))
+    output = np.zeros((batch_size, num_channels, output_height, output_width), dtype=image.dtype)
     for batch_index in range(batch_size):
         for channel_index in range(num_channels):
             for output_height_index in range(output_height):

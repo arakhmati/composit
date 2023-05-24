@@ -1,3 +1,5 @@
+import pytest
+
 import numpy as np
 import torch.nn.functional
 
@@ -29,30 +31,33 @@ def test_gelu():
     assert np.allclose(cnp.evaluate(result), torch_result)
 
 
-def test_convolution_channels_first():
-    image = cnp.random.random((1, 3, 28, 28))
-    filters = cnp.random.random((32, 3, 5, 5))
-    result = cnp.nn.convolution(image, filters, data_format="NCHW")
+@pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
+@pytest.mark.parametrize("padding", [(0, 0), (3, 3)])
+@pytest.mark.parametrize("data_format", ["NCHW", "NHWC"])
+def test_convolution(strides, padding, data_format):
+    np_image = np.random.random((1, 3, 28, 38))
+    np_filters = np.random.random((32, 3, 5, 5))
 
-    torch_image = torch.from_numpy(cnp.evaluate(image))
-    torch_filters = torch.from_numpy(cnp.evaluate(filters))
-    torch_result = torch.nn.functional.conv2d(torch_image, torch_filters).numpy()
+    image_var = image_arg = cnp.nn.variable(name="image", shape=np_image.shape, dtype=np_image.dtype)
+    filters_var = filters_arg = cnp.nn.variable(name="filters", shape=np_filters.shape, dtype=np_filters.dtype)
+
+    if data_format == "NHWC":
+        image_arg = cnp.transpose(image_var, (0, 2, 3, 1))
+        filters_arg = cnp.transpose(filters_var, (0, 2, 3, 1))
+
+    result_var = cnp.nn.convolution(image_arg, filters_arg, strides=strides, padding=padding, data_format=data_format)
+
+    if data_format == "NHWC":
+        result_var = cnp.transpose(result_var, (0, 3, 1, 2))
+
+    result = cnp.nn.evaluate(result_var, inputs={image_var: np_image, filters_var: np_filters})
+
+    torch_result = torch.nn.functional.conv2d(
+        torch.from_numpy(np_image), torch.from_numpy(np_filters), stride=strides, padding=padding
+    ).numpy()
 
     assert result.shape == torch_result.shape
-    assert np.allclose(cnp.evaluate(result), torch_result)
-
-
-def test_convolution_channels_last():
-    image = cnp.random.random((1, 28, 28, 3))
-    filters = cnp.random.random((32, 5, 5, 3))
-    result = cnp.nn.convolution(image, filters, data_format="NHWC")
-
-    torch_image = torch.from_numpy(cnp.evaluate(image).transpose((0, 3, 1, 2)))
-    torch_filters = torch.from_numpy(cnp.evaluate(filters).transpose((0, 3, 1, 2)))
-    torch_result = torch.nn.functional.conv2d(torch_image, torch_filters).numpy().transpose((0, 2, 3, 1))
-
-    assert result.shape == torch_result.shape
-    assert np.allclose(cnp.evaluate(result), torch_result)
+    assert np.allclose(result, torch_result)
 
 
 def test_average_pooling():
