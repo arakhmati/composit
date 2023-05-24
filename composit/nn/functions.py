@@ -23,6 +23,11 @@ def gelu(input_tensor):
     return vectorized_functions.gelu(input_tensor)
 
 
+@wrap_as_instruction()
+def relu(input_tensor):
+    return np.maximum(input_tensor, 0)
+
+
 def convolution_channels_first(image, filters, strides, padding):
     padding_height, padding_width = padding
     image = np.pad(
@@ -166,6 +171,7 @@ __all__ = [
     "variable",
     "embedding",
     "gelu",
+    "relu",
     "convolution",
     "average_pooling",
     "max_pooling",
