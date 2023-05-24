@@ -11,7 +11,7 @@ from torchvision import transforms
 
 import composit as cnp
 from model_zoo.resnet import (
-    functional_resnet,
+    resnet,
     convert_parameters_to_numpy,
 )
 
@@ -32,7 +32,7 @@ def load_image(url):
 
 
 @pytest.mark.parametrize("data_format", ["NHWC"])
-def test_functional_resnet_vs_torch_resnet(data_format):
+def test_torch_vs_composit(data_format):
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet50", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
@@ -45,7 +45,7 @@ def test_functional_resnet_vs_torch_resnet(data_format):
     }
 
     image_var = cnp.nn.variable(name="image", shape=image.shape, dtype=image.dtype)
-    model = functional_resnet(image_var, parameters, data_format=data_format)
+    model = resnet(image_var, parameters, data_format=data_format)
 
     output = cnp.nn.evaluate(model, inputs={image_var: image})
 

@@ -7,7 +7,7 @@ import composit as cnp
 
 from model_zoo.bert import (
     create_bert_config,
-    functional_bert,
+    bert,
     convert_parameters_to_numpy,
 )
 from mosaic.passes import inspect
@@ -44,7 +44,7 @@ def test_bert(
     }
 
     with cnp.nn.module.disable_modules():
-        model = functional_bert(
+        model = bert(
             input_ids_var,
             token_type_ids_var,
             None,

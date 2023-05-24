@@ -10,7 +10,7 @@ from model_zoo.bert import (
     create_random_float,
     create_random_long,
     create_bert_config,
-    functional_bert,
+    bert,
     convert_parameters_to_numpy,
 )
 
@@ -22,7 +22,7 @@ from model_zoo.bert import (
 @pytest.mark.parametrize("num_attention_heads", [12])
 @pytest.mark.parametrize("head_size", [64])
 @pytest.mark.parametrize("vocab_size", [30522])
-def test_functional_bert_vs_transformers_bert(
+def test_torch_vs_composit(
     num_inputs,
     batch_size,
     num_encoders,
@@ -47,7 +47,7 @@ def test_functional_bert_vs_transformers_bert(
         for name, value in convert_parameters_to_numpy(transformers_model).items()
     }
 
-    model = functional_bert(
+    model = bert(
         input_ids_var,
         token_type_ids_var,
         None,
@@ -94,7 +94,7 @@ def test_functional_bert_vs_transformers_bert(
 @pytest.mark.parametrize("num_attention_heads", [3])
 @pytest.mark.parametrize("head_size", [16])
 @pytest.mark.parametrize("vocab_size", [16])
-def test_functional_bert_autograd(
+def test_autograd(
     num_inputs,
     batch_size,
     num_encoders,
@@ -121,7 +121,7 @@ def test_functional_bert_autograd(
     parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
 
     with cnp.nn.module.disable_modules():
-        model: cnp.PersistentArray = functional_bert(
+        model: cnp.PersistentArray = bert(
             input_ids_variable,
             token_type_ids_variable,
             None,

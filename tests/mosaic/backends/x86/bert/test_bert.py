@@ -16,7 +16,7 @@ from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, ScalarTileLevel
 
 from model_zoo.bert import (
-    functional_bert,
+    bert,
     create_random_long,
     convert_parameters_to_numpy,
     create_bert_config,
@@ -81,7 +81,7 @@ def composit_model(
     token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
 
     with cnp.nn.module.disable_modules():
-        output_var = functional_bert(
+        output_var = bert(
             input_ids_var,
             token_type_ids_var,
             None,

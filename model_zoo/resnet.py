@@ -16,7 +16,7 @@ def convert_parameters_to_numpy(model, data_format):
     return parameters
 
 
-def functional_batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5):
+def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5):
     output = input_tensor - mean
     output = output / cnp.sqrt(var + epsilon)
     output *= weight
@@ -24,7 +24,7 @@ def functional_batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5
     return output
 
 
-def functional_resnet_module(
+def resnet_module(
     input_tensor,
     right_branch_conv_0_weight,
     right_branch_bn_0_running_mean,
@@ -56,7 +56,7 @@ def functional_resnet_module(
         left_branch = cnp.nn.convolution(
             left_branch, left_branch_conv_weight, strides=module_strides, data_format=data_format
         )
-        left_branch = functional_batch_norm(
+        left_branch = batch_norm(
             left_branch,
             left_branch_bn_running_mean,
             left_branch_bn_running_var,
@@ -65,7 +65,7 @@ def functional_resnet_module(
         )
 
     right_branch = cnp.nn.convolution(right_branch, right_branch_conv_0_weight, strides=(1, 1), data_format=data_format)
-    right_branch = functional_batch_norm(
+    right_branch = batch_norm(
         right_branch,
         right_branch_bn_0_running_mean,
         right_branch_bn_0_running_var,
@@ -77,7 +77,7 @@ def functional_resnet_module(
     right_branch = cnp.nn.convolution(
         right_branch, right_branch_conv_1_weight, strides=module_strides, padding=(1, 1), data_format=data_format
     )
-    right_branch = functional_batch_norm(
+    right_branch = batch_norm(
         right_branch,
         right_branch_bn_1_running_mean,
         right_branch_bn_1_running_var,
@@ -87,7 +87,7 @@ def functional_resnet_module(
     right_branch = cnp.nn.relu(right_branch)
 
     right_branch = cnp.nn.convolution(right_branch, right_branch_conv_2_weight, strides=(1, 1), data_format=data_format)
-    right_branch = functional_batch_norm(
+    right_branch = batch_norm(
         right_branch,
         right_branch_bn_2_running_mean,
         right_branch_bn_2_running_var,
@@ -99,7 +99,7 @@ def functional_resnet_module(
     return output
 
 
-def functional_resnet(
+def resnet(
     image,
     parameters,
     *,
@@ -111,7 +111,7 @@ def functional_resnet(
     output = cnp.nn.convolution(
         image, parameters["conv1.weight"], strides=(2, 2), padding=(3, 3), data_format=data_format
     )
-    output = functional_batch_norm(
+    output = batch_norm(
         output,
         parameters["bn1.running_mean"],
         parameters["bn1.running_var"],
@@ -124,7 +124,7 @@ def functional_resnet(
     for layer_index, num_layers in enumerate((3, 4, 6, 3)):
         for index in range(num_layers):
             layer_name = f"layer{layer_index + 1}.{index}"
-            output = functional_resnet_module(
+            output = resnet_module(
                 output,
                 parameters[f"{layer_name}.conv1.weight"],
                 parameters[f"{layer_name}.bn1.running_mean"],
