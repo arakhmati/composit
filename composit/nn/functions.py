@@ -29,6 +29,10 @@ def relu(input_tensor):
     return np.maximum(input_tensor, 0)
 
 
+def convolution_output_dim(input_dim, kernel_dim, stride):
+    return math.floor((input_dim - (kernel_dim - 1) - 1) / stride + 1)
+
+
 def convolution_channels_first(image, filters, strides, padding):
     padding_height, padding_width = padding
     image = np.pad(
@@ -43,8 +47,8 @@ def convolution_channels_first(image, filters, strides, padding):
 
     strides_height, strides_width = strides
 
-    output_height = (height - kernel_height) // strides_height + 1
-    output_width = (width - kernel_width) // strides_width + 1
+    output_height = convolution_output_dim(height, kernel_height, strides_height)
+    output_width = convolution_output_dim(width, kernel_width, strides_width)
 
     output = np.zeros((batch_size, num_output_channels, output_height, output_width), dtype=image.dtype)
     for batch_index in range(batch_size):
@@ -79,8 +83,8 @@ def convolution_channels_last(image, filters, strides, padding):
 
     strides_height, strides_width = strides
 
-    output_height = (height - kernel_height) // strides_height + 1
-    output_width = (width - kernel_width) // strides_width + 1
+    output_height = convolution_output_dim(height, kernel_height, strides_height)
+    output_width = convolution_output_dim(width, kernel_width, strides_width)
 
     filters = filters.reshape((num_output_channels, -1))
 
