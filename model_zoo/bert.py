@@ -88,13 +88,13 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
 
 
 @wrap_module
-def functional_softmax(input_tensor, axis):
+def softmax(input_tensor, axis):
     exp_input_tensor = cnp.exp(input_tensor - cnp.max(input_tensor, axis=axis, keepdims=True))
     return exp_input_tensor / cnp.sum(exp_input_tensor, axis=axis, keepdims=True)
 
 
 @wrap_module
-def functional_multi_head_attention(
+def multi_head_attention(
     hidden_states,
     attention_mask,
     parameters,
@@ -127,7 +127,7 @@ def functional_multi_head_attention(
     if attention_mask is not None:
         attention_scores = attention_scores + attention_mask
 
-    attention_probs = functional_softmax(attention_scores, axis=-1)
+    attention_probs = softmax(attention_scores, axis=-1)
 
     context_layer = attention_probs @ value
 
@@ -141,7 +141,7 @@ def functional_multi_head_attention(
 
 
 @wrap_module
-def functional_layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
+def layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
     mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
     input_tensor_minus_mean = input_tensor - mean
     var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
@@ -158,7 +158,7 @@ def functional_layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
 
 
 @wrap_module
-def functional_feedforward(hidden_states, parameters, encoder_index):
+def feedforward(hidden_states, parameters, encoder_index):
     hidden_states = hidden_states @ parameters[f"encoder.layer.{encoder_index}.intermediate.dense.weight"]
     hidden_states = hidden_states + parameters[f"encoder.layer.{encoder_index}.intermediate.dense.bias"]
     hidden_states = cnp.nn.gelu(hidden_states)
@@ -168,7 +168,7 @@ def functional_feedforward(hidden_states, parameters, encoder_index):
 
 
 @wrap_module
-def functional_bert_encoder(
+def bert_encoder(
     hidden_states,
     attention_mask,
     parameters,
@@ -178,7 +178,7 @@ def functional_bert_encoder(
     num_attention_heads,
     head_size,
 ):
-    multi_head_attention_output = functional_multi_head_attention(
+    multi_head_attention_output = multi_head_attention(
         hidden_states,
         attention_mask,
         parameters,
@@ -188,17 +188,17 @@ def functional_bert_encoder(
         head_size=head_size,
     )
 
-    multi_head_attention_add_and_layer_norm_output = functional_layer_norm(
+    multi_head_attention_add_and_layer_norm_output = layer_norm(
         hidden_states + multi_head_attention_output,
         parameters[f"encoder.layer.{encoder_index}.attention.output.LayerNorm.weight"],
         parameters[f"encoder.layer.{encoder_index}.attention.output.LayerNorm.bias"],
     )
 
-    feedforward_output = functional_feedforward(
+    feedforward_output = feedforward(
         multi_head_attention_add_and_layer_norm_output, parameters, encoder_index=encoder_index
     )
 
-    feedforward_add_and_layer_norm_output = functional_layer_norm(
+    feedforward_add_and_layer_norm_output = layer_norm(
         multi_head_attention_add_and_layer_norm_output + feedforward_output,
         parameters[f"encoder.layer.{encoder_index}.output.LayerNorm.weight"],
         parameters[f"encoder.layer.{encoder_index}.output.LayerNorm.bias"],
@@ -208,7 +208,7 @@ def functional_bert_encoder(
 
 
 @wrap_module
-def functional_bert(
+def bert(
     input_ids,
     token_type_ids,
     attention_mask,
@@ -223,7 +223,7 @@ def functional_bert(
     token_type_embeddings = cnp.nn.embedding(token_type_ids, parameters["embeddings.token_type_embeddings.weight"])
     embeddings = word_embeddings + token_type_embeddings
 
-    encoder_input = functional_layer_norm(
+    encoder_input = layer_norm(
         embeddings,
         parameters["embeddings.LayerNorm.weight"],
         parameters["embeddings.LayerNorm.bias"],
@@ -231,7 +231,7 @@ def functional_bert(
 
     encoder_output = None
     for encoder_index in range(num_encoders):
-        encoder_output = functional_bert_encoder(
+        encoder_output = bert_encoder(
             encoder_input,
             attention_mask,
             parameters,
@@ -245,7 +245,7 @@ def functional_bert(
 
 
 @wrap_module
-def functional_bert_for_question_answering(
+def bert_for_question_answering(
     input_ids,
     token_type_ids,
     attention_mask,
@@ -256,7 +256,7 @@ def functional_bert_for_question_answering(
     num_attention_heads,
     head_size,
 ):
-    bert_output = functional_bert(
+    bert_output = bert(
         input_ids,
         token_type_ids,
         attention_mask,
