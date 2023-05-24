@@ -32,6 +32,7 @@ def load_image(url):
 def evaluate_torch_model(model, image):
     output = model.conv1(image)
     output = model.relu(output)
+    output = model.maxpool(output)
     return output.detach().numpy()
 
 
