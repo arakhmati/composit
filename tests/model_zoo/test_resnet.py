@@ -31,45 +31,14 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
-def resnet_module(input_tensor, layer):
-    left_branch = input_tensor
-    right_branch = input_tensor
-
-    if layer.downsample is not None:
-        left_branch = layer.downsample[0](left_branch)
-
-    right_branch = layer.conv1(right_branch)
-    right_branch = layer.conv2(right_branch)
-    right_branch = layer.conv3(right_branch)
-
-    output = torch.nn.functional.relu(left_branch + right_branch)
-    return output
-
-
-def evaluate_torch_model(model, image):
-    output = model.conv1(image)
-    output = model.relu(output)
-    output = model.maxpool(output)
-
-    for layers in [model.layer1, model.layer2, model.layer3, model.layer4]:
-        for layer in layers:
-            output = resnet_module(output, layer)
-
-    output = model.avgpool(output)
-    output = torch.flatten(output, 1)
-    output = model.fc(output)
-
-    return output.detach().numpy()
-
-
 @pytest.mark.parametrize("data_format", ["NHWC"])
 def test_functional_resnet_vs_torch_resnet(data_format):
-    torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet50", pretrained=True)
+    torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet50", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
 
     torch_image = torch.from_numpy(image)
-    torch_output = evaluate_torch_model(torch_model, torch_image)
+    torch_output = torch_model(torch_image).detach().numpy()
 
     parameters = {
         name: cnp.asarray(value, name) for name, value in convert_parameters_to_numpy(torch_model, data_format).items()
