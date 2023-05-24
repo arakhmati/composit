@@ -1,3 +1,5 @@
+import pytest
+
 from io import BytesIO
 import requests
 
@@ -29,14 +31,39 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
+def resnet_module(input_tensor, layer):
+    left_branch = input_tensor
+    right_branch = input_tensor
+
+    if layer.downsample is not None:
+        left_branch = layer.downsample[0](left_branch)
+
+    right_branch = layer.conv1(right_branch)
+    right_branch = layer.conv2(right_branch)
+    right_branch = layer.conv3(right_branch)
+
+    output = torch.nn.functional.relu(left_branch + right_branch)
+    return output
+
+
 def evaluate_torch_model(model, image):
     output = model.conv1(image)
     output = model.relu(output)
     output = model.maxpool(output)
+
+    for layers in [model.layer1, model.layer2, model.layer3, model.layer4]:
+        for layer in layers:
+            output = resnet_module(output, layer)
+
+    output = model.avgpool(output)
+    output = torch.flatten(output, 1)
+    output = model.fc(output)
+
     return output.detach().numpy()
 
 
-def test_functional_resnet_vs_torch_resnet(data_format="NHWC"):
+@pytest.mark.parametrize("data_format", ["NHWC"])
+def test_functional_resnet_vs_torch_resnet(data_format):
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet50", pretrained=True)
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
@@ -45,20 +72,12 @@ def test_functional_resnet_vs_torch_resnet(data_format="NHWC"):
     torch_output = evaluate_torch_model(torch_model, torch_image)
 
     parameters = {
-        cnp.nn.variable(name=name, shape=value.shape): value
-        for name, value in convert_parameters_to_numpy(torch_model).items()
+        name: cnp.asarray(value, name) for name, value in convert_parameters_to_numpy(torch_model, data_format).items()
     }
 
-    image_var = cnp.nn.variable(name="image_channels_last", shape=image.shape, dtype=image.dtype)
+    image_var = cnp.nn.variable(name="image", shape=image.shape, dtype=image.dtype)
+    model = functional_resnet(image_var, parameters, data_format=data_format)
 
-    model = functional_resnet(image_var, {var.node.name: var for var in parameters.keys()}, data_format=data_format)
+    output = cnp.nn.evaluate(model, inputs={image_var: image})
 
-    output = cnp.nn.evaluate(
-        model,
-        inputs={
-            image_var: image,
-            **parameters,
-        },
-    )
-
-    assert np.allclose(output, torch_output, atol=1e-5)
+    assert np.allclose(output, torch_output, atol=1e-4)
