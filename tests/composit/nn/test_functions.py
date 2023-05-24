@@ -31,6 +31,17 @@ def test_gelu():
     assert np.allclose(cnp.evaluate(result), torch_result)
 
 
+def test_relu():
+    array = cnp.random.random((5, 25, 15))
+    result = cnp.nn.relu(array)
+
+    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_result = torch.nn.functional.relu(torch_array).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(cnp.evaluate(result), torch_result)
+
+
 @pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
 @pytest.mark.parametrize("padding", [(0, 0), (3, 3)])
 @pytest.mark.parametrize("data_format", ["NCHW", "NHWC"])
