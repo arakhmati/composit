@@ -3,6 +3,7 @@ import transformers
 
 import composit as cnp
 from composit.nn.module import wrap_module
+from composit.nn.layers import layer_norm, multi_head_attention, feedforward
 
 
 def create_bert_config(num_encoders: int, num_attention_heads: int, head_size: int, vocab_size: int):
@@ -88,103 +89,25 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
 
 
 @wrap_module
-def softmax(input_tensor, axis):
-    exp_input_tensor = cnp.exp(input_tensor - cnp.max(input_tensor, axis=axis, keepdims=True))
-    return exp_input_tensor / cnp.sum(exp_input_tensor, axis=axis, keepdims=True)
-
-
-@wrap_module
-def multi_head_attention(
-    hidden_states,
-    attention_mask,
-    parameters,
-    *,
-    encoder_index,
-    sequence_size,
-    num_attention_heads,
-    head_size,
-):
-    batch_size = hidden_states.shape[0]
-
-    query = hidden_states @ parameters[f"encoder.layer.{encoder_index}.attention.self.query.weight"]
-    query = query + parameters[f"encoder.layer.{encoder_index}.attention.self.query.bias"]
-    query = cnp.reshape(query, (batch_size, sequence_size, num_attention_heads, head_size))
-    query = cnp.transpose(query, (0, 2, 1, 3))
-
-    key = hidden_states @ parameters[f"encoder.layer.{encoder_index}.attention.self.key.weight"]
-    key = key + parameters[f"encoder.layer.{encoder_index}.attention.self.key.bias"]
-    key = cnp.reshape(key, (batch_size, sequence_size, num_attention_heads, head_size))
-    key = cnp.transpose(key, (0, 2, 3, 1))
-
-    value = hidden_states @ parameters[f"encoder.layer.{encoder_index}.attention.self.value.weight"]
-    value = value + parameters[f"encoder.layer.{encoder_index}.attention.self.value.bias"]
-    value = cnp.reshape(value, (batch_size, sequence_size, num_attention_heads, head_size))
-    value = cnp.transpose(value, (0, 2, 1, 3))
-
-    attention_scores = query @ key
-
-    attention_scores = attention_scores / (head_size**0.5)
-    if attention_mask is not None:
-        attention_scores = attention_scores + attention_mask
-
-    attention_probs = softmax(attention_scores, axis=-1)
-
-    context_layer = attention_probs @ value
-
-    context_layer = cnp.transpose(context_layer, (0, 2, 1, 3))
-    context_layer = cnp.reshape(context_layer, (batch_size, sequence_size, num_attention_heads * head_size))
-
-    self_output = context_layer @ parameters[f"encoder.layer.{encoder_index}.attention.output.dense.weight"]
-    self_output = self_output + parameters[f"encoder.layer.{encoder_index}.attention.output.dense.bias"]
-
-    return self_output
-
-
-@wrap_module
-def layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
-    mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
-    input_tensor_minus_mean = input_tensor - mean
-    var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
-    output = input_tensor_minus_mean / cnp.sqrt(var + epsilon)
-    output *= weight
-    output += bias
-    return output
-    """
-    mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
-    var = cnp.sqrt(cnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
-    output = (input_tensor - mean) / var
-    return output * weight + bias
-    """
-
-
-@wrap_module
-def feedforward(hidden_states, parameters, encoder_index):
-    hidden_states = hidden_states @ parameters[f"encoder.layer.{encoder_index}.intermediate.dense.weight"]
-    hidden_states = hidden_states + parameters[f"encoder.layer.{encoder_index}.intermediate.dense.bias"]
-    hidden_states = cnp.nn.gelu(hidden_states)
-    hidden_states = hidden_states @ parameters[f"encoder.layer.{encoder_index}.output.dense.weight"]
-    hidden_states = hidden_states + parameters[f"encoder.layer.{encoder_index}.output.dense.bias"]
-    return hidden_states
-
-
-@wrap_module
 def bert_encoder(
     hidden_states,
     attention_mask,
     parameters,
     *,
     encoder_index,
-    sequence_size,
-    num_attention_heads,
     head_size,
 ):
     multi_head_attention_output = multi_head_attention(
         hidden_states,
         attention_mask,
-        parameters,
-        encoder_index=encoder_index,
-        sequence_size=sequence_size,
-        num_attention_heads=num_attention_heads,
+        parameters[f"encoder.layer.{encoder_index}.attention.self.query.weight"],
+        parameters[f"encoder.layer.{encoder_index}.attention.self.query.bias"],
+        parameters[f"encoder.layer.{encoder_index}.attention.self.key.weight"],
+        parameters[f"encoder.layer.{encoder_index}.attention.self.key.bias"],
+        parameters[f"encoder.layer.{encoder_index}.attention.self.value.weight"],
+        parameters[f"encoder.layer.{encoder_index}.attention.self.value.bias"],
+        parameters[f"encoder.layer.{encoder_index}.attention.output.dense.weight"],
+        parameters[f"encoder.layer.{encoder_index}.attention.output.dense.bias"],
         head_size=head_size,
     )
 
@@ -195,7 +118,11 @@ def bert_encoder(
     )
 
     feedforward_output = feedforward(
-        multi_head_attention_add_and_layer_norm_output, parameters, encoder_index=encoder_index
+        multi_head_attention_add_and_layer_norm_output,
+        parameters[f"encoder.layer.{encoder_index}.intermediate.dense.weight"],
+        parameters[f"encoder.layer.{encoder_index}.intermediate.dense.bias"],
+        parameters[f"encoder.layer.{encoder_index}.output.dense.weight"],
+        parameters[f"encoder.layer.{encoder_index}.output.dense.bias"],
     )
 
     feedforward_add_and_layer_norm_output = layer_norm(
@@ -215,8 +142,6 @@ def bert(
     parameters,
     *,
     num_encoders,
-    sequence_size,
-    num_attention_heads,
     head_size,
 ):
     word_embeddings = cnp.nn.embedding(input_ids, parameters["embeddings.word_embeddings.weight"])
@@ -236,8 +161,6 @@ def bert(
             attention_mask,
             parameters,
             encoder_index=encoder_index,
-            sequence_size=sequence_size,
-            num_attention_heads=num_attention_heads,
             head_size=head_size,
         )
         encoder_input = encoder_output
@@ -252,8 +175,6 @@ def bert_for_question_answering(
     parameters,
     *,
     num_encoders,
-    sequence_size,
-    num_attention_heads,
     head_size,
 ):
     bert_output = bert(
@@ -262,8 +183,6 @@ def bert_for_question_answering(
         attention_mask,
         parameters,
         num_encoders=num_encoders,
-        sequence_size=sequence_size,
-        num_attention_heads=num_attention_heads,
         head_size=head_size,
     )
 

@@ -53,8 +53,6 @@ def test_torch_vs_composit(
         None,
         {var.node.name: var for var in parameters.keys()},
         num_encoders=num_encoders,
-        sequence_size=sequence_size,
-        num_attention_heads=num_attention_heads,
         head_size=head_size,
     )
 
@@ -127,8 +125,6 @@ def test_autograd(
             None,
             parameter_variables,
             num_encoders=num_encoders,
-            sequence_size=sequence_size,
-            num_attention_heads=num_attention_heads,
             head_size=head_size,
         )
 

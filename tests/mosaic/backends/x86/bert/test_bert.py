@@ -73,7 +73,6 @@ def composit_model(
     batch_size,
     num_encoders,
     sequence_size,
-    num_attention_heads,
     head_size,
     parameters,
 ):
@@ -87,8 +86,6 @@ def composit_model(
             None,
             {var.node.name: var for var in parameters},
             num_encoders=num_encoders,
-            sequence_size=sequence_size,
-            num_attention_heads=num_attention_heads,
             head_size=head_size,
         )
 
@@ -122,7 +119,7 @@ def setup_test(
     transformers_model = get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_size)
     composit_parameters = create_composit_parameters(transformers_model)
     output_var, (input_ids_var, token_type_ids_var), input_var_to_scheme = composit_model(
-        batch_size, num_encoders, sequence_size, num_attention_heads, head_size, composit_parameters
+        batch_size, num_encoders, sequence_size, head_size, composit_parameters
     )
     mosaic_model = compile_to_mosaic_model(
         output_var,
