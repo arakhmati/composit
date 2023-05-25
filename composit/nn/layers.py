@@ -7,16 +7,55 @@ def softmax(input_tensor, *, axis):
     return exp_input_tensor / cnp.sum(exp_input_tensor, axis=axis, keepdims=True)
 
 
-def layer_norm(input_tensor, weight, bias, *, epsilon=1e-5):
+def group_norm(input_tensor, weight, bias, *, channel_axis, num_groups, epsilon=1e-5):
+    input_shape = input_tensor.shape
+
+    channel_axis = (len(input_shape) + channel_axis) % len(input_shape)
+
+    batch_size = input_shape[0]
+    num_channels = input_shape[channel_axis]
+
+    if num_channels % num_groups != 0:
+        raise ValueError(f"num_channels must be divisible by num_groups: {num_channels} % {num_groups} != 0")
+
+    new_shape = [batch_size]
+    reduction_axes = []
+    next_reduction_axis = 1
+    for axis in range(1, len(input_shape)):
+        if axis == channel_axis:
+            new_shape.append(num_groups)
+            next_reduction_axis += 1
+            new_shape.append(num_channels // num_groups)
+            reduction_axes.append(next_reduction_axis)
+        else:
+            new_shape.append(input_shape[axis])
+            reduction_axes.append(next_reduction_axis)
+        next_reduction_axis += 1
+    axes = tuple(reduction_axes)
+    new_shape = tuple(new_shape)
+
+    input_tensor = cnp.reshape(input_tensor, new_shape)
+    mean = cnp.mean(input_tensor, axis=axes, keepdims=True)
+    input_tensor_minus_mean = input_tensor - mean
+    var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=axes, keepdims=True)
+    output = input_tensor_minus_mean / cnp.sqrt(var + epsilon)
+    output = cnp.reshape(output, input_shape)
+
+    output *= weight
+    output += bias
+    return output
+
+
+def layer_norm(input_tensor, weight, bias, *, axis=-1, epsilon=1e-5):
     """
     mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
     var = cnp.sqrt(cnp.var(input_tensor, axis=-1, keepdims=True) + epsilon)
     output = (input_tensor - mean) / var
     return output * weight + bias
     """
-    mean = cnp.mean(input_tensor, axis=-1, keepdims=True)
+    mean = cnp.mean(input_tensor, axis=axis, keepdims=True)
     input_tensor_minus_mean = input_tensor - mean
-    var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=-1, keepdims=True)
+    var = cnp.mean(cnp.square(input_tensor_minus_mean), axis=axis, keepdims=True)
     output = input_tensor_minus_mean / cnp.sqrt(var + epsilon)
     output *= weight
     output += bias
