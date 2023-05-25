@@ -27,3 +27,7 @@ def pdf(input_tensor: np.array) -> np.array:
 
 def gelu(input_tensor: np.array) -> np.array:
     return input_tensor * cdf(input_tensor)
+
+
+def sigmoid(input_tensor: np.array) -> np.array:
+    return 1 / (1 + np.exp(-input_tensor))
