@@ -3,13 +3,13 @@ import composit.nn
 from composit.nn.layers import batch_norm, resnet_module
 
 
-def convert_parameters_to_numpy(model, data_format):
+def convert_parameters_to_numpy(model, data_layout):
     parameters = {}
     for name, value in model.state_dict().items():
         new_value = value.detach().numpy()
         if "fc.weight" in name:
             new_value = new_value.transpose((1, 0))
-        elif (("conv" in name and "weight" in name) or "downsample.0" in name) and data_format == "NHWC":
+        elif (("conv" in name and "weight" in name) or "downsample.0" in name) and data_layout == "NHWC":
             new_value = new_value.transpose((0, 2, 3, 1))
         parameters[name] = new_value
     return parameters
@@ -19,13 +19,13 @@ def resnet(
     image,
     parameters,
     *,
-    data_format,
+    data_layout,
 ):
-    if data_format == "NHWC":
+    if data_layout == "NHWC":
         image = cnp.transpose(image, (0, 2, 3, 1))
 
     output = cnp.nn.convolution(
-        image, parameters["conv1.weight"], strides=(2, 2), padding=(3, 3), data_format=data_format
+        image, parameters["conv1.weight"], strides=(2, 2), padding=(3, 3), data_layout=data_layout
     )
     output = batch_norm(
         output,
@@ -33,10 +33,10 @@ def resnet(
         parameters["bn1.running_var"],
         parameters["bn1.weight"],
         parameters["bn1.bias"],
-        data_format=data_format,
+        data_layout=data_layout,
     )
     output = cnp.nn.relu(output)
-    output = cnp.nn.max_pool(output, kernel_size=(3, 3), strides=(2, 2), padding=(1, 1), data_format=data_format)
+    output = cnp.nn.max_pool(output, kernel_size=(3, 3), strides=(2, 2), padding=(1, 1), data_layout=data_layout)
 
     for layer_index, num_layers in enumerate((3, 4, 6, 3)):
         for index in range(num_layers):
@@ -63,11 +63,11 @@ def resnet(
                 parameters.get(f"{layer_name}.downsample.1.running_var"),
                 parameters.get(f"{layer_name}.downsample.1.weight"),
                 parameters.get(f"{layer_name}.downsample.1.bias"),
-                data_format=data_format,
+                data_layout=data_layout,
                 module_strides=(2, 2) if layer_index > 0 and index == 0 else (1, 1),
             )
 
-    if data_format == "NHWC":
+    if data_layout == "NHWC":
         output = cnp.transpose(output, (0, 3, 1, 2))
 
     output = cnp.mean(output, axis=(2, 3))
