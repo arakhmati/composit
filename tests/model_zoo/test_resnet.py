@@ -31,8 +31,8 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
-@pytest.mark.parametrize("data_format", ["NHWC"])
-def test_torch_vs_composit(data_format):
+@pytest.mark.parametrize("data_layout", ["NHWC"])
+def test_torch_vs_composit(data_layout):
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet50", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
@@ -41,11 +41,11 @@ def test_torch_vs_composit(data_format):
     torch_output = torch_model(torch_image).detach().numpy()
 
     parameters = {
-        name: cnp.asarray(value, name) for name, value in convert_parameters_to_numpy(torch_model, data_format).items()
+        name: cnp.asarray(value, name) for name, value in convert_parameters_to_numpy(torch_model, data_layout).items()
     }
 
     image_var = cnp.nn.variable(name="image", shape=image.shape, dtype=image.dtype)
-    model = resnet(image_var, parameters, data_format=data_format)
+    model = resnet(image_var, parameters, data_layout=data_layout)
 
     output = cnp.nn.evaluate(model, inputs={image_var: image})
 
