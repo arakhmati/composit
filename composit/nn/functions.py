@@ -29,6 +29,16 @@ def relu(input_tensor):
     return np.maximum(input_tensor, 0)
 
 
+@wrap_as_instruction()
+def sigmoid(input_tensor):
+    return vectorized_functions.sigmoid(input_tensor)
+
+
+@wrap_as_instruction()
+def silu(input_tensor):
+    return input_tensor * vectorized_functions.sigmoid(input_tensor)
+
+
 def convolution_output_dim(input_dim, kernel_dim, stride):
     return math.floor((input_dim - (kernel_dim - 1) - 1) / stride + 1)
 
@@ -216,6 +226,8 @@ __all__ = [
     "embedding",
     "gelu",
     "relu",
+    "sigmoid",
+    "silu",
     "convolution",
     "average_pool",
     "max_pool",
