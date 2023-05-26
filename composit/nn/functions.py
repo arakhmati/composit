@@ -121,12 +121,12 @@ def convolution_channels_last(image, filters, strides, padding):
 
 
 @wrap_as_instruction()
-def convolution(image, filters, *, data_layout, strides=(1, 1), padding=(0, 0)):
+def convolution(image, filters, *, channels_last, strides=(1, 1), padding=(0, 0)):
     data_format_to_function = {
-        "NCHW": convolution_channels_first,
-        "NHWC": convolution_channels_last,
+        False: convolution_channels_first,
+        True: convolution_channels_last,
     }
-    function = data_format_to_function[data_layout]
+    function = data_format_to_function[channels_last]
     return function(image, filters, strides, padding)
 
 
@@ -204,12 +204,12 @@ def pool_channels_last(image, *, kernel_size, strides, padding, pool_function):
 
 
 @wrap_as_instruction()
-def pool(image, *, pool_function, kernel_size, data_layout, strides=(1, 1), padding=(0, 0)):
+def pool(image, *, pool_function, kernel_size, channels_last, strides=(1, 1), padding=(0, 0)):
     data_format_to_function = {
-        "NCHW": pool_channels_first,
-        "NHWC": pool_channels_last,
+        False: pool_channels_first,
+        True: pool_channels_last,
     }
-    function = data_format_to_function[data_layout]
+    function = data_format_to_function[channels_last]
     return function(image, kernel_size=kernel_size, strides=strides, padding=padding, pool_function=pool_function)
 
 
