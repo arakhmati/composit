@@ -12,8 +12,8 @@ from model_zoo.stable_diffusion.autoencoder_kl import decoder, convert_parameter
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("height", [16])
 @pytest.mark.parametrize("width", [16])
-@pytest.mark.parametrize("data_layout", ["NHWC"])
-def test_torch_vs_composit(batch_size, height, width, data_layout, latent_channels=4, reduction_factor=8):
+@pytest.mark.parametrize("channels_last", [True])
+def test_torch_vs_composit(batch_size, height, width, channels_last, latent_channels=4, reduction_factor=8):
     np.random.seed(0)
     torch.manual_seed(0)
 
@@ -30,11 +30,11 @@ def test_torch_vs_composit(batch_size, height, width, data_layout, latent_channe
 
     parameters = {
         name: cnp.asarray(value, name)
-        for name, value in convert_parameters_to_numpy(torch_decoder, data_layout).items()
+        for name, value in convert_parameters_to_numpy(torch_decoder, channels_last).items()
     }
 
     latents_var = cnp.nn.variable(name="latents", shape=latents.shape, dtype=latents.dtype)
-    model = decoder(latents_var, parameters, data_layout=data_layout)
+    model = decoder(latents_var, parameters, channels_last=channels_last)
 
     output = cnp.nn.evaluate(model, inputs={latents_var: latents})
 

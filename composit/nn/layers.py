@@ -62,8 +62,8 @@ def layer_norm(input_tensor, weight, bias, *, axis=-1, epsilon=1e-5):
     return output
 
 
-def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5, data_layout):
-    if data_layout == "NCHW":
+def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5, channels_last):
+    if not channels_last:
         raise NotImplementedError
     output = input_tensor - mean
     output = output / cnp.sqrt(var + epsilon)
@@ -153,7 +153,7 @@ def resnet_module(
     left_branch_bn_running_var,
     left_branch_bn_weight,
     left_branch_bn_bias,
-    data_layout,
+    channels_last,
     module_strides=(1, 1),
 ):
     left_branch = input_tensor
@@ -161,7 +161,7 @@ def resnet_module(
 
     if left_branch_conv_weight is not None:
         left_branch = cnp.nn.convolution(
-            left_branch, left_branch_conv_weight, strides=module_strides, data_layout=data_layout
+            left_branch, left_branch_conv_weight, strides=module_strides, channels_last=channels_last
         )
         left_branch = batch_norm(
             left_branch,
@@ -169,22 +169,24 @@ def resnet_module(
             left_branch_bn_running_var,
             left_branch_bn_weight,
             left_branch_bn_bias,
-            data_layout=data_layout,
+            channels_last=channels_last,
         )
 
-    right_branch = cnp.nn.convolution(right_branch, right_branch_conv_0_weight, strides=(1, 1), data_layout=data_layout)
+    right_branch = cnp.nn.convolution(
+        right_branch, right_branch_conv_0_weight, strides=(1, 1), channels_last=channels_last
+    )
     right_branch = batch_norm(
         right_branch,
         right_branch_bn_0_running_mean,
         right_branch_bn_0_running_var,
         right_branch_bn_0_weight,
         right_branch_bn_0_bias,
-        data_layout=data_layout,
+        channels_last=channels_last,
     )
     right_branch = cnp.nn.relu(right_branch)
 
     right_branch = cnp.nn.convolution(
-        right_branch, right_branch_conv_1_weight, strides=module_strides, padding=(1, 1), data_layout=data_layout
+        right_branch, right_branch_conv_1_weight, strides=module_strides, padding=(1, 1), channels_last=channels_last
     )
     right_branch = batch_norm(
         right_branch,
@@ -192,18 +194,20 @@ def resnet_module(
         right_branch_bn_1_running_var,
         right_branch_bn_1_weight,
         right_branch_bn_1_bias,
-        data_layout=data_layout,
+        channels_last=channels_last,
     )
     right_branch = cnp.nn.relu(right_branch)
 
-    right_branch = cnp.nn.convolution(right_branch, right_branch_conv_2_weight, strides=(1, 1), data_layout=data_layout)
+    right_branch = cnp.nn.convolution(
+        right_branch, right_branch_conv_2_weight, strides=(1, 1), channels_last=channels_last
+    )
     right_branch = batch_norm(
         right_branch,
         right_branch_bn_2_running_mean,
         right_branch_bn_2_running_var,
         right_branch_bn_2_weight,
         right_branch_bn_2_bias,
-        data_layout=data_layout,
+        channels_last=channels_last,
     )
 
     output = cnp.nn.relu(left_branch + right_branch)
