@@ -14,7 +14,7 @@ from composit.numpy.core import (
     create_numpy_concatenate_function,
 )
 from composit.introspection import get_name_from_args_and_kwargs
-from composit.persistent_array import PersistentArray
+from composit.types import LazyTensor
 from composit.string import random_string
 
 THIS_MODULE = sys.modules[__name__]
@@ -67,12 +67,12 @@ class DynamicGetItem(PClass):
         return array[indices]
 
 
-def get_item(self, indices) -> "PersistentArray":
+def get_item(self, indices) -> "LazyTensor":
     if isinstance(indices[0], slice):
         indices = process_indices(indices)
         return create_from_numpy_compute_instruction(self, instruction=GetItem(indices=indices))
 
-    if not isinstance(indices, PersistentArray):
+    if not isinstance(indices, LazyTensor):
         name = f"Indices({indices})"
         indices = create_ndarray(name, np.asarray(indices, dtype=int))
 
@@ -80,7 +80,7 @@ def get_item(self, indices) -> "PersistentArray":
 
 
 __all__.append("get_item")
-PersistentArray.__getitem__ = get_item
+LazyTensor.__getitem__ = get_item
 
 
 class SetItem(PClass):
@@ -94,17 +94,17 @@ class SetItem(PClass):
         return new_array
 
 
-def set_item(self, indices, values) -> "PersistentArray":
+def set_item(self, indices, values) -> "LazyTensor":
     indices = process_indices(indices)
     return create_from_numpy_compute_instruction(self, values, instruction=SetItem(indices=indices))
 
 
 __all__.append("set_item")
-PersistentArray.set_item = set_item
+LazyTensor.set_item = set_item
 
 
 def asarray(array, name=None):
-    if isinstance(array, PersistentArray):
+    if isinstance(array, LazyTensor):
         return array
 
     if not isinstance(array, np.ndarray):
@@ -202,7 +202,7 @@ for function_name in BINARY_COMPUTE_FUNCTIONS:
     __all__.append(function_name)
     setattr(THIS_MODULE, function_name, create_numpy_binary_compute_function(function_name))
     function = getattr(THIS_MODULE, function_name)
-    setattr(PersistentArray, dunder_method_name, function)
+    setattr(LazyTensor, dunder_method_name, function)
 
 
 setattr(THIS_MODULE, "concatenate", create_numpy_concatenate_function())

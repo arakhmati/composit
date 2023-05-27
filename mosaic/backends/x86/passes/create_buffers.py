@@ -18,19 +18,19 @@ from mosaic.passes.inspect import format_bytes
 from mosaic.tilelab.tile import create_aligned_array, to_tilized_array
 
 
-def intermediate_buffer_descriptor_factory():
+def buffer_descriptor_factory():
     buffer_id = 0
 
-    def create_intermediate_buffer_descriptor(dtype):
+    def create_buffer_descriptor(dtype):
         nonlocal buffer_id
         buffer_descriptor = BufferDescriptor(name=f"intermediate_buffer_descriptor_{buffer_id}_{dtype}")
         buffer_id += 1
         return buffer_descriptor
 
-    return create_intermediate_buffer_descriptor
+    return create_buffer_descriptor
 
 
-create_intermediate_buffer_descriptor = intermediate_buffer_descriptor_factory()
+create_buffer_descriptor = buffer_descriptor_factory()
 
 
 def normalize_name(name):
@@ -77,6 +77,12 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
 
     (successor,) = graph.successors(node)
 
+    # Only re-use the buffer of the first operand
+    # TODO: figure out why buffers of aother operands don't work
+    (first_input_node_to_successor, _), *_ = get_operands(graph, successor)
+    if first_input_node_to_successor != node:
+        return graph, node_to_users, buffer_descriptor_to_current_node
+
     dtype = first(graph.nodes[node]["dtypes"])
     successor_dtype = first(graph.nodes[successor]["dtypes"])
     if dtype != successor_dtype:
@@ -89,8 +95,7 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     if "buffer_descriptors" in graph.nodes[successor]:
         return graph, node_to_users, buffer_descriptor_to_current_node
 
-    (input_node_to_successor, _), *_ = get_operands(graph, successor)
-    buffer_descriptor = first(graph.nodes[input_node_to_successor]["buffer_descriptors"])
+    buffer_descriptor = first(graph.nodes[node]["buffer_descriptors"])
 
     graph = graph.add_node(successor, buffer_descriptors=tuple([buffer_descriptor]))
     buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, successor)
@@ -130,11 +135,11 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
         if reuse_buffers:
             buffer_descriptor_stack = dtype_to_buffer_descriptor_stack.setdefault(dtype, deque(maxlen=None))
             if not buffer_descriptor_stack:
-                buffer_descriptor = create_intermediate_buffer_descriptor(dtype)
+                buffer_descriptor = create_buffer_descriptor(dtype)
             else:
                 buffer_descriptor = buffer_descriptor_stack.pop()
         else:
-            buffer_descriptor = create_intermediate_buffer_descriptor(dtype)
+            buffer_descriptor = create_buffer_descriptor(dtype)
 
         graph = graph.add_node(node, buffer_descriptors=tuple([buffer_descriptor]))
         buffer_descriptor_to_current_node = buffer_descriptor_to_current_node.set(buffer_descriptor, node)

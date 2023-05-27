@@ -8,7 +8,7 @@ from pyrsistent import PClass, field
 
 import composit as cnp
 from composit.numpy.core import create_from_numpy_compute_instruction
-from composit.persistent_array import PersistentArray, Node
+from composit.types import LazyTensor, Node
 from composit.multidigraph import MultiDiGraph, compose_all, visualize_graph
 
 ENABLE = True  # Temporary hack until Module is supported in chain_rule
@@ -19,10 +19,10 @@ class ModuleInput(PClass):
         return args
 
 
-def module_input(*, name: str, shape: tuple, dtype: np.dtype) -> PersistentArray:
+def module_input(*, name: str, shape: tuple, dtype: np.dtype) -> LazyTensor:
     node = Node(name=name)
     graph = MultiDiGraph().add_node(node, instruction=ModuleInput(), shapes=(shape,), dtypes=(dtype,))
-    return PersistentArray(graph=graph, node=node)
+    return LazyTensor(graph=graph, node=node)
 
 
 class ModuleOutput(PClass):
@@ -30,7 +30,7 @@ class ModuleOutput(PClass):
         return args
 
 
-def module_output(input_var) -> PersistentArray:
+def module_output(input_var) -> LazyTensor:
     return create_from_numpy_compute_instruction(
         input_var,
         instruction=ModuleOutput(),
@@ -67,7 +67,7 @@ def flatten_vars(vars, graph=None):
         if var is None:
             continue
 
-        elif isinstance(var, PersistentArray):
+        elif isinstance(var, LazyTensor):
             flat_vars.append(var)
 
         elif isinstance(var, dict):
@@ -93,7 +93,7 @@ def convert_input_vars_to_module_input_vars(input_vars):
         if input_var is None:
             module_input_var = None
 
-        elif isinstance(input_var, PersistentArray):
+        elif isinstance(input_var, LazyTensor):
             name = input_var.node.name
             if input_var.output_index > 0:
                 name = f"{name}_{input_var.output_index}"

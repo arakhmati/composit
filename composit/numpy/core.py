@@ -8,7 +8,7 @@ from toolz import functoolz, memoize
 
 from composit.introspection import class_name
 from composit.multidigraph import MultiDiGraph, merge_graphs
-from composit.persistent_array import PersistentArray, Node
+from composit.types import LazyTensor, Node
 from composit.string import random_string
 
 
@@ -60,14 +60,14 @@ def create_ndarray(name: str, array: np.ndarray):
     graph = MultiDiGraph().add_node(
         node, instruction=Constant(array=array), shapes=(array.shape,), dtypes=(np.dtype(array.dtype),)
     )
-    return PersistentArray(graph=graph, node=node)
+    return LazyTensor(graph=graph, node=node)
 
 
 def create_from_numpy_compute_instruction(
     *operands,
     instruction,
     dtype_to_override=None,
-) -> PersistentArray | tuple[PersistentArray]:
+) -> LazyTensor | tuple[LazyTensor]:
     operands = list(operands)
     for index, operand in enumerate(operands):
         if isinstance(operands[index], (int, float)):
@@ -95,8 +95,7 @@ def create_from_numpy_compute_instruction(
         )
 
     result = tuple(
-        PersistentArray(graph=graph, node=new_node, output_index=output_index)
-        for output_index, dtype in enumerate(dtypes)
+        LazyTensor(graph=graph, node=new_node, output_index=output_index) for output_index, dtype in enumerate(dtypes)
     )
     if len(result) == 1:
         return result[0]
@@ -122,7 +121,7 @@ def create_numpy_compute_instruction(function_name, *args, **kwargs):
 
         # Distribute args across klass_args and klass_kwargs
         for index, arg in enumerate(args):
-            if isinstance(arg, PersistentArray):
+            if isinstance(arg, LazyTensor):
                 continue
             if index < len(klass_args):
                 key = klass_args[index]
@@ -144,7 +143,7 @@ def create_numpy_compute_instruction(function_name, *args, **kwargs):
 
 def create_numpy_compute_function(function_name):
     def function(*args, **kwargs):
-        operands = [arg for arg in args if isinstance(arg, PersistentArray)]
+        operands = [arg for arg in args if isinstance(arg, LazyTensor)]
         return create_from_numpy_compute_instruction(
             *operands,
             dtype_to_override=kwargs.get("dtype", None),
