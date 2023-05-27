@@ -1,4 +1,4 @@
 # ruff: noqa: F401
 from composit.numpy import *
 
-from composit.persistent_array import visualize
+from composit.types import visualize

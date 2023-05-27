@@ -11,7 +11,7 @@ class Node(PClass):
         return deterministic_hash(self)
 
 
-class PersistentArray(PClass):
+class LazyTensor(PClass):
     graph = field(type=MultiDiGraph)
     node = field(type=Node)
     output_index = field(type=int, initial=0)

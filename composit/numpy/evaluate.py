@@ -4,10 +4,10 @@ import numpy as np
 
 from composit.numpy.core import get_operands
 from composit.multidigraph import topological_traversal, compose_all
-from composit.persistent_array import PersistentArray
+from composit.types import LazyTensor
 
 
-def evaluate(*outputs: tuple[PersistentArray]):
+def evaluate(*outputs: tuple[LazyTensor]):
     graph = compose_all(*tuple(output.graph for output in outputs))
 
     cache = {}

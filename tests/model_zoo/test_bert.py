@@ -119,7 +119,7 @@ def test_autograd(
     parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
 
     with cnp.nn.module.disable_modules():
-        model: cnp.PersistentArray = bert(
+        model: cnp.LazyTensor = bert(
             input_ids_variable,
             token_type_ids_variable,
             None,

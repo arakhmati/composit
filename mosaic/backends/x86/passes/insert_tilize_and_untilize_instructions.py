@@ -2,7 +2,7 @@ from pyrsistent import PClass
 
 from composit.introspection import class_name
 from composit.multidigraph import topological_traversal, MultiDiGraph
-from composit.persistent_array import Node
+from composit.types import Node
 
 
 class Tilize(PClass):

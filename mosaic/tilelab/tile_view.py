@@ -6,7 +6,7 @@ import math
 from pyrsistent import PClass, field, pmap, pmap_field, PVector
 
 from composit.introspection import class_name
-from composit.persistent_array import PersistentArray
+from composit.types import LazyTensor
 from composit.multidigraph import topological_traversal
 from composit.numpy.core import get_operands
 
@@ -139,9 +139,9 @@ class Cache(PClass):
     def from_dict(cls, dictionary):
         return cls(node_output_to_tile_view=pmap(dictionary))
 
-    def __getitem__(self, persistent_array: PersistentArray):
-        node = persistent_array.node
-        output_index = persistent_array.output_index
+    def __getitem__(self, lazy_tensor: LazyTensor):
+        node = lazy_tensor.node
+        output_index = lazy_tensor.output_index
         return self.node_output_to_tile_view[(node, output_index)]
 
     def __iter__(self):

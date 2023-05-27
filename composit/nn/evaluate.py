@@ -8,7 +8,7 @@ from pyrsistent import PClass, pmap_field, pmap
 from composit.multidigraph import topological_traversal, compose_all
 from composit import nn
 from composit.numpy.core import get_operands
-from composit.persistent_array import PersistentArray
+from composit.types import LazyTensor
 
 
 class Cache(PClass):
@@ -18,9 +18,9 @@ class Cache(PClass):
     def from_dict(cls, dictionary):
         return cls(node_output_to_array=pmap(dictionary))
 
-    def __getitem__(self, persistent_array: PersistentArray):
-        node = persistent_array.node
-        output_index = persistent_array.output_index
+    def __getitem__(self, lazy_tensor: LazyTensor):
+        node = lazy_tensor.node
+        output_index = lazy_tensor.output_index
         return self.node_output_to_array[(node, output_index)]
 
     def as_dict_from_variable_to_array(self):
@@ -39,7 +39,7 @@ def initialize_cache(graph, inputs):
 
 def evaluate(
     *output_vars,
-    inputs: dict[PersistentArray, np.ndarray],
+    inputs: dict[LazyTensor, np.ndarray],
     initialize_cache_function=initialize_cache,
     return_cache: bool = False,
     always_return_tuple: bool = False,
