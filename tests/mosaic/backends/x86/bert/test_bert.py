@@ -218,7 +218,9 @@ def test_benchmark(
     execution_times = []
     for _ in range(num_iterations):
         start = time.time_ns()
-        output = transformers_model(torch.from_numpy(input_ids))["last_hidden_state"]
+        output = transformers_model(torch.from_numpy(input_ids), token_type_ids=torch.from_numpy(token_type_ids))[
+            "last_hidden_state"
+        ]
         end = time.time_ns()
         execution_times.append(end - start)
     execution_times = np.asarray(execution_times) / 1e6

@@ -64,8 +64,8 @@ def test_torch_vs_composit(
 
     transformers_outputs = []
     for model_input in model_inputs:
-        model_input = [torch.from_numpy(x) for x in model_input]
-        transformers_outputs.append(transformers_model(model_input[0])["last_hidden_state"])
+        input_ids, token_type_ids = [torch.from_numpy(x) for x in model_input]
+        transformers_outputs.append(transformers_model(input_ids, token_type_ids=token_type_ids)["last_hidden_state"])
 
     cnp_outputs = []
     for model_input in model_inputs:
@@ -161,7 +161,7 @@ def test_autograd(
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-        torch_loss = transformers_model(torch.from_numpy(input_ids), torch.from_numpy(token_type_ids))[
+        torch_loss = transformers_model(torch.from_numpy(input_ids), token_type_ids=torch.from_numpy(token_type_ids))[
             "last_hidden_state"
         ]
 
