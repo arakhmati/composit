@@ -183,8 +183,8 @@ def generate_body(
 
         inner_loop_body += generate_body(
             arguments=arguments,
-            input_a_tile_config=input_a_tile_config.next_level(),
-            input_b_tile_config=input_b_tile_config.next_level(),
+            input_a_tile_config=input_a_tile_config.next_level_tile_config,
+            input_b_tile_config=input_b_tile_config.next_level_tile_config,
             offsets=dict(input_a_var=next_a_offset, input_b_var=next_b_offset, output_var=next_output_offset),
             use_avx_manually=use_avx_manually,
         )

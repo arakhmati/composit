@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import math
-import itertools
 
 import numpy as np
-from pyrsistent import PClass, field, pmap
-from toolz import first
+from pyrsistent import PClass, field
 
 from composit.introspection import class_name
 from mosaic.tilelab.layout import TransposedLayout
@@ -16,37 +14,31 @@ class TileConfig(PClass):
     level_name = field()
     shape = field()
     layout = field()
-    index_to_tile = field()
+    next_level_tile_config = field()
 
     @property
     def hierarchy(self):
         current = [TileLevel(level_name=self.level_name, tile_shape=self.tile_shape, layout=self.layout)]
-        downstream = first(self.index_to_tile.values()).hierarchy
+        downstream = self.next_level_tile_config.hierarchy
         return current + downstream
 
     @property
     def tile_shape(self):
-        return first(self.index_to_tile.values()).shape
+        return self.next_level_tile_config.shape
 
     @property
     def rank(self):
         return len(self.shape)
 
-    def next_level(self):
-        return self[tuple(0 for _ in range(self.rank))]
-
     def num_tiles_per_axis(self):
         return tuple(dim // tile_dim for dim, tile_dim in zip(self.shape, self.tile_shape))
-
-    def __getitem__(self, index):
-        return self.index_to_tile[index]
 
     def __repr__(self):
         result = (
             f"{class_name(self)}(level_name={self.level_name}, shape={self.shape}, "
-            f"tile_shape={self.tile_shape}, num_tiles={len(self.index_to_tile)})"
+            f"tile_shape={self.tile_shape}, num_tiles={math.prod(self.num_tiles_per_axis())})"
         )
-        first_child = self.next_level()
+        first_child = self.next_level_tile_config
         if isinstance(first_child, TileConfig):
             first_child_repr = f"\n{first_child}"
         else:
@@ -76,50 +68,31 @@ class AtomicTileConfig(PClass):
         return self.shape
 
 
-def create_tile_config(
-    tile_view: TileView,
-    offsets=None,
-) -> TileConfig:
+def create_tile_config(tile_view: TileView) -> TileConfig | AtomicTileConfig:
     shape = tile_view.shape
     hierarchy = tile_view.hierarchy
 
-    if offsets is None:
-        offsets = tuple(0 for _ in shape)
-
     tile_level, *remaining_hierarchy = hierarchy
-    tile_shape = tile_level.tile_shape
 
-    if len(shape) != len(tile_shape):
-        raise RuntimeError(f"Shapes must have the same rank: {shape} != {tile_shape}")
+    if len(remaining_hierarchy) > 1:
+        tile_shape = tile_level.tile_shape
+        if len(shape) != len(tile_shape):
+            raise RuntimeError(f"Shapes must have the same rank: {shape} != {tile_shape}")
 
-    ranges = (range(0, tensor_dim, tile_dim) for tensor_dim, tile_dim in zip(shape, tile_shape))
+        next_level_tile_config = create_tile_config(TileView(shape=tile_shape, hierarchy=remaining_hierarchy))
 
-    index_to_tile = {}
-    for indices in itertools.product(*ranges):
-        tile_indices = tuple(tensor_index // tile_dim for tensor_index, tile_dim in zip(indices, tile_shape))
-
-        new_offsets = [offset + index for offset, index in zip(offsets, indices)]
-
-        if len(remaining_hierarchy) > 1:
-            index_to_tile[tile_indices] = create_tile_config(
-                TileView(shape=tile_shape, hierarchy=remaining_hierarchy), offsets=new_offsets
-            )
-        else:
-            leaf_level = remaining_hierarchy[-1]
-            index_to_tile[tile_indices] = AtomicTileConfig(
-                level_name=leaf_level.level_name,
-                shape=tile_shape,
-                layout=leaf_level.layout,
-            )
-
-    tile_config = TileConfig(
-        level_name=tile_level.level_name,
-        shape=shape,
-        layout=tile_level.layout,
-        index_to_tile=pmap(index_to_tile),
-    )
-
-    return tile_config
+        return TileConfig(
+            level_name=tile_level.level_name,
+            shape=shape,
+            layout=tile_level.layout,
+            next_level_tile_config=next_level_tile_config,
+        )
+    else:
+        return AtomicTileConfig(
+            level_name=tile_level.level_name,
+            shape=shape,
+            layout=tile_level.layout,
+        )
 
 
 def create_aligned_array(shape, dtype, align=32):
@@ -132,7 +105,7 @@ def create_aligned_array(shape, dtype, align=32):
 
 def get_all_num_tiles_per_axis(tile_config):
     if isinstance(tile_config, TileConfig):
-        return tile_config.num_tiles_per_axis() + get_all_num_tiles_per_axis(tile_config.next_level())
+        return tile_config.num_tiles_per_axis() + get_all_num_tiles_per_axis(tile_config.next_level_tile_config)
     else:
         return tile_config.num_tiles_per_axis()
 

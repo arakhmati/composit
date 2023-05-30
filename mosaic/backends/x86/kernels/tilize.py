@@ -104,7 +104,7 @@ def generate_body(arguments, *, tile_config, offset, original_shape, all_indices
         inner_loop_body = c.block(declare_next_offset)
         inner_loop_body += generate_body(
             arguments,
-            tile_config=tile_config.next_level(),
+            tile_config=tile_config.next_level_tile_config,
             offset=next_offset,
             original_shape=original_shape,
             all_indices=all_indices,
