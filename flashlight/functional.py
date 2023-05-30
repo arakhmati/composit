@@ -36,6 +36,14 @@ def mul(*args):
     return Tensor(output, lazy_output)
 
 
+torch_rmul = torch.Tensor.__rmul__
+def rmul(*args):
+    output = torch_rmul(*args)
+    lazy_input_b, lazy_input_a = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+    lazy_output = lazy_input_a * lazy_input_b
+    return Tensor(output, lazy_output)
+
+
 torch_truediv = torch.Tensor.__truediv__
 def truediv(*args):
     output = torch_truediv(*args)
@@ -47,7 +55,7 @@ def truediv(*args):
 torch_matmul = torch.Tensor.__matmul__
 def matmul(*args):
     output = torch_matmul(*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
     lazy_output = lazy_input_a @ lazy_input_b
     return Tensor(output, lazy_output)
 
@@ -64,6 +72,13 @@ def matmul(*args):
 torch_view = torch.Tensor.view
 def view(*args):
     output = torch_view(*args)
+    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+    return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
+
+
+torch_reshape = torch.Tensor.reshape
+def reshape(*args):
+    output = torch_reshape(*args)
     lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
     return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
 
@@ -98,8 +113,12 @@ def transpose(*args):
     lazy_input, = convert_torch_tensors_to_lazy_tensors(*args)
 
     axes_to_transpose = list(args[1:])
+    assert len(axes_to_transpose) == 2
     for index, axis in enumerate(axes_to_transpose):
         axes_to_transpose[index] = (len(output.shape) + axis) % len(output.shape)
+
+    if axes_to_transpose[0] < axes_to_transpose[1]:
+        axes_to_transpose = tuple(reversed(axes_to_transpose))
 
     order = []
     axes_to_transpose_index = 0
@@ -118,6 +137,24 @@ def identity(*args, **kwargs):
     output, *_ = args
     lazy_input, = convert_torch_tensors_to_lazy_tensors(*args)
     return Tensor(output, lazy_input)
+
+
+
+torch_bmm = torch.bmm
+def bmm(*args):
+    output = torch_bmm(*args)
+    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = lazy_input_a @ lazy_input_b
+    return Tensor(output, lazy_output)
+
+
+
+torch_sigmoid = torch.sigmoid
+def sigmoid(*args):
+    output = torch_sigmoid(*args)
+    lazy_input, = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = cnp.nn.sigmoid(lazy_input)
+    return Tensor(output, lazy_output)
 
 
 def linear(*args, **kwargs):
@@ -186,6 +223,8 @@ def trace():
     torch.nn.functional.__dict__.clear()
 
     setattr(torch, "matmul", matmul)
+    setattr(torch, "bmm", bmm)
+    setattr(torch, "sigmoid", sigmoid)
 
     setattr(torch.nn.functional, "linear", linear)
     setattr(torch.nn.functional, "embedding", embedding)
@@ -203,10 +242,12 @@ def trace():
     setattr(torch.Tensor, "__add__", add)
     setattr(torch.Tensor, "__sub__", sub)
     setattr(torch.Tensor, "__mul__", mul)
+    setattr(torch.Tensor, "__rmul__", rmul)
     setattr(torch.Tensor, "__truediv__", truediv)
     setattr(torch.Tensor, "__matmul__", matmul)
     # setattr(torch.Tensor, "__getitem__", getitem)
     setattr(torch.Tensor, "view", view)
+    setattr(torch.Tensor, "reshape", reshape)
     setattr(torch.Tensor, "permute", permute)
     setattr(torch.Tensor, "transpose", transpose)
     setattr(torch.Tensor, "contiguous", contiguous)
@@ -223,10 +264,12 @@ def trace():
     setattr(torch.Tensor, "__add__", torch_add)
     setattr(torch.Tensor, "__sub__", torch_sub)
     setattr(torch.Tensor, "__mul__", torch_mul)
+    setattr(torch.Tensor, "__rmul__", torch_rmul)
     setattr(torch.Tensor, "__truediv__", torch_truediv)
     setattr(torch.Tensor, "__matmul__", torch_matmul)
     # setattr(torch.Tensor, "__getitem__", torch_getitem)
     setattr(torch.Tensor, "view", torch_view)
+    setattr(torch.Tensor, "reshape", torch_reshape)
     setattr(torch.Tensor, "permute", torch_permute)
     setattr(torch.Tensor, "transpose", torch_transpose)
     setattr(torch.Tensor, "contiguous", torch_contiguous)
