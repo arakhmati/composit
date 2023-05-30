@@ -20,33 +20,46 @@ def cnp_model(input_var, weights, bias):
     return input_var @ weights + bias
 
 
-def specify_input_var_to_scheme(input_var, weights_var, bias_var):
-    return {
-        input_var: [
-            TileLevel(level_name="tile", tile_shape=(1, 32, 32)),
-            ScalarTileLevel(level_name="scalar", rank=len(input_var.shape)),
-        ],
-        weights_var: [
-            TileLevel(level_name="tile", tile_shape=(32, 32), layout=TransposedLayout(order=(1, 0))),
-            ScalarTileLevel(level_name="scalar", rank=len(weights_var.shape), layout=TransposedLayout(order=(1, 0))),
-        ],
-        bias_var: [
-            TileLevel(level_name="tile", tile_shape=(32,)),
-            ScalarTileLevel(level_name="scalar", rank=len(bias_var.shape)),
-        ],
-    }
+def specify_input_var_to_scheme(input_var, weights_var, bias_var, *, tilize_l1_cache):
+    if tilize_l1_cache:
+        return {
+            input_var: [
+                TileLevel(level_name="tile", tile_shape=(1, 32, 32)),
+                ScalarTileLevel(level_name="scalar", rank=len(input_var.shape)),
+            ],
+            weights_var: [
+                TileLevel(level_name="tile", tile_shape=(32, 32), layout=TransposedLayout(order=(1, 0))),
+                ScalarTileLevel(
+                    level_name="scalar", rank=len(weights_var.shape), layout=TransposedLayout(order=(1, 0))
+                ),
+            ],
+            bias_var: [
+                TileLevel(level_name="tile", tile_shape=(32,)),
+                ScalarTileLevel(level_name="scalar", rank=len(bias_var.shape)),
+            ],
+        }
+    else:
+        return {
+            input_var: [ScalarTileLevel(level_name="scalar", rank=len(input_var.shape))],
+            weights_var: [
+                ScalarTileLevel(level_name="scalar", rank=len(weights_var.shape), layout=TransposedLayout(order=(1, 0)))
+            ],
+            bias_var: [ScalarTileLevel(level_name="scalar", rank=len(bias_var.shape))],
+        }
 
 
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_size", [128])
 @pytest.mark.parametrize("hidden_size", [768])
 @pytest.mark.parametrize("fuse_kernels", [False, True])
+@pytest.mark.parametrize("tilize_l1_cache", [False, True])
 def test_matrix_multiplication_with_bias(
     request,
     batch_size: int,
     sequence_size: int,
     hidden_size: int,
     fuse_kernels: bool,
+    tilize_l1_cache: bool,
 ):
     random.seed(0)
     np.random.seed(0)
@@ -66,7 +79,7 @@ def test_matrix_multiplication_with_bias(
 
     cnp_output = cnp.nn.evaluate(output_var, inputs={input_var: np_input})
 
-    input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var)
+    input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var, tilize_l1_cache=tilize_l1_cache)
     mosaic_model = compile_to_mosaic_model(
         output_var,
         input_var_to_scheme=input_var_to_scheme,

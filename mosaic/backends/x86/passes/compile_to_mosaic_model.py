@@ -15,7 +15,8 @@ def propagate_tile_config(graph, input_var_to_scheme):
     for (node, output_index), tile_view in tile_views:
         # TODO: Group-by tile_views of every node and add them at once
         assert output_index == 0, "output_index other than 0 is not currently supported"
-        graph = graph.add_node(node, tile_configs=tuple([create_tile_config(tile_view)]))
+        tile_config = create_tile_config(tile_view)
+        graph = graph.add_node(node, tile_configs=tuple([tile_config]))
     return graph
 
 

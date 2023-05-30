@@ -96,8 +96,8 @@ def generate_loops(arguments, *, input_tile_config, broadcasted_input_tile_confi
     if isinstance(input_tile_config, TileConfig):
         loop_body += generate_loops(
             arguments,
-            input_tile_config=input_tile_config.next_level(),
-            broadcasted_input_tile_config=broadcasted_input_tile_config.next_level(),
+            input_tile_config=input_tile_config.next_level_tile_config,
+            broadcasted_input_tile_config=broadcasted_input_tile_config.next_level_tile_config,
             operation=operation,
             offsets=dict(input=index, broadcasted_input=broadcasted_index),
         )

@@ -93,8 +93,8 @@ def generate_body(arguments, input_tile_config, output_tile_config, axes, offset
         inner_loop_body = c.block(declare_next_input_offset, declare_next_output_offset)
         inner_loop_body += generate_body(
             arguments=arguments,
-            input_tile_config=input_tile_config.next_level(),
-            output_tile_config=output_tile_config.next_level(),
+            input_tile_config=input_tile_config.next_level_tile_config,
+            output_tile_config=output_tile_config.next_level_tile_config,
             axes=axes,
             offsets=dict(input=next_input_offset, output=next_output_offset),
         )
