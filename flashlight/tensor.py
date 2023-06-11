@@ -1,6 +1,7 @@
 import torch
 
 import composit as cnp
+from composit.string import random_string
 
 
 class Tensor(torch.Tensor):
@@ -19,11 +20,15 @@ class Tensor(torch.Tensor):
     def __repr__(self):
         return f"flashlight.{super().__repr__()}, var={self.lazy_tensor}"
 
+
+def from_torch(tensor: torch.Tensor):
+    np_tensor = tensor.detach().numpy()
+    lazy_tensor = cnp.nn.variable(name=random_string(), shape=np_tensor.shape, dtype=np_tensor.dtype)
+    return Tensor(tensor, lazy_tensor)
+
+
 def forward(*output_tensors, input_tensors):
     return cnp.nn.evaluate(
         *(output_tensor.lazy_tensor for output_tensor in output_tensors),
-        inputs={
-            input_tensor.lazy_tensor: input_tensor.numpy()
-            for input_tensor in input_tensors
-        }
+        inputs={input_tensor.lazy_tensor: input_tensor.numpy() for input_tensor in input_tensors},
     )
