@@ -4,6 +4,7 @@ import math
 import torch
 import torch.mps
 import torch.nn.functional
+from loguru import logger
 
 import composit as cnp
 import composit.nn
@@ -29,8 +30,8 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "distributed",
     "double",
     "dtype",
-    "embedding",
-    "embedding_renorm_",
+    "embedding",  # TODO: override?
+    "embedding_renorm_",  # TODO: override?
     "empty",
     "finfo",
     "float",
@@ -38,9 +39,11 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "float32",
     "FloatTensor",
     "_from_functional_tensor",
+    "from_numpy",
     "fx",
     "Generator",
     "get_default_dtype",
+    "group_norm",  # TODO: override?
     "int",
     "int64",
     "isfinite",
@@ -49,7 +52,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "is_tensor",
     "jit",
     "_jit_internal",
-    "layer_norm",
+    "layer_norm",  # TODO: override?
     "long",
     "LongTensor",
     "masked_select",
@@ -98,7 +101,6 @@ TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "dim",
     "div",  # TODO: override?
     "fill_",  # TODO: override?
-    "expand",  # TODO: override with reshape
     "is_floating_point",
     "matmul",  # TODO: override?
     "mul",  # TODO: override?
@@ -123,6 +125,12 @@ TORCH_NN_FUNCTIONAL_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "torch",
     "_verify_batch_size",
 ]
+
+
+def identity(*args, **kwargs):
+    output, *_ = args
+    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+    return Tensor(output, lazy_input)
 
 
 def add(*args):
@@ -201,6 +209,16 @@ def reshape(*args):
     return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
 
 
+def expand(*args):
+    output = TORCH_TENSOR["expand"](*args)
+    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+    if lazy_input.shape == (1,):
+        return Tensor(output, cnp.concatenate([lazy_input, lazy_input], axis=0))
+    else:
+        logger.warning("Defaulting to torch.Tensor.expand")
+        return output
+
+
 def contiguous(*args):
     output = TORCH_TENSOR["contiguous"](*args)
     lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
@@ -251,10 +269,13 @@ def transpose(*args):
     return Tensor(output, cnp.transpose(lazy_input, order))
 
 
-def identity(*args, **kwargs):
-    output, *_ = args
+def chunk(*args, **kwargs):
+    outputs = TORCH_TENSOR["chunk"](*args, **kwargs)
     (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, lazy_input)
+    _, num_chunks = args
+    axis = kwargs["dim"]
+    lazy_outputs = cnp.split(lazy_input, num_chunks, axis=axis)
+    return tuple(Tensor(output, lazy_output) for output, lazy_output in zip(outputs, lazy_outputs))
 
 
 def bmm(*args):
@@ -326,10 +347,19 @@ def conv2d(*args, **kwargs):
     output = TORCH_NN_FUNCTIONAL["conv2d"](*args, **kwargs)
 
     lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, channels_last=False)
+
+    strides, padding, dilation, groups = args[3:]
+    assert (
+        isinstance(padding, tuple) and len(padding) == 2 and all(isinstance(element, int) for element in padding)
+    ), "padding should be a tuple of 2 integers"
+    assert dilation == (1, 1), f"dilation should be (1, 1) but is {dilation}"
+    assert groups == 1, f"groups should be 1 but is {dilation}"
+
+    lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=False)
+
     if len(rest) == 1:
         (lazy_bias,) = rest
-        lazy_output += lazy_bias
+        lazy_output += cnp.reshape(lazy_bias, (-1, 1, 1))
 
     return Tensor(output, lazy_output)
 
@@ -388,6 +418,55 @@ def layer_norm(*args, **kwargs):
     return Tensor(output, lazy_output)
 
 
+def group_norm(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["group_norm"](*args, **kwargs)
+
+    lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_input, *rest = lazy_inputs
+    if len(rest) == 2:
+        lazy_weight, lazy_bias = rest
+    else:
+        assert len(rest) == 0
+        lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
+
+    num_groups = args[1]
+    epsilon = args[4] if len(args) >= 5 else 1e-5
+
+    lazy_output = cnp.nn.layers.group_norm(
+        lazy_input,
+        cnp.reshape(lazy_weight, (-1, 1, 1)),
+        cnp.reshape(lazy_bias, (-1, 1, 1)),
+        channel_axis=1,
+        num_groups=num_groups,
+        epsilon=epsilon,
+    )
+
+    return Tensor(output, lazy_output)
+
+
+def scaled_dot_product_attention(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["scaled_dot_product_attention"](*args, **kwargs)
+    lazy_query, lazy_key, lazy_value = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = cnp.nn.layers.scaled_dot_product_attention(lazy_query, lazy_key, lazy_value)
+    return Tensor(output, lazy_output)
+
+
+def interpolate(*args, **kwargs):
+    from composit.nn import wrap_as_instruction
+
+    @wrap_as_instruction()
+    def interpolate(input_tensor, *args, **kwargs):
+        input_tensor = torch.from_numpy(input_tensor)
+        output_tensor = TORCH_NN_FUNCTIONAL["interpolate"](input_tensor, *args, **kwargs)
+        output_tensor = output_tensor.detach().numpy()
+        return output_tensor
+
+    output = TORCH_NN_FUNCTIONAL["interpolate"](*args, **kwargs)
+    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = interpolate(lazy_input, **kwargs)
+    return Tensor(output, lazy_output)
+
+
 @contextmanager
 def trace():
     torch.__dict__.clear()
@@ -424,12 +503,15 @@ def trace():
     setattr(torch.nn.functional, "linear", linear)
     setattr(torch.nn.functional, "conv2d", conv2d)
     setattr(torch.nn.functional, "embedding", embedding)
-    setattr(torch.nn.functional, "layer_norm", layer_norm)
     setattr(torch.nn.functional, "dropout", identity)
     setattr(torch.nn.functional, "softmax", softmax)
     setattr(torch.nn.functional, "gelu", gelu)
     setattr(torch.nn.functional, "silu", silu)
     setattr(torch.nn.functional, "mish", identity)
+    setattr(torch.nn.functional, "layer_norm", layer_norm)
+    setattr(torch.nn.functional, "group_norm", group_norm)
+    setattr(torch.nn.functional, "scaled_dot_product_attention", scaled_dot_product_attention)
+    setattr(torch.nn.functional, "interpolate", interpolate)
 
     setattr(torch.Tensor, "__add__", add)
     setattr(torch.Tensor, "__sub__", sub)
@@ -441,11 +523,13 @@ def trace():
     setattr(torch.Tensor, "__getitem__", getitem)
     setattr(torch.Tensor, "view", view)
     setattr(torch.Tensor, "reshape", reshape)
+    setattr(torch.Tensor, "expand", expand)
     setattr(torch.Tensor, "permute", permute)
     setattr(torch.Tensor, "transpose", transpose)
     setattr(torch.Tensor, "contiguous", contiguous)
     setattr(torch.Tensor, "to", to)
     setattr(torch.Tensor, "float", float)
+    setattr(torch.Tensor, "chunk", chunk)
 
     yield
 

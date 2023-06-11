@@ -1,5 +1,4 @@
 import composit as cnp
-import composit.nn
 
 
 def softmax(input_tensor, *, axis):
@@ -70,6 +69,18 @@ def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5, channels_
     output *= weight
     output += bias
     return output
+
+
+def scaled_dot_product_attention(query, key, value):
+    def hw_transpose_order(shape):
+        key_transpose_order = list(range(len((shape))))
+        key_transpose_order[-2:] = reversed(key_transpose_order[-2:])
+        return tuple(key_transpose_order)
+
+    attn_weight = softmax(
+        (query @ cnp.transpose(key, hw_transpose_order(key.shape)) / (query.shape[-1] ** 0.5)), axis=-1
+    )
+    return attn_weight @ value
 
 
 def multi_head_attention(
