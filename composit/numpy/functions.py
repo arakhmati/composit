@@ -167,6 +167,9 @@ COMPUTE_FUNCTIONS = [
     "exp",
     "sqrt",
     "reciprocal",
+    "sin",
+    "cos",
+    "tanh",
     # Data Movement
     "transpose",
     "reshape",
