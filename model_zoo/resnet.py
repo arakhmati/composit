@@ -33,7 +33,6 @@ def resnet(
         parameters["bn1.running_var"],
         parameters["bn1.weight"],
         parameters["bn1.bias"],
-        channels_last=channels_last,
     )
     output = cnp.nn.relu(output)
     output = cnp.nn.max_pool(output, kernel_size=(3, 3), strides=(2, 2), padding=(1, 1), channels_last=channels_last)

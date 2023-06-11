@@ -61,9 +61,7 @@ def layer_norm(input_tensor, weight, bias, *, axis=-1, epsilon=1e-5):
     return output
 
 
-def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5, channels_last):
-    if not channels_last:
-        raise NotImplementedError
+def batch_norm(input_tensor, mean, var, weight, bias, *, epsilon=1e-5):
     output = input_tensor - mean
     output = output / cnp.sqrt(var + epsilon)
     output *= weight
@@ -180,7 +178,6 @@ def resnet_module(
             left_branch_bn_running_var,
             left_branch_bn_weight,
             left_branch_bn_bias,
-            channels_last=channels_last,
         )
 
     right_branch = cnp.nn.convolution(
@@ -192,7 +189,6 @@ def resnet_module(
         right_branch_bn_0_running_var,
         right_branch_bn_0_weight,
         right_branch_bn_0_bias,
-        channels_last=channels_last,
     )
     right_branch = cnp.nn.relu(right_branch)
 
@@ -205,7 +201,6 @@ def resnet_module(
         right_branch_bn_1_running_var,
         right_branch_bn_1_weight,
         right_branch_bn_1_bias,
-        channels_last=channels_last,
     )
     right_branch = cnp.nn.relu(right_branch)
 
@@ -218,7 +213,6 @@ def resnet_module(
         right_branch_bn_2_running_var,
         right_branch_bn_2_weight,
         right_branch_bn_2_bias,
-        channels_last=channels_last,
     )
 
     output = cnp.nn.relu(left_branch + right_branch)
