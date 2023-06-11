@@ -19,6 +19,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "arange",
     "autograd",
     "backends",
+    "batch_norm",  # TODO: override?
     "bfloat16",
     "bool",
     "BoolTensor",
@@ -56,6 +57,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "long",
     "LongTensor",
     "masked_select",
+    "max_pool2d",  # TODO: override?
     "mps",
     "nn",
     "no_grad",
@@ -63,6 +65,8 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "overrides",
     "rand",
     "randn",
+    "relu",  # TODO: override?
+    "relu_",  # TODO: override?
     "save",
     "set_grad_enabled",
     "Size",
@@ -121,6 +125,7 @@ TORCH_NN_FUNCTIONAL_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "handle_torch_function",
     "has_torch_function_unary",
     "has_torch_function_variadic",
+    "_list_with_default",
     "_no_grad_embedding_renorm_",
     "torch",
     "_verify_batch_size",
@@ -331,6 +336,12 @@ def cat(*args, **kwargs):
     return Tensor(output, lazy_output)
 
 
+def flatten(*args):
+    output = TORCH["flatten"](*args)
+    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+    return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
+
+
 def linear(*args, **kwargs):
     output = TORCH_NN_FUNCTIONAL["linear"](*args, **kwargs)
 
@@ -353,7 +364,7 @@ def conv2d(*args, **kwargs):
         isinstance(padding, tuple) and len(padding) == 2 and all(isinstance(element, int) for element in padding)
     ), "padding should be a tuple of 2 integers"
     assert dilation == (1, 1), f"dilation should be (1, 1) but is {dilation}"
-    assert groups == 1, f"groups should be 1 but is {dilation}"
+    assert groups == 1, f"groups should be 1 but is {groups}"
 
     lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=False)
 
@@ -364,11 +375,62 @@ def conv2d(*args, **kwargs):
     return Tensor(output, lazy_output)
 
 
+def max_pool2d(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["max_pool2d"](*args, **kwargs)
+
+    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+
+    if len(args) == 5:
+        kernel_size, strides, padding, dilation = args[1:]
+    else:
+        (kernel_size,) = args[1:]
+        strides = kwargs["stride"]
+        padding = kwargs["padding"]
+        dilation = kwargs["dilation"]
+
+    assert isinstance(kernel_size, int), "kernel_size should be an integer"
+    assert isinstance(strides, int), "strides should be an integer"
+    assert isinstance(padding, int), "padding should be an integer"
+    assert isinstance(dilation, int), "dilation should be an integer"
+
+    kernel_size = (kernel_size, kernel_size)
+    strides = (strides, strides)
+    padding = (padding, padding)
+
+    lazy_output = cnp.nn.max_pool(
+        lazy_input, kernel_size=kernel_size, strides=strides, padding=padding, channels_last=False
+    )
+
+    return Tensor(output, lazy_output)
+
+
+def adaptive_avg_pool2d(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["adaptive_avg_pool2d"](*args, **kwargs)
+
+    if len(args) == 2:
+        (output_size,) = args[1:]
+    else:
+        output_size = kwargs["output_size"]
+    assert output_size == (1, 1)
+
+    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = cnp.mean(lazy_input, axis=(2, 3))
+    return Tensor(output, lazy_output)
+
+
 def embedding(*args, **kwargs):
     output = TORCH_NN_FUNCTIONAL["embedding"](*args, **kwargs)
 
     input_ids, weights = convert_torch_tensors_to_lazy_tensors(*args)
     lazy_output = cnp.nn.embedding(input_ids, weights)
+    return Tensor(output, lazy_output)
+
+
+def relu(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["relu"](*args, **kwargs)
+
+    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+    lazy_output = cnp.nn.relu(lazy_input)
     return Tensor(output, lazy_output)
 
 
@@ -399,6 +461,29 @@ def softmax(*args, **kwargs):
 
     (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
     lazy_output = cnp.nn.layers.softmax(lazy_input, axis=axis)
+    return Tensor(output, lazy_output)
+
+
+def batch_norm(*args, **kwargs):
+    output = TORCH_NN_FUNCTIONAL["batch_norm"](*args, **kwargs)
+
+    lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
+
+    lazy_input, lazy_running_mean, lazy_running_var, *rest = lazy_inputs
+    if len(rest) == 2:
+        lazy_weight, lazy_bias = rest
+    else:
+        assert len(rest) == 0
+        lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
+
+    lazy_output = cnp.nn.layers.batch_norm(
+        lazy_input,
+        cnp.reshape(lazy_running_mean, (-1, 1, 1)),
+        cnp.reshape(lazy_running_var, (-1, 1, 1)),
+        cnp.reshape(lazy_weight, (-1, 1, 1)),
+        cnp.reshape(lazy_bias, (-1, 1, 1)),
+    )
+
     return Tensor(output, lazy_output)
 
 
@@ -499,21 +584,27 @@ def trace():
     setattr(torch, "tanh", tanh)
     setattr(torch, "sigmoid", sigmoid)
     setattr(torch, "cat", cat)
+    setattr(torch, "flatten", flatten)
 
     setattr(torch.nn.functional, "linear", linear)
     setattr(torch.nn.functional, "conv2d", conv2d)
+    setattr(torch.nn.functional, "max_pool2d", max_pool2d)
+    setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d)
     setattr(torch.nn.functional, "embedding", embedding)
     setattr(torch.nn.functional, "dropout", identity)
     setattr(torch.nn.functional, "softmax", softmax)
+    setattr(torch.nn.functional, "relu", relu)
     setattr(torch.nn.functional, "gelu", gelu)
     setattr(torch.nn.functional, "silu", silu)
     setattr(torch.nn.functional, "mish", identity)
+    setattr(torch.nn.functional, "batch_norm", batch_norm)
     setattr(torch.nn.functional, "layer_norm", layer_norm)
     setattr(torch.nn.functional, "group_norm", group_norm)
     setattr(torch.nn.functional, "scaled_dot_product_attention", scaled_dot_product_attention)
     setattr(torch.nn.functional, "interpolate", interpolate)
 
     setattr(torch.Tensor, "__add__", add)
+    setattr(torch.Tensor, "__iadd__", add)
     setattr(torch.Tensor, "__sub__", sub)
     setattr(torch.Tensor, "__rsub__", rsub)
     setattr(torch.Tensor, "__mul__", mul)
