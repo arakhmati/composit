@@ -11,15 +11,6 @@ from model_zoo.bert import (
 )
 
 
-def get_extended_attention_mask(
-    attention_mask,
-    *args,
-    **kwargs,
-):
-    # TODO: lackcontiguous should not be needed
-    return attention_mask.contiguous()
-
-
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [3])
 @pytest.mark.parametrize("sequence_size", [32])
