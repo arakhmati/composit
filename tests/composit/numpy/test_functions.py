@@ -138,6 +138,33 @@ def test_exp():
     check_results(function)
 
 
+def test_sin():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.sin(array)
+        return result
+
+    check_results(function)
+
+
+def test_cos():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.cos(array)
+        return result
+
+    check_results(function)
+
+
+def test_tanh():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.tanh(array)
+        return result
+
+    check_results(function)
+
+
 def test_sum():
     def function(np):
         array = np.ones((5, 25, 15))
