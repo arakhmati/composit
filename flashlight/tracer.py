@@ -366,11 +366,15 @@ def conv2d(*args, **kwargs):
     assert dilation == (1, 1), f"dilation should be (1, 1) but is {dilation}"
     assert groups == 1, f"groups should be 1 but is {groups}"
 
-    lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=False)
+    lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
+    lazy_weight = cnp.transpose(lazy_weight, (0, 2, 3, 1))
+    lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=True)
 
     if len(rest) == 1:
         (lazy_bias,) = rest
-        lazy_output += cnp.reshape(lazy_bias, (-1, 1, 1))
+        lazy_output += lazy_bias
+
+    lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
 
     return Tensor(output, lazy_output)
 
@@ -397,9 +401,11 @@ def max_pool2d(*args, **kwargs):
     strides = (strides, strides)
     padding = (padding, padding)
 
+    lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
     lazy_output = cnp.nn.max_pool(
-        lazy_input, kernel_size=kernel_size, strides=strides, padding=padding, channels_last=False
+        lazy_input, kernel_size=kernel_size, strides=strides, padding=padding, channels_last=True
     )
+    lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
 
     return Tensor(output, lazy_output)
 
