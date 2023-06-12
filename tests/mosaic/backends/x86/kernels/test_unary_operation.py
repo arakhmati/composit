@@ -24,7 +24,7 @@ FILE_DIR = pathlib.Path(__file__).parent.resolve()
 operation_to_np_function = {
     "exp": np.exp,
     "sqrt": np.sqrt,
-    "gelu": cnp.nn.vectorized_functions.gelu,
+    "gelu": cnp.nn.numpy_functions.gelu,
 }
 
 
