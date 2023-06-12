@@ -9,8 +9,8 @@ include = '(\.pyi?)$'
 exclude = 'vendor|venv|wvenv'
 
 [tool.pytest.ini_options]
-testpaths = [ "pyimmer/tests","tests"]
-python_files = ["test_*.py", "*_test.py"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 
 [tool.poetry]
 name = "composit"

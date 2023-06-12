@@ -30,7 +30,7 @@ jobs:
         python-version: '3.11'
         cache: 'poetry'
     - run: poetry install
-    - run: poetry run black --check codegen composit model_zoo mosaic pyimmer tests
+    - run: poetry run black --check src
     - run: poetry run ruff .
     - name: Test with Pytest
       run: poetry run pytest
