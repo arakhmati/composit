@@ -1,5 +1,6 @@
 from pyrsistent import PClass, field
 
+from composit.introspection import class_name
 from composit.multidigraph import MultiDiGraph, visualize_graph, compose_all
 from composit.hash import deterministic_hash
 
@@ -33,11 +34,14 @@ class LazyTensor(PClass):
         return len(self.shape)
 
 
-def visualize(*arrays):
+def visualize(*lazy_tensors, **kwargs):
     def visualize_node(graphviz_graph, graph, node):
+        instruction = graph.nodes[node]["instruction"]
         shapes = graph.nodes[node]["shapes"]
-        graphviz_graph.node(node.name, label=f"{node}:{shapes}")
+        if len(shapes) == 1:
+            (shapes,) = shapes
+        graphviz_graph.node(node.name, label=f"{node}\n{class_name(instruction)}\n{shapes}")
 
-    graph = compose_all(*(array.graph for array in arrays))
+    graph = compose_all(*(lazy_tensor.graph for lazy_tensor in lazy_tensors))
 
-    visualize_graph(graph, visualize_node=visualize_node)
+    visualize_graph(graph, visualize_node=visualize_node, **kwargs)
