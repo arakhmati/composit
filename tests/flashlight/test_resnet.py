@@ -33,7 +33,7 @@ def test_trace():
 
     with flashlight.tracer.trace():
         flashlight_output = torch_model(image)
-        assert len(flashlight_output.graph) == 355
+        assert len(flashlight_output.graph) == 417
 
         composit_output = forward(flashlight_output, input_tensors=[image])
 

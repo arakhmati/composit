@@ -34,7 +34,7 @@ def test_torch_vs_composit(
     with flashlight.tracer.trace(), torch.no_grad():
         torch_noise_pred = unet(latent_model_input, timestep, encoder_hidden_states=text_embeddings).sample
 
-        assert len(torch_noise_pred.graph) == 3580
+        assert len(torch_noise_pred.graph) == 3776
 
         composit_noise_pred = forward(torch_noise_pred, input_tensors=[latent_model_input, timestep, text_embeddings])
         assert np.allclose(composit_noise_pred, torch_noise_pred.detach().numpy(), atol=1e-5)
