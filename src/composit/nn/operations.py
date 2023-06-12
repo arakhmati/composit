@@ -3,17 +3,17 @@ import math
 import numpy as np
 
 from composit.nn.core import wrap_as_operation
-from composit.nn import vectorized_functions
+from composit.nn import numpy_functions
 
 
 @wrap_as_operation()
 def embedding(input_tensor, weights):
-    return vectorized_functions.embedding(input_tensor, weights)
+    return numpy_functions.embedding(input_tensor, weights)
 
 
 @wrap_as_operation()
 def gelu(input_tensor):
-    return vectorized_functions.gelu(input_tensor)
+    return numpy_functions.gelu(input_tensor)
 
 
 @wrap_as_operation()
@@ -23,12 +23,12 @@ def relu(input_tensor):
 
 @wrap_as_operation()
 def sigmoid(input_tensor):
-    return vectorized_functions.sigmoid(input_tensor)
+    return numpy_functions.sigmoid(input_tensor)
 
 
 @wrap_as_operation()
 def silu(input_tensor):
-    return input_tensor * vectorized_functions.sigmoid(input_tensor)
+    return input_tensor * numpy_functions.sigmoid(input_tensor)
 
 
 def convolution_output_dim(input_dim, kernel_dim, stride):

@@ -3,7 +3,7 @@ import sys
 import numpy as np
 
 import composit as cnp
-from composit.nn.vectorized_functions import cdf, pdf
+from composit.nn import numpy_functions
 
 THIS_MODULE = sys.modules[__name__]
 
@@ -162,7 +162,7 @@ def gelu_jacobian(forward_operation, incoming_gradients, forward_input_vars):
 
     @cnp.nn.wrap_as_operation()
     def gelu_jacobian(incoming_gradient, input_var):
-        return incoming_gradient * (cdf(input_var) + input_var * pdf(input_var))
+        return incoming_gradient * (numpy_functions.cdf(input_var) + input_var * numpy_functions.pdf(input_var))
 
     input_var = forward_input_vars[0]
     outgoing_gradient = gelu_jacobian(incoming_gradient, input_var)

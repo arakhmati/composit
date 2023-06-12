@@ -37,7 +37,7 @@ def run_torch(num_iterations, input_a_shape, input_b_shape):
     np_input_a = np.random.randint(0, len(input_b_shape), input_a_shape, dtype=np.int64)
     np_input_b = np.random.uniform(-0.5, 0.5, input_b_shape).astype(np.float32)
     assert np.allclose(
-        run(np_input_a, np_input_b), cnp.nn.vectorized_functions.embedding(np_input_a, np_input_b), atol=1e-5, rtol=1e-6
+        run(np_input_a, np_input_b), cnp.nn.numpy_functions.embedding(np_input_a, np_input_b), atol=1e-5, rtol=1e-6
     )
 
     execution_times = []
@@ -126,7 +126,7 @@ def run_cnp_kernel(
     np_input_a = np.random.randint(0, len(input_b_var.shape), input_a_var.shape, dtype=np.int64)
     np_input_b = np.random.uniform(-0.5, 0.5, input_b_var.shape).astype(np.float32)
     assert np.allclose(
-        run(np_input_a, np_input_b), cnp.nn.vectorized_functions.embedding(np_input_a, np_input_b), atol=1e-5, rtol=1e-6
+        run(np_input_a, np_input_b), cnp.nn.numpy_functions.embedding(np_input_a, np_input_b), atol=1e-5, rtol=1e-6
     )
 
     logger.info(f"Run Kernel for {num_iterations} iterations")
