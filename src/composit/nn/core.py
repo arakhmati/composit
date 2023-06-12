@@ -7,8 +7,6 @@ from composit.numpy.core import create_from_numpy_compute_operation
 
 def wrap_as_operation():
     def outer_wrapper(compute_function):
-        compute_function = staticmethod(compute_function)
-
         def wrapper(*operands, **klass_kwargs):
             klass_attributes = list(klass_kwargs.keys())
             klass = immutable(klass_attributes, name=compute_function.__name__)

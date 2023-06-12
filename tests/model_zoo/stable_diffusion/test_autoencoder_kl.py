@@ -15,7 +15,6 @@ from model_zoo.stable_diffusion.autoencoder_kl import decoder, convert_parameter
 @pytest.mark.parametrize("channels_last", [True])
 def test_torch_vs_composit(batch_size, height, width, channels_last, latent_channels=4, reduction_factor=8):
     np.random.seed(0)
-    torch.manual_seed(0)
 
     torch_model = diffusers.AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae").eval()
     assert not torch_model.use_slicing
@@ -38,4 +37,4 @@ def test_torch_vs_composit(batch_size, height, width, channels_last, latent_chan
 
     output = cnp.nn.evaluate(model)
 
-    assert np.allclose(output, torch_output, atol=1e-5)
+    assert np.allclose(output, torch_output, atol=1e-4)

@@ -1,3 +1,7 @@
+import pytest
+
+import sys
+
 import diffusers
 import numpy as np
 import torch
@@ -6,6 +10,9 @@ import composit as cnp
 import flashlight.tracer
 
 
+@pytest.mark.skipif(
+    sys.version_info.major == 3 and sys.version_info.minor != 11, reason="Unsupported version of python"
+)
 def test_torch_vs_composit(
     batch_size=1, tokenizer_model_max_length=77, clip_hidden_size=768, height=16, width=16, num_inference_steps=1
 ):
@@ -16,13 +23,7 @@ def test_torch_vs_composit(
     )
     scheduler.set_timesteps(num_inference_steps)
 
-    latents = (
-        torch.randn(
-            (batch_size, unet.in_channels, height // 8, width // 8),
-            generator=torch.manual_seed(0),
-        )
-        * scheduler.init_noise_sigma
-    )
+    latents = torch.randn((batch_size, unet.in_channels, height // 8, width // 8)) * scheduler.init_noise_sigma
 
     # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
     latent_model_input = torch.cat([latents] * 2)
