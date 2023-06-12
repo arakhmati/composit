@@ -1,3 +1,5 @@
+from typing import Union
+
 import math
 
 import numpy as np
@@ -47,7 +49,7 @@ def evaluate_with_kernel_fusion(model: ModelWithKernelFusion):
 
 
 def evaluate(*output_vars, input_var_to_scheme, **kwargs):
-    model: ModelWithoutKernelFusion | ModelWithKernelFusion
+    model: Union[ModelWithoutKernelFusion, ModelWithKernelFusion]
     input_var_to_scheme = pmap(input_var_to_scheme)
     model = compile_to_mosaic_model(*output_vars, input_var_to_scheme=input_var_to_scheme, **kwargs)
 

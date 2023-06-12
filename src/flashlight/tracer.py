@@ -2,7 +2,6 @@ from contextlib import contextmanager
 import math
 
 import torch
-import torch.mps
 import torch.nn.functional
 from loguru import logger
 
@@ -40,6 +39,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "FloatTensor",
     "_from_functional_tensor",
     "from_numpy",
+    "full",  # TODO: override?
     "fx",
     "Generator",
     "get_default_dtype",
@@ -57,7 +57,6 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "LongTensor",
     "masked_select",
     "max_pool2d",  # TODO: override?
-    "mps",
     "nn",
     "no_grad",
     "optim",
@@ -74,7 +73,6 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "sparse_bsr",
     "sparse_bsc",
     "strided",
-    "SymFloat",
     "tensor",
     "Tensor",
     "Size",
@@ -85,10 +83,12 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "zeros",
 ]
 
+
 TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "__class__",
     "__dict__",
     "__getattribute__",
+    "__gt__",  # TODO: override?
     "__hash__",
     "__init__",
     "__new__",
@@ -104,8 +104,10 @@ TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "dim",
     "div",  # TODO: override?
     "fill_",  # TODO: override?
+    "gt",  # TODO: override?
     "is_floating_point",
-    "matmul",  # TODO: override?
+    "fill_",  # TODO: override?
+    "masked_fill_",  # TODO: override?
     "mul",  # TODO: override?
     "normal_",  # TODO: override?
     "numel",
@@ -214,19 +216,6 @@ def truediv(run_torch):
         lazy_output = lazy_input_a / lazy_input_b
         if run_torch:
             output = TORCH_TENSOR["__truediv__"](*args)
-            return Tensor(output, lazy_output)
-        else:
-            return lazy_output
-
-    return implementation
-
-
-def matmul(run_torch):
-    def implementation(*args):
-        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
-        lazy_output = lazy_input_a @ lazy_input_b
-        if run_torch:
-            output = TORCH_TENSOR["__matmul__"](*args)
             return Tensor(output, lazy_output)
         else:
             return lazy_output
@@ -414,6 +403,19 @@ def chunk(run_torch):
             return tuple(Tensor(output, lazy_output) for output, lazy_output in zip(outputs, lazy_outputs))
         else:
             return lazy_outputs
+
+    return implementation
+
+
+def matmul(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input_a @ lazy_input_b
+        if run_torch:
+            output = TORCH["matmul"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
     return implementation
 

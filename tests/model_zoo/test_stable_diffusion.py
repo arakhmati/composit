@@ -2,6 +2,8 @@
 https://huggingface.co/blog/stable_diffusion
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import diffusers
@@ -11,7 +13,7 @@ import transformers
 from tqdm.auto import tqdm
 
 
-@dataclass(kw_only=True)
+@dataclass
 class TorchStableDiffusion:
     vae: torch.nn.Module
     tokenizer: transformers.PreTrainedTokenizer
@@ -56,13 +58,7 @@ def evaluate(stable_diffusion: TorchStableDiffusion, prompt, height, width, num_
     )
     scheduler.set_timesteps(num_inference_steps)
 
-    latents = (
-        torch.randn(
-            (batch_size, unet.in_channels, height // 8, width // 8),
-            generator=torch.manual_seed(0),
-        )
-        * scheduler.init_noise_sigma
-    )
+    latents = torch.randn((batch_size, unet.in_channels, height // 8, width // 8)) * scheduler.init_noise_sigma
 
     for timestep in tqdm(scheduler.timesteps):
         # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.

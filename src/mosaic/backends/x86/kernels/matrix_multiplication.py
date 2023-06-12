@@ -1,3 +1,5 @@
+from typing import Union
+
 import math
 import pathlib
 
@@ -9,7 +11,7 @@ from mosaic.backends.x86.avx import _mm256_load_ps, _mm256_fmadd_ps
 from mosaic.backends.x86.constants import AVX_SIZE, MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
 
-OffsetType = c.Variable | c.Expression
+OffsetType = Union[c.Variable, c.Expression]
 
 InputType = c.Type("float").const().pointer().restrict().aligned(MEMORY_ALIGNMENT)
 OutputType = c.Type("float").pointer().restrict().aligned(MEMORY_ALIGNMENT)

@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass, replace
-from typing import Union, Any, Optional
+from typing import Union, Any, Optional, List
 
 
 class UpdateOperator(enum.Enum):
@@ -283,7 +283,7 @@ class Declare:
 
 @dataclass
 class Block:
-    statements: list[Union[Statement, Return, "If", "ForLoop", "Block"]]
+    statements: List[Union[Statement, Return, "If", "ForLoop", "Block"]]
     indentation_level: Optional[int] = None
     indentation: int = 4
 
@@ -347,11 +347,11 @@ for ({self.initialization_statement}; {self.test_expression}; {self.update_state
 {self.body}"""
 
 
-@dataclass(kw_only=True)
+@dataclass
 class Function:
     return_type: Type
     name: Identifier
-    arguments: list[Variable]
+    arguments: List[Variable]
     body: Block
 
     _inline: bool = False
@@ -409,7 +409,7 @@ class Lambda:
 @dataclass
 class FunctionCall:
     function_name: Identifier
-    arguments: list[Union[Identifier, Expression]]
+    arguments: List[Union[Identifier, Expression]]
 
     def __repr__(self):
         delimiter = ", "
@@ -454,8 +454,8 @@ class Text:
 
 @dataclass
 class Module:
-    includes: list[Include]
-    members: list[Function | Statement]
+    includes: List[Include]
+    members: List[Union[Function, Statement]]
 
     def __repr__(self):
         delimiter = "\n"

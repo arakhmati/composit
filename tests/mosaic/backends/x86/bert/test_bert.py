@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pathlib
 import time
 
@@ -102,7 +104,6 @@ def bert_model(
     vocab_size,
 ):
     np.random.seed(0)
-    torch.manual_seed(0)
 
     transformers_model = get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_size)
     composit_parameters = create_composit_parameters(transformers_model)
