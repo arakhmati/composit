@@ -44,4 +44,4 @@ def visualize(*lazy_tensors, **kwargs):
 
     graph = compose_all(*(lazy_tensor.graph for lazy_tensor in lazy_tensors))
 
-    visualize_graph(graph, visualize_node=visualize_node, **kwargs)
+    return visualize_graph(graph, visualize_node=visualize_node, **kwargs)
