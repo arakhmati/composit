@@ -55,6 +55,9 @@ class MultiDiGraph(PClass):
     def __contains__(self, node):
         return node in self._node
 
+    def __hash__(self):
+        return hash((self._node, self._pred, self._succ, self._attributes))
+
     def is_directed(self) -> bool:
         return True
 

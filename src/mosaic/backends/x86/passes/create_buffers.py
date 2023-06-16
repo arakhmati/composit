@@ -7,7 +7,7 @@ from toolz import first
 
 from composit.introspection import class_name
 from composit.multidigraph import topological_traversal
-from composit.numpy.core import Constant, get_operands
+from composit.numpy.core import Input, get_operands
 
 from mosaic.backends.x86.types import (
     BufferDescriptor,
@@ -54,7 +54,7 @@ def try_returning_buffer_descriptor_to_queue(
     graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
 ):
     for predecessor, _ in graph.in_edges(node):
-        if isinstance(graph.nodes[predecessor]["instruction"], Constant):
+        if isinstance(graph.nodes[predecessor]["instruction"], Input):
             continue
 
         if predecessor not in node_to_users:
@@ -113,10 +113,12 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
 
     for node in topological_traversal(graph):
         instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, Constant):
+        if isinstance(instruction, Input):
             graph = graph.add_node(
                 node,
-                buffer_descriptors=tuple([create_constant_input_buffer_descriptor(node.name, array=instruction.array)]),
+                buffer_descriptors=tuple(
+                    [create_constant_input_buffer_descriptor(node.name, array=instruction.initializer_callback())]
+                ),
             )
             continue
         elif is_instruction_a_no_operation(instruction):
@@ -210,7 +212,7 @@ def populate_constant_buffers(graph, buffer_descriptor_to_buffer):
     constant_nodes_with_attributes = (
         (node, attributes)
         for node, attributes in graph.nodes(data=True)
-        if class_name(attributes["instruction"]) == "Constant"
+        if class_name(attributes["instruction"]) == "Input"
     )
     for node, attributes in constant_nodes_with_attributes:
         tile_config = first(attributes["tile_configs"])

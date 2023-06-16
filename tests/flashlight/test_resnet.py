@@ -6,8 +6,8 @@ from PIL import Image
 import torch
 from torchvision import transforms
 
+import composit as cnp
 import flashlight
-from flashlight.tensor import forward, from_torch
 
 
 def load_image(url):
@@ -29,12 +29,10 @@ def test_trace():
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
     image = torch.from_numpy(image)
-    image = from_torch(image)
 
     with flashlight.tracer.trace():
         flashlight_output = torch_model(image)
-        assert len(flashlight_output.graph) == 417
 
-        composit_output = forward(flashlight_output, input_tensors=[image])
-
-        assert np.allclose(composit_output, flashlight_output.detach().numpy(), atol=1e-3)
+    assert len(flashlight_output.graph) == 414
+    composit_output = cnp.evaluate(flashlight_output.lazy_tensor)
+    assert np.allclose(composit_output, flashlight_output.detach().numpy(), atol=1e-3)

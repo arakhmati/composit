@@ -90,14 +90,16 @@ def final_3(input_var):
     ],
 )
 def test_modules(final_module):
-    array = cnp.random.random((5, 25, 15))
+    np_array = np.random.random((5, 25, 15))
+
+    array = cnp.asarray(np_array)
     result = add_and_apply_gelu(array)
     result = result * 2
     result = final_module(result)
     result = result / 3
     visualize_modules(result.graph, render=False)
 
-    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_array = torch.from_numpy(np_array)
     torch_result = torch_array
     torch_result = torch_result + torch_result
     torch_result = torch.nn.functional.gelu(torch_result)

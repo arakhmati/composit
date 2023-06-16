@@ -168,7 +168,7 @@ def propagate_tile_views(
         instruction_class_name = class_name(instruction)
         input_tile_views = [cache[operand] for operand in get_operands(graph, node)]
 
-        if instruction_class_name == "Constant":
+        if instruction_class_name == "Input":
             shape = graph.nodes[node]["shapes"][0]
             tile_view = create_tile_view(
                 shape,

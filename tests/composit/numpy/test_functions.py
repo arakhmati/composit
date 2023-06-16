@@ -186,8 +186,8 @@ def test_get_item():
 def test_set_item():
     def function(np):
         numpy.random.seed(0)
-        array = np.random.random((5, 25, 15))
-        smaller_array = np.random.random((23, 15))
+        array = np.reshape(np.arange(5 * 25 * 15), (5, 25, 15))
+        smaller_array = np.reshape(np.arange(23 * 15), (23, 15))
         if np == numpy:
             array[0, 2:] = smaller_array
         else:
@@ -201,7 +201,7 @@ def test_set_item():
 def test_split():
     def function(np):
         numpy.random.seed(0)
-        array = np.random.random((4, 8))
+        array = np.reshape(np.arange(32), (4, 8))
         result = np.split(array, 2, axis=0)
         result = [np.exp(element) for element in result]
         return result

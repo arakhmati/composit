@@ -26,7 +26,7 @@ def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_conf
 
     kernel_name = None
     kernel_module = None
-    if instruction_class_name in {"Constant", "Variable"}:
+    if instruction_class_name in {"Input", "Variable"}:
         pass
     elif instruction_class_name == "Tilize":
         kernel_name, kernel_module = tilize.generate_module(
