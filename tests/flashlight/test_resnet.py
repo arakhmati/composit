@@ -24,15 +24,31 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
-def test_trace():
+def test_resnet():
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet18", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
     image = torch.from_numpy(image)
 
+    torch_output = torch_model(image)
+
     with flashlight.tracer.trace():
         flashlight_output = torch_model(image)
 
-    assert len(flashlight_output.graph) == 414
-    composit_output = cnp.evaluate(flashlight_output.lazy_tensor)
-    assert np.allclose(composit_output, flashlight_output.detach().numpy(), atol=1e-3)
+    return torch_output.detach().numpy(), flashlight_output.lazy_tensor
+
+
+def test_trace():
+    torch_output, output_var = test_resnet()
+
+    assert len(output_var.graph) == 414
+    composit_output = cnp.evaluate(output_var)
+    assert np.allclose(composit_output, torch_output, atol=1e-3)
+
+
+def test_graph_cache():
+    _, output_var = test_resnet()
+    first_hash = hash(output_var)
+
+    _, output_var = test_resnet()
+    assert first_hash == hash(output_var)
