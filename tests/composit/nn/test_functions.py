@@ -8,12 +8,15 @@ import composit.nn
 
 
 def test_embedding():
-    input_tensor = cnp.zeros((5, 25), dtype=np.int32)
-    weights = cnp.random.random((25, 10))
+    np_input_tensor = np.zeros((5, 25), dtype=np.int32)
+    np_weights = np.random.random((25, 10))
+
+    input_tensor = cnp.asarray(np_input_tensor)
+    weights = cnp.asarray(np_weights)
     result = cnp.nn.embedding(input_tensor, weights)
 
-    torch_input_tensor = torch.from_numpy(cnp.evaluate(input_tensor))
-    torch_weights = torch.from_numpy(cnp.evaluate(weights))
+    torch_input_tensor = torch.from_numpy(np_input_tensor)
+    torch_weights = torch.from_numpy(np_weights)
     torch_result = torch.nn.functional.embedding(torch_input_tensor, torch_weights).numpy()
 
     assert result.shape == torch_result.shape
@@ -21,10 +24,12 @@ def test_embedding():
 
 
 def test_gelu():
-    array = cnp.random.random((5, 25, 15))
+    np_array = np.random.random((5, 25, 15))
+
+    array = cnp.asarray(np_array)
     result = cnp.nn.gelu(array)
 
-    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_array = torch.from_numpy(np_array)
     torch_result = torch.nn.functional.gelu(torch_array).numpy()
 
     assert result.shape == torch_result.shape
@@ -32,10 +37,12 @@ def test_gelu():
 
 
 def test_relu():
-    array = cnp.random.random((5, 25, 15))
+    np_array = np.random.random((5, 25, 15))
+
+    array = cnp.asarray(np_array)
     result = cnp.nn.relu(array)
 
-    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_array = torch.from_numpy(np_array)
     torch_result = torch.nn.functional.relu(torch_array).numpy()
 
     assert result.shape == torch_result.shape
@@ -43,10 +50,12 @@ def test_relu():
 
 
 def test_sigmoid():
-    array = cnp.random.random((5, 25, 15))
+    np_array = np.random.random((5, 25, 15))
+
+    array = cnp.asarray(np_array)
     result = cnp.nn.sigmoid(array)
 
-    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_array = torch.from_numpy(np_array)
     torch_result = torch.nn.functional.sigmoid(torch_array).numpy()
 
     assert result.shape == torch_result.shape
@@ -54,10 +63,12 @@ def test_sigmoid():
 
 
 def test_silu():
-    array = cnp.random.random((5, 25, 15))
+    np_array = np.random.random((5, 25, 15))
+
+    array = cnp.asarray(np_array)
     result = cnp.nn.silu(array)
 
-    torch_array = torch.from_numpy(cnp.evaluate(array))
+    torch_array = torch.from_numpy(np_array)
     torch_result = torch.nn.functional.silu(torch_array).numpy()
 
     assert result.shape == torch_result.shape

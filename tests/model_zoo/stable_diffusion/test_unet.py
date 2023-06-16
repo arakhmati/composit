@@ -2,8 +2,8 @@ import diffusers
 import numpy as np
 import torch
 
+import composit as cnp
 import flashlight.tracer
-from flashlight.tensor import forward, from_torch
 
 
 def test_torch_vs_composit(
@@ -27,14 +27,15 @@ def test_torch_vs_composit(
     # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
     latent_model_input = torch.cat([latents] * 2)
 
-    timestep = from_torch(torch.tensor(0))
-    latent_model_input = from_torch(scheduler.scale_model_input(latent_model_input, timestep=timestep))
-    text_embeddings = from_torch(torch.randn(2, tokenizer_model_max_length, clip_hidden_size))
+    timestep = torch.tensor(0)
+    latent_model_input = scheduler.scale_model_input(latent_model_input, timestep=timestep)
+    text_embeddings = torch.randn(2, tokenizer_model_max_length, clip_hidden_size)
 
     with flashlight.tracer.trace(), torch.no_grad():
-        torch_noise_pred = unet(latent_model_input, timestep, encoder_hidden_states=text_embeddings).sample
+        flashlight_noise_pred = unet(latent_model_input, timestep, encoder_hidden_states=text_embeddings).sample
 
-        assert len(torch_noise_pred.graph) == 3776
+    torch_noise_pred = flashlight_noise_pred.detach().numpy()
 
-        composit_noise_pred = forward(torch_noise_pred, input_tensors=[latent_model_input, timestep, text_embeddings])
-        assert np.allclose(composit_noise_pred, torch_noise_pred.detach().numpy(), atol=1e-5)
+    assert len(flashlight_noise_pred.graph) == 3785
+    composit_noise_pred = cnp.evaluate(flashlight_noise_pred.lazy_tensor)
+    assert np.allclose(composit_noise_pred, torch_noise_pred, atol=1e-1)

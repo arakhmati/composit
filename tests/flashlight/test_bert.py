@@ -4,8 +4,8 @@ import numpy as np
 import torch
 import transformers
 
+import composit as cnp
 import flashlight
-from flashlight.tensor import forward, from_torch
 from model_zoo.bert import (
     create_bert_config,
 )
@@ -32,9 +32,9 @@ def test_trace(
         vocab_size=vocab_size,
     )
 
-    input_ids = from_torch(torch.randint(0, vocab_size, (batch_size, sequence_size)))
-    attention_mask = from_torch(torch.zeros(batch_size, sequence_size, dtype=torch.float32))
-    token_type_ids = from_torch(torch.zeros(batch_size, sequence_size, dtype=torch.int64))
+    input_ids = torch.randint(0, vocab_size, (batch_size, sequence_size))
+    attention_mask = torch.zeros(batch_size, sequence_size, dtype=torch.float32)
+    token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.int64)
 
     with flashlight.tracer.trace():
         transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
@@ -42,8 +42,7 @@ def test_trace(
         flashlight_output = transformers_model(input_ids, attention_mask, token_type_ids=token_type_ids)[
             "last_hidden_state"
         ]
-        assert len(flashlight_output.graph) == 245
 
-        composit_output = forward(flashlight_output, input_tensors=[input_ids, attention_mask, token_type_ids])
-
-        assert np.allclose(composit_output, flashlight_output.detach().numpy(), atol=1e-3)
+    assert len(flashlight_output.graph) == 245
+    composit_output = cnp.evaluate(flashlight_output.lazy_tensor)
+    assert np.allclose(composit_output, flashlight_output.detach().numpy(), atol=1e-3)

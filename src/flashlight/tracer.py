@@ -8,7 +8,7 @@ from loguru import logger
 
 import composit as cnp
 import composit.nn
-from flashlight.introspection import convert_torch_tensors_to_lazy_tensors
+from flashlight.introspection import convert_torch_tensors_to_lazy_tensors, reset_graph_input_index
 from flashlight import Tensor
 
 TORCH = torch.__dict__.copy()
@@ -560,6 +560,8 @@ def interpolate(*args, **kwargs):
 
 @contextmanager
 def trace():
+    reset_graph_input_index()
+
     torch.__dict__.clear()
     for attr in TORCH_ATTRIBUTES_TO_LEAVE_AS_IS:
         setattr(torch, attr, TORCH[attr])

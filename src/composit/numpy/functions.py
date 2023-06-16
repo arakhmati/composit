@@ -7,7 +7,7 @@ import numpy as np
 from pyrsistent import PClass, field
 
 from composit.numpy.core import (
-    create_ndarray,
+    create_input,
     create_from_numpy_compute_instruction,
     create_numpy_compute_function,
     create_numpy_binary_compute_function,
@@ -74,7 +74,12 @@ def get_item(self, indices) -> "LazyTensor":
 
     if not isinstance(indices, LazyTensor):
         name = f"Indices({indices})"
-        indices = create_ndarray(name, np.asarray(indices, dtype=int))
+        indices_as_array = np.asarray(indices, dtype=int)
+
+        def initialize_callback():
+            return indices_as_array
+
+        indices = create_input(name, initialize_callback, indices_as_array.shape, indices_as_array.dtype)
 
     return create_from_numpy_compute_instruction(self, indices, instruction=DynamicGetItem())
 
@@ -113,7 +118,7 @@ def asarray(array, name=None):
     if name is None:
         name = f"array_{random_string()}"
 
-    return create_ndarray(name, array)
+    return create_input(name, lambda: array, array.shape, array.dtype)
 
 
 __all__.append("asarray")
@@ -122,7 +127,7 @@ __all__.append("asarray")
 def named_ndarray(*args, name, **kwargs):
     array = np.ndarray(*args, **kwargs)
     array[:] = 0
-    return create_ndarray(name, array)
+    return create_input(name, lambda: array, array.shape, array.dtype)
 
 
 __all__.append("named_ndarray")
@@ -136,22 +141,31 @@ def ndarray(*args, **kwargs):
 __all__.append("ndarray")
 
 
-def zeros(*args, dtype=None, **kwargs):
-    array = np.zeros(*args, dtype=dtype, **kwargs)
+def zeros(*args, **kwargs):
+    array = np.zeros(*args, **kwargs)
     name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return create_ndarray(name, array)
+    return create_input(name, lambda: array, array.shape, array.dtype)
 
 
 __all__.append("zeros")
 
 
-def ones(*args, dtype=None, **kwargs):
-    array = np.ones(*args, dtype=dtype, **kwargs)
+def ones(*args, **kwargs):
+    array = np.ones(*args, **kwargs)
     name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
-    return create_ndarray(name, array)
+    return create_input(name, lambda: array, array.shape, array.dtype)
 
 
 __all__.append("ones")
+
+
+def arange(*args, **kwargs):
+    array = np.arange(*args, **kwargs)
+    name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs)
+    return create_input(name, lambda: array, array.shape, array.dtype)
+
+
+__all__.append("arange")
 
 
 def square(input_tensor):

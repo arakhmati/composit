@@ -9,7 +9,6 @@ from toolz import functoolz, memoize
 from composit.introspection import class_name
 from composit.multidigraph import MultiDiGraph, merge_graphs
 from composit.types import LazyTensor, Node
-from composit.string import random_string
 
 
 def get_operands(graph, node):
@@ -45,22 +44,56 @@ def instruction_shape_and_dtype(instruction, input_shapes_and_dtypes):
         raise RuntimeError(f"Unsupported type: {type(result)}")
 
 
-class Constant(PClass):
-    array = field()
+class Input(PClass):
+    initializer_callback = field()
 
     def __call__(self, *input_arrays: list[np.ndarray]):
-        return self.array
+        return self.initializer_callback()
 
     def __hash__(self):
-        return hash((self.array.sum(), self.array.shape))
+        # only node name matters
+        return 0
 
 
-def create_ndarray(name: str, array: np.ndarray):
+def create_input(name: str, initializer_callback, shape, dtype):
     node = Node(name=name)
     graph = MultiDiGraph().add_node(
-        node, instruction=Constant(array=array), shapes=(array.shape,), dtypes=(np.dtype(array.dtype),)
+        node, instruction=Input(initializer_callback=initializer_callback), shapes=(shape,), dtypes=(np.dtype(dtype),)
     )
     return LazyTensor(graph=graph, node=node)
+
+
+def preprocess_operands(*operands):
+    operands = list(operands)
+    for index, operand in enumerate(operands):
+        if not isinstance(operand, (int, float)):
+            continue
+
+        dtype = operands[0].dtype
+        array = np.asarray(operand, dtype)
+
+        def initializer_callback():
+            return array
+
+        operands[index] = create_input(
+            f"scalar_{operand}",
+            initializer_callback,
+            (),
+            dtype,
+        )
+    return operands
+
+
+def compute_node_hash(instruction, *operands):
+    if isinstance(instruction, PClass):
+        instruction_hash = tuple(instruction._to_dict())
+    else:
+        instruction_hash = instruction._fields
+
+    operand_hashes = [(operand.name, operand.output_index) for operand in operands]
+    operand_hashes = tuple(operand_hashes)
+
+    return hash((instruction_hash, operand_hashes))
 
 
 def create_from_numpy_compute_instruction(
@@ -68,12 +101,7 @@ def create_from_numpy_compute_instruction(
     instruction,
     dtype_to_override=None,
 ) -> LazyTensor | tuple[LazyTensor]:
-    operands = list(operands)
-    for index, operand in enumerate(operands):
-        if isinstance(operands[index], (int, float)):
-            operands[index] = create_ndarray(
-                f"scalar_{operands[index]}", np.asarray(operands[index], operands[0].dtype)
-            )
+    operands = preprocess_operands(*operands)
 
     graph = merge_graphs(*tuple((operand.graph, operand.node) for operand in operands))
 
@@ -83,7 +111,8 @@ def create_from_numpy_compute_instruction(
     )
     dtypes = tuple(dtype_to_override or inferred_dtype for inferred_dtype in inferred_dtypes)
 
-    name = f"{class_name(instruction)}_{random_string()}"
+    node_hash = compute_node_hash(instruction, *operands)
+    name = f"{class_name(instruction)}_{node_hash}"
     new_node = Node(name=name)
     graph = graph.add_node(new_node, instruction=instruction, shapes=shapes, dtypes=dtypes)
     for index, operand in enumerate(operands):
@@ -196,7 +225,7 @@ def create_numpy_concatenate_function():
 
 
 __all__ = [
-    "create_ndarray",
+    "create_input",
     "create_from_numpy_compute_instruction",
     "create_numpy_compute_function",
     "create_numpy_binary_compute_function",
