@@ -1,3 +1,5 @@
+import toolz
+
 from composit.multidigraph import compose_all
 from mosaic.backends.x86.passes.create_buffers import create_buffers
 from mosaic.backends.x86.passes.generate_and_compile import generate_and_compile_run_model, generate_and_compile_kernels
@@ -20,6 +22,7 @@ def propagate_tile_config(graph, input_var_to_scheme):
     return graph
 
 
+@toolz.functoolz.memoize
 def compile_to_mosaic_model(
     *output_vars,
     input_var_to_scheme,
