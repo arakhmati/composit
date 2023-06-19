@@ -14,11 +14,11 @@ from mosaic.backends.x86.passes.compile_to_mosaic_model import compile_to_mosaic
 
 def initialize_input_buffers(graph, buffer_descriptor_to_buffer):
     for node in graph:
-        instruction = graph.nodes[node]["instruction"]
-        if not isinstance(instruction, Input):
+        operation = graph.nodes[node]["operation"]
+        if not isinstance(operation, Input):
             continue
 
-        array = instruction()
+        array = operation()
         buffer = buffer_descriptor_to_buffer[first(graph.nodes[node]["buffer_descriptors"])]
         buffer.array[:] = array.flatten()
 

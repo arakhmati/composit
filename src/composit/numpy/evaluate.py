@@ -26,9 +26,9 @@ def evaluate(*outputs: tuple[LazyTensor]):
 
     cache = {}
     for node in topological_traversal(graph):
-        instruction = graph.nodes[node]["instruction"]
+        operation = graph.nodes[node]["operation"]
         input_arrays = [cache[operand] for operand in get_operands(graph, node)]
-        node_output = instruction(*input_arrays)
+        node_output = operation(*input_arrays)
         cache = update_cache(cache, node, node_output)
 
     result = [cache[(output.node, output.output_index)] for output in outputs]

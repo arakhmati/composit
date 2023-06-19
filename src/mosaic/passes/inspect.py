@@ -31,8 +31,8 @@ def inspect(*outputs):
 
         name = node.name
 
-        instruction = attributes["instruction"]
-        type_name = class_name(instruction)
+        operation = attributes["operation"]
+        type_name = class_name(operation)
 
         shapes = attributes["shapes"]
         assert len(shapes) == 1

@@ -1,5 +1,5 @@
 # ruff: noqa: F401
-from .functions import *
+from .operations import *
 
 import composit.numpy.core
 from composit.numpy.evaluate import evaluate

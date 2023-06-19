@@ -2,10 +2,10 @@ import torch
 
 import composit as cnp
 from composit.nn.layers import group_norm, multi_head_attention
-from composit.nn.core import wrap_as_instruction
+from composit.nn.core import wrap_as_operation
 
 
-@wrap_as_instruction()
+@wrap_as_operation()
 def interpolate(input_tensor, channels_last):
     if channels_last:
         input_tensor = input_tensor.transpose((0, 3, 1, 2))

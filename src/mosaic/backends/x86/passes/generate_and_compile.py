@@ -21,28 +21,28 @@ from mosaic.backends.x86.kernels import (
 )
 
 
-def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype):
-    instruction_class_name = class_name(instruction)
+def get_kernel_name_and_module(operation, input_tile_configs, output_tile_config, input_dtypes, output_dtype):
+    operation_class_name = class_name(operation)
 
     kernel_name = None
     kernel_module = None
-    if instruction_class_name in {"Input"}:
+    if operation_class_name in {"Input"}:
         pass
-    elif instruction_class_name == "Tilize":
+    elif operation_class_name == "Tilize":
         kernel_name, kernel_module = tilize.generate_module(
             input_tile_configs,
             output_tile_config,
             input_dtypes,
             output_dtype,
         )
-    elif instruction_class_name == "Untilize":
+    elif operation_class_name == "Untilize":
         kernel_name, kernel_module = untilize.generate_module(
             input_tile_configs,
             output_tile_config,
             input_dtypes,
             output_dtype,
         )
-    elif instruction_class_name == "matmul":
+    elif operation_class_name == "matmul":
         kernel_name, kernel_module = matrix_multiplication.generate_module(
             input_tile_configs,
             output_tile_config,
@@ -50,34 +50,34 @@ def get_kernel_name_and_module(instruction, input_tile_configs, output_tile_conf
             output_dtype,
             use_avx_manually=True,
         )
-    elif instruction_class_name in {"exp", "sqrt", "gelu"}:
+    elif operation_class_name in {"exp", "sqrt", "gelu"}:
         kernel_name, kernel_module = unary_operation.generate_module(
             input_tile_configs,
             output_tile_config,
             input_dtypes,
             output_dtype,
-            instruction_class_name,
+            operation_class_name,
         )
-    elif instruction_class_name in {"add", "subtract", "divide", "multiply"}:
+    elif operation_class_name in {"add", "subtract", "divide", "multiply"}:
         kernel_name, kernel_module = binary_operation.generate_module(
-            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction_class_name
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, operation_class_name
         )
-    elif instruction_class_name in {"reshape"}:
+    elif operation_class_name in {"reshape"}:
         pass
-    elif instruction_class_name in {"sum", "mean", "max"}:
+    elif operation_class_name in {"sum", "mean", "max"}:
         kernel_name, kernel_module = reduce.generate_module(
-            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction_class_name
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, operation_class_name
         )
-    elif instruction_class_name in {"embedding"}:
+    elif operation_class_name in {"embedding"}:
         kernel_name, kernel_module = embedding.generate_module(
             input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
-    elif instruction_class_name in {"transpose"}:
+    elif operation_class_name in {"transpose"}:
         kernel_name, kernel_module = transpose.generate_module(
-            input_tile_configs, output_tile_config, input_dtypes, output_dtype, instruction.axes
+            input_tile_configs, output_tile_config, input_dtypes, output_dtype, operation.axes
         )
     else:
-        raise NotImplementedError(f"There is no kernel implementation for {instruction_class_name}")
+        raise NotImplementedError(f"There is no kernel implementation for {operation_class_name}")
     return kernel_name, kernel_module
 
 
@@ -86,7 +86,7 @@ def generate_and_compile_kernels(graph, test_output_path):
     kernel_name_to_kernel_module = {}
 
     for node, attributes in graph.nodes(data=True):
-        instruction = attributes["instruction"]
+        operation = attributes["operation"]
 
         input_tile_configs = [
             graph.nodes[input_node]["tile_configs"][output_index]
@@ -100,7 +100,7 @@ def generate_and_compile_kernels(graph, test_output_path):
         output_dtype = attributes["dtypes"][0]
 
         kernel_name, kernel_module = get_kernel_name_and_module(
-            instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype
+            operation, input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
 
         node_to_kernel_name[node] = kernel_name
@@ -133,7 +133,7 @@ def generate_and_compile_run_model(graph, test_output_path, buffer_descriptor_to
     kernel_names_in_module = set()
 
     for node, attributes in graph.nodes(data=True):
-        instruction = attributes["instruction"]
+        operation = attributes["operation"]
 
         input_tile_configs = [
             graph.nodes[input_node]["tile_configs"][output_index]
@@ -147,7 +147,7 @@ def generate_and_compile_run_model(graph, test_output_path, buffer_descriptor_to
         output_dtype = attributes["dtypes"][0]
 
         kernel_name, kernel_module = get_kernel_name_and_module(
-            instruction, input_tile_configs, output_tile_config, input_dtypes, output_dtype
+            operation, input_tile_configs, output_tile_config, input_dtypes, output_dtype
         )
 
         node_to_kernel_name[node] = kernel_name

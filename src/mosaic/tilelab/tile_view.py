@@ -164,11 +164,11 @@ def propagate_tile_views(
     for node in topological_traversal(graph):
         if (node, 0) in cache:
             continue
-        instruction = graph.nodes[node]["instruction"]
-        instruction_class_name = class_name(instruction)
+        operation = graph.nodes[node]["operation"]
+        operation_class_name = class_name(operation)
         input_tile_views = [cache[operand] for operand in get_operands(graph, node)]
 
-        if instruction_class_name == "Input":
+        if operation_class_name == "Input":
             shape = graph.nodes[node]["shapes"][0]
             tile_view = create_tile_view(
                 shape,
@@ -177,26 +177,26 @@ def propagate_tile_views(
                     ScalarTileLevel(level_name="scalar", rank=len(shape)),
                 ],
             )
-        elif instruction_class_name == "embedding":
+        elif operation_class_name == "embedding":
             tile_view = _embedding(input_tile_views[0], input_tile_views[1])
-        elif instruction_class_name == "matmul":
+        elif operation_class_name == "matmul":
             tile_view = _matmul(input_tile_views[0], input_tile_views[1])
-        elif instruction_class_name in {"sum", "mean", "max"}:
-            tile_view = _reduce(input_tile_views[0], axis=instruction.axis)
-        elif instruction_class_name in {"add", "subtract", "multiply", "divide"}:
+        elif operation_class_name in {"sum", "mean", "max"}:
+            tile_view = _reduce(input_tile_views[0], axis=operation.axis)
+        elif operation_class_name in {"add", "subtract", "multiply", "divide"}:
             if input_tile_views[0].hierarchy != input_tile_views[1].hierarchy and math.prod(
                 input_tile_views[0].shape
             ) == math.prod(input_tile_views[1].shape):
                 input_tile_views[1], _ = retilize_view(input_tile_views[1], input_tile_views[0].hierarchy)
             tile_view = _binary_operation(input_tile_views[0], input_tile_views[1])
-        elif instruction_class_name in {"sqrt", "exp", "gelu"}:
+        elif operation_class_name in {"sqrt", "exp", "gelu"}:
             (tile_view,) = input_tile_views
-        elif instruction_class_name == "reshape":
-            tile_view = _reshape(input_tile_views[0], instruction.newshape)
-        elif instruction_class_name == "transpose":
-            tile_view = _transpose(input_tile_views[0], instruction.axes)
+        elif operation_class_name == "reshape":
+            tile_view = _reshape(input_tile_views[0], operation.newshape)
+        elif operation_class_name == "transpose":
+            tile_view = _transpose(input_tile_views[0], operation.axes)
         else:
-            raise RuntimeError(f"Unrecognized instruction: {instruction}")
+            raise RuntimeError(f"Unrecognized operation: {operation}")
 
         if isinstance(tile_view, TileView):
             cache[(node, 0)] = tile_view
