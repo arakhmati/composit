@@ -4,7 +4,30 @@ import numpy as np
 import torch
 
 import composit as cnp
-from composit.nn.optimizer import apply_gradients, sgd_optimizer
+from composit.nn.optimize import sgd_optimizer
+
+
+@pytest.mark.parametrize("input_shape", [(5, 25, 15)])
+@pytest.mark.parametrize("parameter_shape", [(15, 30)])
+@pytest.mark.parametrize("learning_rate", [0.001])
+def test_matmul(
+    input_shape: tuple[int, ...],
+    parameter_shape: tuple[int, ...],
+    learning_rate,
+):
+    input_var = cnp.random.random(input_shape)
+    weight_var = cnp.random.random(parameter_shape)
+    output_var = input_var @ weight_var
+    loss_var = cnp.mean(output_var)
+
+    gradients = cnp.nn.chain_rule(
+        {loss_var: loss_var},
+        [weight_var],
+    )
+
+    (updated_weight_var,) = cnp.nn.optimize([weight_var], gradients, sgd_optimizer(learning_rate=learning_rate))
+
+    assert not np.allclose(cnp.evaluate(weight_var), cnp.evaluate(updated_weight_var))
 
 
 def cnp_model(input_var, parameter_0, parameter_1, parameter_2):
@@ -58,7 +81,7 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
             parameters,
         )
 
-        parameters = apply_gradients(parameters, gradients, sgd_optimizer(learning_rate=learning_rate))
+        parameters = cnp.nn.optimize(parameters, gradients, sgd_optimizer(learning_rate=learning_rate))
 
     torch_optimizer = torch.optim.SGD(torch_parameters, lr=learning_rate)
     for np_input, np_incoming_gradient in zip(np_inputs, np_incoming_gradients):
