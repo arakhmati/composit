@@ -23,7 +23,7 @@ def trace_bert(batch_size, num_encoders, sequence_size, num_attention_heads, hea
     attention_mask = torch.zeros(batch_size, sequence_size, dtype=torch.float32)
     token_type_ids = torch.zeros(batch_size, sequence_size, dtype=torch.int64)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
         flashlight_output = transformers_model(input_ids, attention_mask, token_type_ids=token_type_ids)[
             "last_hidden_state"

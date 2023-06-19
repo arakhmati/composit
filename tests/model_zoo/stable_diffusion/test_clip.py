@@ -22,7 +22,7 @@ def test_torch_vs_composit(prompt="a photograph of an astronaut riding a horse")
     input_ids = text_input.input_ids
     position_ids = torch.arange(text_encoder.config.max_position_embeddings).expand((1, -1))
 
-    with flashlight.tracer.trace():
+    with flashlight.tracer.trace(run_torch=True):
         torch_text_embeddings = text_encoder(input_ids, position_ids=position_ids).last_hidden_state
 
     assert len(torch_text_embeddings.graph) == 958
