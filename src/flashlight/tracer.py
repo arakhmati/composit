@@ -131,434 +131,700 @@ TORCH_NN_FUNCTIONAL_ATTRIBUTES_TO_LEAVE_AS_IS = [
 ]
 
 
-def identity(*args, **kwargs):
-    output, *_ = args
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, lazy_input)
-
-
-def add(*args):
-    output = TORCH_TENSOR["__add__"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a + lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def sub(*args):
-    output = TORCH_TENSOR["__sub__"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a + lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def rsub(*args):
-    output = TORCH_TENSOR["__sub__"](*args)
-    lazy_input_b, lazy_input_a = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a - lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def mul(*args):
-    output = TORCH_TENSOR["__mul__"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a * lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def rmul(*args):
-    output = TORCH_TENSOR["__rmul__"](*args)
-    lazy_input_b, lazy_input_a = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a * lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def truediv(*args):
-    output = TORCH_TENSOR["__truediv__"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
-    lazy_output = lazy_input_a / lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def matmul(*args):
-    output = TORCH_TENSOR["__matmul__"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = lazy_input_a @ lazy_input_b
-    return Tensor(output, lazy_output)
-
-
-def getitem(*args):
-    output = TORCH_TENSOR["__getitem__"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    if math.prod(output.shape) == math.prod(lazy_input.shape):
-        lazy_output = cnp.reshape(lazy_input, tuple(output.shape))
-    else:
-        _, indices = args
-        if isinstance(indices, int):
-            indices = [indices]
+def identity(run_torch):
+    def implementation(*args, **kwargs):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        if run_torch:
+            output, *_ = args
+            return Tensor(output, lazy_input)
         else:
-            indices = [index.tolist() if isinstance(index, torch.Tensor) else index for index in indices]
-        lazy_output = cnp.get_item(lazy_input, indices)
-    return Tensor(output, lazy_output)
+            return lazy_input
+
+    return implementation
 
 
-def view(*args):
-    output = TORCH_TENSOR["view"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
-
-
-def reshape(*args):
-    output = TORCH_TENSOR["reshape"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
-
-
-def expand(*args):
-    output = TORCH_TENSOR["expand"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    if lazy_input.shape == (1,):
-        return Tensor(output, cnp.concatenate([lazy_input, lazy_input], axis=0))
-    else:
-        logger.warning("Defaulting to torch.Tensor.expand")
-        return output
-
-
-def contiguous(*args):
-    output = TORCH_TENSOR["contiguous"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, lazy_input)
-
-
-def to(*args, **kwargs):
-    output = TORCH_TENSOR["to"](*args, **kwargs)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, lazy_input)
-
-
-def float(*args, **kwargs):
-    output = TORCH_TENSOR["float"](*args, **kwargs)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, lazy_input)
-
-
-def permute(*args):
-    output = TORCH_TENSOR["permute"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    order = args[1:]
-    return Tensor(output, cnp.transpose(lazy_input, order))
-
-
-def transpose(*args):
-    output = TORCH_TENSOR["transpose"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-
-    axes_to_transpose = list(args[1:])
-    assert len(axes_to_transpose) == 2
-    for index, axis in enumerate(axes_to_transpose):
-        axes_to_transpose[index] = (len(output.shape) + axis) % len(output.shape)
-
-    if axes_to_transpose[0] < axes_to_transpose[1]:
-        axes_to_transpose = tuple(reversed(axes_to_transpose))
-
-    order = []
-    axes_to_transpose_index = 0
-    for axis, _ in enumerate(output.shape):
-        if axis not in axes_to_transpose:
-            order.append(axis)
+def add(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_a + lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__add__"](*args)
+            return Tensor(output, lazy_output)
         else:
-            order.append(axes_to_transpose[axes_to_transpose_index])
-            axes_to_transpose_index += 1
-    order = tuple(order)
+            return lazy_output
 
-    return Tensor(output, cnp.transpose(lazy_input, order))
+    return implementation
 
 
-def chunk(*args, **kwargs):
-    outputs = TORCH_TENSOR["chunk"](*args, **kwargs)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    _, num_chunks = args
-    axis = kwargs["dim"]
-    lazy_outputs = cnp.split(lazy_input, num_chunks, axis=axis)
-    return tuple(Tensor(output, lazy_output) for output, lazy_output in zip(outputs, lazy_outputs))
+def sub(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_a - lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__sub__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def bmm(*args):
-    output = TORCH["bmm"](*args)
-    lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = lazy_input_a @ lazy_input_b
-    return Tensor(output, lazy_output)
+def rsub(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_b - lazy_input_a
+        if run_torch:
+            output = TORCH_TENSOR["__sub__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def exp(*args):
-    output = TORCH["exp"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.exp(lazy_input)
-    return Tensor(output, lazy_output)
+def mul(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_a * lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__mul__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def sin(*args):
-    output = TORCH["sin"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.sin(lazy_input)
-    return Tensor(output, lazy_output)
+def rmul(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_b * lazy_input_a
+        if run_torch:
+            output = TORCH_TENSOR["__mul__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def cos(*args):
-    output = TORCH["cos"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.cos(lazy_input)
-    return Tensor(output, lazy_output)
+def truediv(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_a / lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__truediv__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def tanh(*args):
-    output = TORCH["tanh"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.tanh(lazy_input)
-    return Tensor(output, lazy_output)
+def matmul(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input_a @ lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__matmul__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def sigmoid(*args):
-    output = TORCH["sigmoid"](*args)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.sigmoid(lazy_input)
-    return Tensor(output, lazy_output)
+def getitem(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+
+        fake_input = torch.rand(lazy_input.shape)
+        fake_output = TORCH_TENSOR["__getitem__"](fake_input, *args[1:])
+
+        if math.prod(fake_input.shape) == math.prod(fake_output.shape):
+            lazy_output = cnp.reshape(lazy_input, tuple(fake_output.shape))
+        else:
+            _, indices = args
+            if isinstance(indices, int):
+                indices = [indices]
+            else:
+                indices = [index.tolist() if isinstance(index, torch.Tensor) else index for index in indices]
+            lazy_output = cnp.get_item(lazy_input, indices)
+
+        if run_torch:
+            output = TORCH_TENSOR["__getitem__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def cat(*args, **kwargs):
-    output = TORCH["cat"](*args, **kwargs)
+def view(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
 
-    input_tensors, *_ = args
-    lazy_inputs = list(convert_torch_tensors_to_lazy_tensors(*input_tensors))
+        fake_input = torch.rand(lazy_input.shape)
+        fake_output = TORCH_TENSOR["view"](fake_input, *args[1:])
 
-    axis = kwargs["dim"]
-    lazy_output = cnp.concatenate(lazy_inputs, axis)
-    return Tensor(output, lazy_output)
+        lazy_output = cnp.reshape(lazy_input, fake_output.shape)
 
+        if run_torch:
+            output = TORCH_TENSOR["view"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-def flatten(*args):
-    output = TORCH["flatten"](*args)
-    lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-    return Tensor(output, cnp.reshape(lazy_input, tuple(output.shape)))
-
-
-def linear(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["linear"](*args, **kwargs)
-
-    lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = lazy_input @ cnp.transpose(lazy_weight, (1, 0))
-    if len(rest) == 1:
-        (lazy_bias,) = rest
-        lazy_output += lazy_bias
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def conv2d(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["conv2d"](*args, **kwargs)
+def reshape(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
 
-    lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
+        fake_input = torch.rand(lazy_input.shape)
+        fake_output = TORCH_TENSOR["reshape"](fake_input, *args[1:])
 
-    strides, padding, dilation, groups = args[3:]
-    assert (
-        isinstance(padding, tuple) and len(padding) == 2 and all(isinstance(element, int) for element in padding)
-    ), "padding should be a tuple of 2 integers"
-    assert dilation == (1, 1), f"dilation should be (1, 1) but is {dilation}"
-    assert groups == 1, f"groups should be 1 but is {groups}"
+        lazy_output = cnp.reshape(lazy_input, fake_output.shape)
 
-    lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
-    lazy_weight = cnp.transpose(lazy_weight, (0, 2, 3, 1))
-    lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=True)
+        if run_torch:
+            output = TORCH_TENSOR["reshape"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    if len(rest) == 1:
-        (lazy_bias,) = rest
-        lazy_output += lazy_bias
-
-    lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def max_pool2d(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["max_pool2d"](*args, **kwargs)
+def expand(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
 
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        if lazy_input.shape != (1,):
+            logger.warning("Defaulting to torch.Tensor.expand")
+            torch_input = torch.from_numpy(cnp.evaluate(lazy_input))
+            output = TORCH_TENSOR["expand"](torch_input, *args[1:])
+            return output
 
-    if len(args) == 5:
-        kernel_size, strides, padding, dilation = args[1:]
-    else:
-        (kernel_size,) = args[1:]
-        strides = kwargs["stride"]
-        padding = kwargs["padding"]
-        dilation = kwargs["dilation"]
+        lazy_output = cnp.concatenate([lazy_input, lazy_input], axis=0)
 
-    assert isinstance(kernel_size, int), "kernel_size should be an integer"
-    assert isinstance(strides, int), "strides should be an integer"
-    assert isinstance(padding, int), "padding should be an integer"
-    assert isinstance(dilation, int), "dilation should be an integer"
+        if run_torch:
+            output = TORCH_TENSOR["expand"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    kernel_size = (kernel_size, kernel_size)
-    strides = (strides, strides)
-    padding = (padding, padding)
-
-    lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
-    lazy_output = cnp.nn.max_pool(
-        lazy_input, kernel_size=kernel_size, strides=strides, padding=padding, channels_last=True
-    )
-    lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def adaptive_avg_pool2d(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["adaptive_avg_pool2d"](*args, **kwargs)
+def contiguous(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input
+        if run_torch:
+            output = TORCH_TENSOR["contiguous"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    if len(args) == 2:
-        (output_size,) = args[1:]
-    else:
-        output_size = kwargs["output_size"]
-    assert output_size == (1, 1)
-
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.mean(lazy_input, axis=(2, 3))
-    return Tensor(output, lazy_output)
-
-
-def embedding(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["embedding"](*args, **kwargs)
-
-    input_ids, weights = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.embedding(input_ids, weights)
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def relu(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["relu"](*args, **kwargs)
+def to(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input
+        if run_torch:
+            output = TORCH_TENSOR["to"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.relu(lazy_input)
-    return Tensor(output, lazy_output)
-
-
-def gelu(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["gelu"](*args, **kwargs)
-
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.gelu(lazy_input)
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def silu(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["silu"](*args, **kwargs)
+def float(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input
+        if run_torch:
+            output = TORCH_TENSOR["float"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.silu(lazy_input)
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def softmax(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["softmax"](*args, **kwargs)
+def permute(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        order = args[1:]
+        lazy_output = cnp.transpose(lazy_input, order)
+        if run_torch:
+            output = TORCH_TENSOR["permute"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    _, *rest = args
-    if len(rest) > 0:
-        axis, *_ = rest
-    else:
+    return implementation
+
+
+def transpose(run_torch):
+    def implementation(*args):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+
+        rank = len(lazy_input.shape)
+        axes_to_transpose = list(args[1:])
+        assert len(axes_to_transpose) == 2
+        for index, axis in enumerate(axes_to_transpose):
+            axes_to_transpose[index] = (rank + axis) % rank
+
+        if axes_to_transpose[0] < axes_to_transpose[1]:
+            axes_to_transpose = tuple(reversed(axes_to_transpose))
+
+        order = []
+        axes_to_transpose_index = 0
+        for axis in range(rank):
+            if axis not in axes_to_transpose:
+                order.append(axis)
+            else:
+                order.append(axes_to_transpose[axes_to_transpose_index])
+                axes_to_transpose_index += 1
+        order = tuple(order)
+
+        lazy_output = cnp.transpose(lazy_input, order)
+        if run_torch:
+            output = TORCH_TENSOR["transpose"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def chunk(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        _, num_chunks = args
         axis = kwargs["dim"]
+        lazy_outputs = cnp.split(lazy_input, num_chunks, axis=axis)
+        if run_torch:
+            outputs = TORCH_TENSOR["chunk"](*args, **kwargs)
+            return tuple(Tensor(output, lazy_output) for output, lazy_output in zip(outputs, lazy_outputs))
+        else:
+            return lazy_outputs
 
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.layers.softmax(lazy_input, axis=axis)
-    return Tensor(output, lazy_output)
-
-
-def batch_norm(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["batch_norm"](*args, **kwargs)
-
-    lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
-
-    lazy_input, lazy_running_mean, lazy_running_var, *rest = lazy_inputs
-    if len(rest) == 2:
-        lazy_weight, lazy_bias = rest
-    else:
-        assert len(rest) == 0
-        lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
-
-    lazy_output = cnp.nn.layers.batch_norm(
-        lazy_input,
-        cnp.reshape(lazy_running_mean, (-1, 1, 1)),
-        cnp.reshape(lazy_running_var, (-1, 1, 1)),
-        cnp.reshape(lazy_weight, (-1, 1, 1)),
-        cnp.reshape(lazy_bias, (-1, 1, 1)),
-    )
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def layer_norm(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["layer_norm"](*args, **kwargs)
+def bmm(run_torch):
+    def implementation(*args):
+        lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input_a @ lazy_input_b
+        if run_torch:
+            output = TORCH["bmm"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_input, *rest = lazy_inputs
-    if len(rest) == 2:
-        lazy_weight, lazy_bias = rest
-    else:
-        assert len(rest) == 0
-        lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
-
-    lazy_output = cnp.nn.layers.layer_norm(lazy_input, lazy_weight, lazy_bias)
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def group_norm(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["group_norm"](*args, **kwargs)
+def exp(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.exp(lazy_input)
+        if run_torch:
+            output = TORCH["exp"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_input, *rest = lazy_inputs
-    if len(rest) == 2:
-        lazy_weight, lazy_bias = rest
-    else:
-        assert len(rest) == 0
-        lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
-
-    num_groups = args[1]
-    epsilon = args[4] if len(args) >= 5 else 1e-5
-
-    lazy_output = cnp.nn.layers.group_norm(
-        lazy_input,
-        cnp.reshape(lazy_weight, (-1, 1, 1)),
-        cnp.reshape(lazy_bias, (-1, 1, 1)),
-        channel_axis=1,
-        num_groups=num_groups,
-        epsilon=epsilon,
-    )
-
-    return Tensor(output, lazy_output)
+    return implementation
 
 
-def scaled_dot_product_attention(*args, **kwargs):
-    output = TORCH_NN_FUNCTIONAL["scaled_dot_product_attention"](*args, **kwargs)
-    lazy_query, lazy_key, lazy_value = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = cnp.nn.layers.scaled_dot_product_attention(lazy_query, lazy_key, lazy_value)
-    return Tensor(output, lazy_output)
+def sin(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.sin(lazy_input)
+        if run_torch:
+            output = TORCH["sin"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
-def interpolate(*args, **kwargs):
-    from composit.nn import wrap_as_instruction
+def cos(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.cos(lazy_input)
+        if run_torch:
+            output = TORCH["cos"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
 
-    @wrap_as_instruction()
-    def interpolate(input_tensor, *args, **kwargs):
-        input_tensor = torch.from_numpy(input_tensor)
-        output_tensor = TORCH_NN_FUNCTIONAL["interpolate"](input_tensor, *args, **kwargs)
-        output_tensor = output_tensor.detach().numpy()
-        return output_tensor
+    return implementation
 
-    output = TORCH_NN_FUNCTIONAL["interpolate"](*args, **kwargs)
-    (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
-    lazy_output = interpolate(lazy_input, **kwargs)
-    return Tensor(output, lazy_output)
+
+def tanh(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.tanh(lazy_input)
+        if run_torch:
+            output = TORCH["tanh"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def sigmoid(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.sigmoid(lazy_input)
+        if run_torch:
+            output = TORCH["sigmoid"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def cat(run_torch):
+    def implementation(*args, **kwargs):
+        input_tensors, *_ = args
+        lazy_inputs = list(convert_torch_tensors_to_lazy_tensors(*input_tensors))
+
+        axis = kwargs["dim"]
+        lazy_output = cnp.concatenate(lazy_inputs, axis)
+        if run_torch:
+            output = TORCH["cat"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def flatten(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.reshape(lazy_input, (math.prod(lazy_input.shape),))
+        if run_torch:
+            output = TORCH["flatten"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def linear(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+        lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input @ cnp.transpose(lazy_weight, (1, 0))
+        if len(rest) == 1:
+            (lazy_bias,) = rest
+            lazy_output += lazy_bias
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["linear"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def conv2d(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+
+        lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
+
+        strides, padding, dilation, groups = args[3:]
+        assert (
+            isinstance(padding, tuple) and len(padding) == 2 and all(isinstance(element, int) for element in padding)
+        ), "padding should be a tuple of 2 integers"
+        assert dilation == (1, 1), f"dilation should be (1, 1) but is {dilation}"
+        assert groups == 1, f"groups should be 1 but is {groups}"
+
+        lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
+        lazy_weight = cnp.transpose(lazy_weight, (0, 2, 3, 1))
+        lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=True)
+
+        if len(rest) == 1:
+            (lazy_bias,) = rest
+            lazy_output += lazy_bias
+
+        lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["conv2d"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def max_pool2d(run_torch):
+    def implementation(*args, **kwargs):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+
+        if len(args) == 5:
+            kernel_size, strides, padding, dilation = args[1:]
+        else:
+            (kernel_size,) = args[1:]
+            strides = kwargs["stride"]
+            padding = kwargs["padding"]
+            dilation = kwargs["dilation"]
+
+        assert isinstance(kernel_size, int), "kernel_size should be an integer"
+        assert isinstance(strides, int), "strides should be an integer"
+        assert isinstance(padding, int), "padding should be an integer"
+        assert isinstance(dilation, int), "dilation should be an integer"
+
+        kernel_size = (kernel_size, kernel_size)
+        strides = (strides, strides)
+        padding = (padding, padding)
+
+        lazy_input = cnp.transpose(lazy_input, (0, 2, 3, 1))
+        lazy_output = cnp.nn.max_pool(
+            lazy_input, kernel_size=kernel_size, strides=strides, padding=padding, channels_last=True
+        )
+        lazy_output = cnp.transpose(lazy_output, (0, 3, 1, 2))
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["max_pool2d"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def adaptive_avg_pool2d(run_torch):
+    def implementation(*args, **kwargs):
+        if len(args) == 2:
+            (output_size,) = args[1:]
+        else:
+            output_size = kwargs["output_size"]
+        assert output_size == (1, 1)
+
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.mean(lazy_input, axis=(2, 3))
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["adaptive_avg_pool2d"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def embedding(run_torch):
+    def implementation(*args, **kwargs):
+        input_ids, weights = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.embedding(input_ids, weights)
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["embedding"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def relu(run_torch):
+    def implementation(*args, **kwargs):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.relu(lazy_input)
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["relu"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def gelu(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.gelu(lazy_input)
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["gelu"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def silu(run_torch):
+    def implementation(*args, **kwargs):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.silu(lazy_input)
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["silu"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def softmax(run_torch):
+    def implementation(*args, **kwargs):
+        _, *rest = args
+        if len(rest) > 0:
+            axis, *_ = rest
+        else:
+            axis = kwargs["dim"]
+
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.layers.softmax(lazy_input, axis=axis)
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["softmax"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def batch_norm(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
+
+        lazy_input, lazy_running_mean, lazy_running_var, *rest = lazy_inputs
+        if len(rest) == 2:
+            lazy_weight, lazy_bias = rest
+        else:
+            assert len(rest) == 0
+            lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
+
+        lazy_output = cnp.nn.layers.batch_norm(
+            lazy_input,
+            cnp.reshape(lazy_running_mean, (-1, 1, 1)),
+            cnp.reshape(lazy_running_var, (-1, 1, 1)),
+            cnp.reshape(lazy_weight, (-1, 1, 1)),
+            cnp.reshape(lazy_bias, (-1, 1, 1)),
+        )
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["batch_norm"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def layer_norm(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_input, *rest = lazy_inputs
+        if len(rest) == 2:
+            lazy_weight, lazy_bias = rest
+        else:
+            assert len(rest) == 0
+            lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
+
+        lazy_output = cnp.nn.layers.layer_norm(lazy_input, lazy_weight, lazy_bias)
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["layer_norm"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def group_norm(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_inputs = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_input, *rest = lazy_inputs
+        if len(rest) == 2:
+            lazy_weight, lazy_bias = rest
+        else:
+            assert len(rest) == 0
+            lazy_weight, lazy_bias = convert_torch_tensors_to_lazy_tensors(kwargs["weight"], kwargs["bias"])
+
+        num_groups = args[1]
+        epsilon = args[4] if len(args) >= 5 else 1e-5
+
+        lazy_output = cnp.nn.layers.group_norm(
+            lazy_input,
+            cnp.reshape(lazy_weight, (-1, 1, 1)),
+            cnp.reshape(lazy_bias, (-1, 1, 1)),
+            channel_axis=1,
+            num_groups=num_groups,
+            epsilon=epsilon,
+        )
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["group_norm"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def scaled_dot_product_attention(run_torch):
+    def implementation(*args, **kwargs):
+        lazy_query, lazy_key, lazy_value = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.nn.layers.scaled_dot_product_attention(lazy_query, lazy_key, lazy_value)
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["scaled_dot_product_attention"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def interpolate(run_torch):
+    def implementation(*args, **kwargs):
+        from composit.nn import wrap_as_instruction
+
+        @wrap_as_instruction()
+        def interpolate(input_tensor, *args, **kwargs):
+            input_tensor = torch.from_numpy(input_tensor)
+            output_tensor = TORCH_NN_FUNCTIONAL["interpolate"](input_tensor, *args, **kwargs)
+            output_tensor = output_tensor.detach().numpy()
+            return output_tensor
+
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = interpolate(lazy_input, **kwargs)
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["interpolate"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
 
 
 @contextmanager
-def trace():
+def trace(run_torch=True):
     reset_graph_input_index()
 
     torch.__dict__.clear()
@@ -583,51 +849,51 @@ def trace():
 
     # Overrides
 
-    setattr(torch, "matmul", matmul)
-    setattr(torch, "bmm", bmm)
-    setattr(torch, "exp", exp)
-    setattr(torch, "sin", sin)
-    setattr(torch, "cos", cos)
-    setattr(torch, "tanh", tanh)
-    setattr(torch, "sigmoid", sigmoid)
-    setattr(torch, "cat", cat)
-    setattr(torch, "flatten", flatten)
+    setattr(torch, "matmul", matmul(run_torch))
+    setattr(torch, "bmm", bmm(run_torch))
+    setattr(torch, "exp", exp(run_torch))
+    setattr(torch, "sin", sin(run_torch))
+    setattr(torch, "cos", cos(run_torch))
+    setattr(torch, "tanh", tanh(run_torch))
+    setattr(torch, "sigmoid", sigmoid(run_torch))
+    setattr(torch, "cat", cat(run_torch))
+    setattr(torch, "flatten", flatten(run_torch))
 
-    setattr(torch.nn.functional, "linear", linear)
-    setattr(torch.nn.functional, "conv2d", conv2d)
-    setattr(torch.nn.functional, "max_pool2d", max_pool2d)
-    setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d)
-    setattr(torch.nn.functional, "embedding", embedding)
-    setattr(torch.nn.functional, "dropout", identity)
-    setattr(torch.nn.functional, "softmax", softmax)
-    setattr(torch.nn.functional, "relu", relu)
-    setattr(torch.nn.functional, "gelu", gelu)
-    setattr(torch.nn.functional, "silu", silu)
-    setattr(torch.nn.functional, "mish", identity)
-    setattr(torch.nn.functional, "batch_norm", batch_norm)
-    setattr(torch.nn.functional, "layer_norm", layer_norm)
-    setattr(torch.nn.functional, "group_norm", group_norm)
-    setattr(torch.nn.functional, "scaled_dot_product_attention", scaled_dot_product_attention)
-    setattr(torch.nn.functional, "interpolate", interpolate)
+    setattr(torch.nn.functional, "linear", linear(run_torch))
+    setattr(torch.nn.functional, "conv2d", conv2d(run_torch))
+    setattr(torch.nn.functional, "max_pool2d", max_pool2d(run_torch))
+    setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d(run_torch))
+    setattr(torch.nn.functional, "embedding", embedding(run_torch))
+    setattr(torch.nn.functional, "dropout", identity(run_torch))
+    setattr(torch.nn.functional, "softmax", softmax(run_torch))
+    setattr(torch.nn.functional, "relu", relu(run_torch))
+    setattr(torch.nn.functional, "gelu", gelu(run_torch))
+    setattr(torch.nn.functional, "silu", silu(run_torch))
+    setattr(torch.nn.functional, "mish", identity(run_torch))
+    setattr(torch.nn.functional, "batch_norm", batch_norm(run_torch))
+    setattr(torch.nn.functional, "layer_norm", layer_norm(run_torch))
+    setattr(torch.nn.functional, "group_norm", group_norm(run_torch))
+    setattr(torch.nn.functional, "scaled_dot_product_attention", scaled_dot_product_attention(run_torch))
+    setattr(torch.nn.functional, "interpolate", interpolate(run_torch))
 
-    setattr(torch.Tensor, "__add__", add)
-    setattr(torch.Tensor, "__iadd__", add)
-    setattr(torch.Tensor, "__sub__", sub)
-    setattr(torch.Tensor, "__rsub__", rsub)
-    setattr(torch.Tensor, "__mul__", mul)
-    setattr(torch.Tensor, "__rmul__", rmul)
-    setattr(torch.Tensor, "__truediv__", truediv)
-    setattr(torch.Tensor, "__matmul__", matmul)
-    setattr(torch.Tensor, "__getitem__", getitem)
-    setattr(torch.Tensor, "view", view)
-    setattr(torch.Tensor, "reshape", reshape)
-    setattr(torch.Tensor, "expand", expand)
-    setattr(torch.Tensor, "permute", permute)
-    setattr(torch.Tensor, "transpose", transpose)
-    setattr(torch.Tensor, "contiguous", contiguous)
-    setattr(torch.Tensor, "to", to)
-    setattr(torch.Tensor, "float", float)
-    setattr(torch.Tensor, "chunk", chunk)
+    setattr(torch.Tensor, "__add__", add(run_torch))
+    setattr(torch.Tensor, "__iadd__", add(run_torch))
+    setattr(torch.Tensor, "__sub__", sub(run_torch))
+    setattr(torch.Tensor, "__rsub__", rsub(run_torch))
+    setattr(torch.Tensor, "__mul__", mul(run_torch))
+    setattr(torch.Tensor, "__rmul__", rmul(run_torch))
+    setattr(torch.Tensor, "__truediv__", truediv(run_torch))
+    setattr(torch.Tensor, "__matmul__", matmul(run_torch))
+    setattr(torch.Tensor, "__getitem__", getitem(run_torch))
+    setattr(torch.Tensor, "view", view(run_torch))
+    setattr(torch.Tensor, "reshape", reshape(run_torch))
+    setattr(torch.Tensor, "expand", expand(run_torch))
+    setattr(torch.Tensor, "permute", permute(run_torch))
+    setattr(torch.Tensor, "transpose", transpose(run_torch))
+    setattr(torch.Tensor, "contiguous", contiguous(run_torch))
+    setattr(torch.Tensor, "to", to(run_torch))
+    setattr(torch.Tensor, "float", float(run_torch))
+    setattr(torch.Tensor, "chunk", chunk(run_torch))
 
     yield
 

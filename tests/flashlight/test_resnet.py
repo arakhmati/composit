@@ -1,3 +1,5 @@
+import pytest
+
 from io import BytesIO
 import requests
 
@@ -24,7 +26,7 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
-def test_resnet():
+def test_resnet(run_torch=True):
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet18", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
@@ -32,23 +34,26 @@ def test_resnet():
 
     torch_output = torch_model(image)
 
-    with flashlight.tracer.trace():
+    with flashlight.tracer.trace(run_torch):
         flashlight_output = torch_model(image)
 
-    return torch_output.detach().numpy(), flashlight_output.lazy_tensor
+    if isinstance(flashlight_output, flashlight.Tensor):
+        return flashlight_output.lazy_tensor, torch_output.detach().numpy()
+    return flashlight_output, None
 
 
-def test_trace():
-    torch_output, output_var = test_resnet()
-
+@pytest.mark.parametrize("run_torch", [True])
+def test_trace(run_torch):
+    output_var, torch_output = test_resnet(run_torch)
     assert len(output_var.graph) == 414
     composit_output = cnp.evaluate(output_var)
-    assert np.allclose(composit_output, torch_output, atol=1e-3)
+    if run_torch:
+        assert np.allclose(composit_output, torch_output, atol=1e-3)
 
 
 def test_graph_cache():
-    _, output_var = test_resnet()
+    output_var, _ = test_resnet()
     first_hash = hash(output_var)
 
-    _, output_var = test_resnet()
+    output_var, _ = test_resnet()
     assert first_hash == hash(output_var)
