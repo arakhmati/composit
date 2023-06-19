@@ -10,8 +10,7 @@ from loguru import logger
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from mosaic.backends.x86.passes.compile_to_mosaic_model import compile_to_mosaic_model
-from mosaic.backends.x86.passes.evaluate import evaluate_mosaic_model
+from mosaic.backends.x86.passes.evaluate import evaluate as mosaic_evaluate
 from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, ScalarTileLevel
 
@@ -63,10 +62,10 @@ def create_hierarchy(var, tile_shape):
     kwargs = {}
     if "dense.weight" in var.name:
         kwargs = dict(layout=TransposedLayout(order=(1, 0)))
-    return [
+    return (
         TileLevel(level_name="tile", tile_shape=tile_shape, **kwargs),
         ScalarTileLevel(level_name="scalar", rank=len(tile_shape), **kwargs),
-    ]
+    )
 
 
 def composit_model(
@@ -94,37 +93,23 @@ def composit_model(
     return output_var, input_var_to_scheme
 
 
-def create_and_compile_bert_model(
-    request,
+def bert_model(
     input_ids_var,
     token_type_ids_var,
     num_encoders,
     num_attention_heads,
     head_size,
     vocab_size,
-    reuse_buffers,
-    fuse_kernels,
 ):
     np.random.seed(0)
     torch.manual_seed(0)
-
-    test_name = request.node.name
-    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
-    test_output_path.mkdir(parents=True, exist_ok=True)
 
     transformers_model = get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_size)
     composit_parameters = create_composit_parameters(transformers_model)
     output_var, input_var_to_scheme = composit_model(
         input_ids_var, token_type_ids_var, num_encoders, head_size, composit_parameters
     )
-    mosaic_model = compile_to_mosaic_model(
-        output_var,
-        input_var_to_scheme=input_var_to_scheme,
-        output_path=test_output_path,
-        reuse_buffers=reuse_buffers,
-        fuse_kernels=fuse_kernels,
-    )
-    return mosaic_model, output_var, transformers_model
+    return output_var, input_var_to_scheme, transformers_model
 
 
 @pytest.mark.parametrize("num_inputs", [1])
@@ -148,6 +133,10 @@ def test_evaluates_correctly(
     reuse_buffers,
     fuse_kernels,
 ):
+    test_name = request.node.name
+    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
@@ -155,20 +144,23 @@ def test_evaluates_correctly(
         input_ids_var = cnp.asarray(input_ids, name="input_ids")
         token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
 
-        mosaic_model, output_var, _ = create_and_compile_bert_model(
-            request,
+        output_var, input_var_to_scheme, _ = bert_model(
             input_ids_var,
             token_type_ids_var,
             num_encoders,
             num_attention_heads,
             head_size,
             vocab_size,
-            reuse_buffers,
-            fuse_kernels,
         )
 
         golden_output = cnp.nn.evaluate(output_var)
-        output = evaluate_mosaic_model(mosaic_model, output_var)
+        output = mosaic_evaluate(
+            output_var,
+            input_var_to_scheme=input_var_to_scheme,
+            output_path=test_output_path,
+            reuse_buffers=reuse_buffers,
+            fuse_kernels=fuse_kernels,
+        )
         assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
 
@@ -191,6 +183,10 @@ def test_benchmark(
     vocab_size,
     reuse_buffers,
 ):
+    test_name = request.node.name
+    test_output_path = FILE_DIR / "test_output" / str(deterministic_hash(test_name))
+    test_output_path.mkdir(parents=True, exist_ok=True)
+
     torch.set_num_threads(1)
 
     input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
@@ -199,20 +195,23 @@ def test_benchmark(
     input_ids_var = cnp.asarray(input_ids, name="input_ids")
     token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
 
-    mosaic_model, output_var, transformers_model = create_and_compile_bert_model(
-        request,
+    output_var, input_var_to_scheme, transformers_model = bert_model(
         input_ids_var,
         token_type_ids_var,
         num_encoders,
         num_attention_heads,
         head_size,
         vocab_size,
-        reuse_buffers,
-        fuse_kernels=False,
     )
 
     golden_output = cnp.nn.evaluate(output_var)
-    output = evaluate_mosaic_model(mosaic_model, output_var)
+    output = mosaic_evaluate(
+        output_var,
+        input_var_to_scheme=input_var_to_scheme,
+        output_path=test_output_path,
+        reuse_buffers=reuse_buffers,
+        fuse_kernels=False,
+    )
     assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
     execution_times = []
@@ -231,7 +230,13 @@ def test_benchmark(
     execution_times = []
     for _ in range(num_iterations):
         start = time.time_ns()
-        output = evaluate_mosaic_model(mosaic_model, output_var)
+        output = mosaic_evaluate(
+            output_var,
+            input_var_to_scheme=input_var_to_scheme,
+            output_path=test_output_path,
+            reuse_buffers=reuse_buffers,
+            fuse_kernels=False,
+        )
         end = time.time_ns()
         execution_times.append(end - start)
     execution_times = np.asarray(execution_times) / 1e6
