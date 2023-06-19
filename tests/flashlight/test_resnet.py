@@ -34,7 +34,7 @@ def test_resnet(run_torch=True):
 
     torch_output = torch_model(image)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         flashlight_output = torch_model(image)
 
     if isinstance(flashlight_output, flashlight.Tensor):

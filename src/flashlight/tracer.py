@@ -824,7 +824,7 @@ def interpolate(run_torch):
 
 
 @contextmanager
-def trace(run_torch=True):
+def trace(*, run_torch=False):
     reset_graph_input_index()
 
     torch.__dict__.clear()

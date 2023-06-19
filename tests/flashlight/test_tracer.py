@@ -18,7 +18,7 @@ def test_add(run_torch):
     input_a = torch.rand(32, 128)
     input_b = torch.rand(128)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = input_a + input_b
 
     check_output_type(output, run_torch)
@@ -30,7 +30,7 @@ def test_sub(run_torch):
     input_a = torch.rand(32, 128)
     input_b = torch.rand(128)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = input_a - input_b
 
     check_output_type(output, run_torch)
@@ -42,7 +42,7 @@ def test_mul(run_torch):
     input_a = torch.rand(32, 128)
     input_b = torch.rand(128)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = input_a * input_b
 
     check_output_type(output, run_torch)
@@ -54,7 +54,7 @@ def test_truediv(run_torch):
     input_a = torch.rand(32, 128)
     input_b = torch.rand(128)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = input_a / input_b
 
     check_output_type(output, run_torch)
@@ -66,7 +66,7 @@ def test_matmul(run_torch):
     input_a = torch.rand(32, 128)
     input_b = torch.rand(128, 64)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = input_a @ input_b
 
     check_output_type(output, run_torch)
@@ -78,7 +78,7 @@ def test_linear(run_torch):
     model = torch.nn.Linear(128, 64)
     activations = torch.rand(32, 128)
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = model(activations)
 
     check_output_type(output, run_torch)
@@ -90,7 +90,7 @@ def test_embedding(run_torch):
     model = torch.nn.Embedding(num_embeddings=10, embedding_dim=64)
     input_ids = torch.randint(0, 10, (1, 128))
 
-    with flashlight.tracer.trace(run_torch):
+    with flashlight.tracer.trace(run_torch=run_torch):
         output = model(input_ids)
 
     check_output_type(output, run_torch)

@@ -31,7 +31,7 @@ def test_torch_vs_composit(
     latent_model_input = scheduler.scale_model_input(latent_model_input, timestep=timestep)
     text_embeddings = torch.randn(2, tokenizer_model_max_length, clip_hidden_size)
 
-    with flashlight.tracer.trace(), torch.no_grad():
+    with flashlight.tracer.trace(run_torch=True), torch.no_grad():
         flashlight_noise_pred = unet(latent_model_input, timestep, encoder_hidden_states=text_embeddings).sample
 
     torch_noise_pred = flashlight_noise_pred.detach().numpy()
