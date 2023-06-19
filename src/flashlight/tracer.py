@@ -7,7 +7,6 @@ import torch.nn.functional
 from loguru import logger
 
 import composit as cnp
-import composit.nn
 from flashlight.introspection import convert_torch_tensors_to_lazy_tensors, reset_graph_input_index
 from flashlight import Tensor
 

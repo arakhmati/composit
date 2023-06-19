@@ -1,5 +1,4 @@
 import composit as cnp
-import composit.nn
 from composit.nn.layers import batch_norm, resnet_module
 
 

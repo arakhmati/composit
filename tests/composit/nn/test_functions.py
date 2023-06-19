@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn.functional
 
 import composit as cnp
-import composit.nn
 
 
 def test_embedding():
@@ -82,8 +81,8 @@ def test_convolution(strides, padding, channels_last):
     np_image = np.random.random((1, 3, 28, 38))
     np_filters = np.random.random((32, 3, 5, 5))
 
-    image_var = image_arg = cnp.nn.variable(name="image", shape=np_image.shape, dtype=np_image.dtype)
-    filters_var = filters_arg = cnp.nn.variable(name="filters", shape=np_filters.shape, dtype=np_filters.dtype)
+    image_var = image_arg = cnp.asarray(np_image, name="image")
+    filters_var = filters_arg = cnp.asarray(np_filters, name="filters")
 
     if channels_last:
         image_arg = cnp.transpose(image_var, (0, 2, 3, 1))
@@ -96,7 +95,7 @@ def test_convolution(strides, padding, channels_last):
     if channels_last:
         result_var = cnp.transpose(result_var, (0, 3, 1, 2))
 
-    result = cnp.nn.evaluate(result_var, inputs={image_var: np_image, filters_var: np_filters})
+    result = cnp.nn.evaluate(result_var)
 
     torch_result = torch.nn.functional.conv2d(
         torch.from_numpy(np_image), torch.from_numpy(np_filters), stride=strides, padding=padding
@@ -119,7 +118,7 @@ def test_pool(composit_and_torch_functions, kernel_size, strides, padding, chann
 
     np_image = np.random.random((1, 3, 28, 38))
 
-    image_var = image_arg = cnp.nn.variable(name="image", shape=np_image.shape, dtype=np_image.dtype)
+    image_var = image_arg = cnp.asarray(np_image, name="image")
 
     if channels_last:
         image_arg = cnp.transpose(image_var, (0, 2, 3, 1))
@@ -131,7 +130,7 @@ def test_pool(composit_and_torch_functions, kernel_size, strides, padding, chann
     if channels_last:
         result_var = cnp.transpose(result_var, (0, 3, 1, 2))
 
-    result = cnp.nn.evaluate(result_var, inputs={image_var: np_image})
+    result = cnp.nn.evaluate(result_var)
 
     torch_result = torch_function(
         torch.from_numpy(np_image), kernel_size=kernel_size, stride=strides, padding=padding

@@ -36,21 +36,19 @@ def test_bert(
 
     transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
 
-    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
+    input_ids_var = cnp.ndarray((batch_size, sequence_size), dtype=np.uint64, name="input_ids")
+    token_type_ids_var = cnp.ndarray((batch_size, sequence_size), dtype=np.uint64, name="token_type_ids")
     parameters = {
-        cnp.nn.variable(name=name, shape=value.shape, dtype=np.float16): value
-        for name, value in convert_parameters_to_numpy(transformers_model).items()
+        name: cnp.asarray(value, name=name) for name, value in convert_parameters_to_numpy(transformers_model).items()
     }
 
-    with cnp.nn.module.disable_modules():
-        model = bert(
-            input_ids_var,
-            token_type_ids_var,
-            None,
-            {var.node.name: var for var in parameters.keys()},
-            num_encoders=num_encoders,
-            head_size=head_size,
-        )
+    output_var = bert(
+        input_ids_var,
+        token_type_ids_var,
+        None,
+        parameters,
+        num_encoders=num_encoders,
+        head_size=head_size,
+    )
 
-    inspect(model)
+    inspect(output_var)

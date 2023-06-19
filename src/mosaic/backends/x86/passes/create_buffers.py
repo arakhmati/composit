@@ -103,6 +103,11 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     return propagate_buffer_down(graph, successor, node_to_users, buffer_descriptor_to_current_node)
 
 
+def is_constant_input(instruction):
+    # TODO: figure out how to specify that the input is constant
+    return False
+
+
 def populate_buffer_descriptors(graph, reuse_buffers=False):
     dtype_to_buffer_descriptor_stack = {}
     node_to_users = pmap()
@@ -113,7 +118,8 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
 
     for node in topological_traversal(graph):
         instruction = graph.nodes[node]["instruction"]
-        if isinstance(instruction, Input):
+
+        if is_constant_input(instruction):
             graph = graph.add_node(
                 node,
                 buffer_descriptors=tuple(
@@ -121,6 +127,7 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
                 ),
             )
             continue
+
         elif is_instruction_a_no_operation(instruction):
             graph = graph.add_node(
                 node,
@@ -212,7 +219,7 @@ def populate_constant_buffers(graph, buffer_descriptor_to_buffer):
     constant_nodes_with_attributes = (
         (node, attributes)
         for node, attributes in graph.nodes(data=True)
-        if class_name(attributes["instruction"]) == "Input"
+        if is_constant_input(attributes["instruction"])
     )
     for node, attributes in constant_nodes_with_attributes:
         tile_config = first(attributes["tile_configs"])

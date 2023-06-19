@@ -124,18 +124,14 @@ def asarray(array, name=None):
 __all__.append("asarray")
 
 
-def named_ndarray(*args, name, **kwargs):
+def ndarray(*args, name=None, **kwargs):
+    if name is None:
+        function_name = inspect.currentframe().f_code.co_name
+        name = f"{get_name_from_args_and_kwargs(function_name, *args,**kwargs)}-{random_string()}"
+
     array = np.ndarray(*args, **kwargs)
     array[:] = 0
     return create_input(name, lambda: array, array.shape, array.dtype)
-
-
-__all__.append("named_ndarray")
-
-
-def ndarray(*args, **kwargs):
-    name = get_name_from_args_and_kwargs(inspect.currentframe().f_code.co_name, *args, **kwargs) + "-" + random_string()
-    return named_ndarray(*args, name=name, **kwargs)
 
 
 __all__.append("ndarray")

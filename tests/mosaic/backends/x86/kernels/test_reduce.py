@@ -87,7 +87,7 @@ def run_cnp_kernel(
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Creating composit graph")
-    input_var = cnp.nn.variable(name="input_var", shape=input_shape)
+    input_var = cnp.ndarray(name="input_var", shape=input_shape)
     output_var = getattr(cnp, operation)(input_var, axis=axis, keepdims=True)
 
     logger.info("Propagate tile views and create tile metadatas")

@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import composit as cnp
-import composit.nn
 from composit.hash import deterministic_hash
 from mosaic.backends.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views, ScalarTileLevel
@@ -70,8 +69,8 @@ def run_cnp_kernel(
     test_output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info("Creating composit graph")
-    input_a_var = cnp.nn.variable(name="input_a_var", shape=input_a_shape, dtype=np.int64)
-    input_b_var = cnp.nn.variable(name="input_b_var", shape=input_b_shape, dtype=np.float32)
+    input_a_var = cnp.ndarray(name="input_a_var", shape=input_a_shape, dtype=np.int64)
+    input_b_var = cnp.ndarray(name="input_b_var", shape=input_b_shape, dtype=np.float32)
     output_var = cnp.nn.embedding(input_a_var, input_b_var)
 
     logger.info("Propagate tile views and create tile metadatas")

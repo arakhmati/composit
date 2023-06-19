@@ -40,21 +40,9 @@ def test_torch_vs_composit(
 
     transformers_model = transformers.models.bert.modeling_bert.BertModel(config)
 
-    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
     parameters = {
-        cnp.nn.variable(name=name, shape=value.shape): value
-        for name, value in convert_parameters_to_numpy(transformers_model).items()
+        name: cnp.asarray(value, name=name) for name, value in convert_parameters_to_numpy(transformers_model).items()
     }
-
-    model = bert(
-        input_ids_var,
-        token_type_ids_var,
-        None,
-        {var.node.name: var for var in parameters.keys()},
-        num_encoders=num_encoders,
-        head_size=head_size,
-    )
 
     model_inputs = []
     for _ in range(num_inputs):
@@ -70,14 +58,20 @@ def test_torch_vs_composit(
     cnp_outputs = []
     for model_input in model_inputs:
         input_ids, token_type_ids = model_input
-        output = cnp.nn.evaluate(
-            model,
-            inputs={
-                input_ids_var: input_ids,
-                token_type_ids_var: token_type_ids,
-                **parameters,
-            },
+
+        input_ids_var = cnp.asarray(input_ids, name="input_ids")
+        token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
+
+        output_var = bert(
+            input_ids_var,
+            token_type_ids_var,
+            None,
+            parameters,
+            num_encoders=num_encoders,
+            head_size=head_size,
         )
+
+        output = cnp.nn.evaluate(output_var)
         cnp_outputs.append(output)
 
     for output, transformers_output in zip(cnp_outputs, transformers_outputs):
@@ -113,22 +107,7 @@ def test_autograd(
         parameter.requires_grad = True
 
     parameters = convert_parameters_to_numpy(transformers_model)
-
-    input_ids_variable = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    token_type_ids_variable = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    parameter_variables = {name: cnp.nn.variable(name=name, shape=value.shape) for name, value in parameters.items()}
-
-    with cnp.nn.module.disable_modules():
-        model: cnp.LazyTensor = bert(
-            input_ids_variable,
-            token_type_ids_variable,
-            None,
-            parameter_variables,
-            num_encoders=num_encoders,
-            head_size=head_size,
-        )
-
-    loss = model
+    parameter_variables = {name: cnp.asarray(value, name=name) for name, value in parameters.items()}
 
     input_vars_to_differentiate = [
         parameter_variables["embeddings.LayerNorm.weight"],
@@ -161,27 +140,32 @@ def test_autograd(
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-        torch_loss = transformers_model(torch.from_numpy(input_ids), token_type_ids=torch.from_numpy(token_type_ids))[
+        torch_output = transformers_model(torch.from_numpy(input_ids), token_type_ids=torch.from_numpy(token_type_ids))[
             "last_hidden_state"
         ]
 
         incoming_gradient = create_random_float(
             (batch_size, sequence_size, num_attention_heads * head_size), -0.001, 0.001
         )
-        torch_loss.backward(torch.from_numpy(incoming_gradient))
+        torch_output.backward(torch.from_numpy(incoming_gradient))
 
-        cnp_gradients = cnp.nn.differentiate(
-            [loss],
-            input_vars_to_differentiate,
-            {
-                input_ids_variable: input_ids,
-                token_type_ids_variable: token_type_ids,
-                **{parameter_variables[key]: parameters[key] for key in parameters},
-            },
-            {loss: incoming_gradient},
+        input_ids_var = cnp.asarray(input_ids, name="input_ids")
+        token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
+
+        output_var: cnp.LazyTensor = bert(
+            input_ids_var,
+            token_type_ids_var,
+            None,
+            parameter_variables,
+            num_encoders=num_encoders,
+            head_size=head_size,
         )
-        assert len(cnp_gradients) == len(input_vars_to_differentiate)
-        cnp_gradients = {var.node.name: value for var, value in cnp_gradients.items()}
+
+        cnp_gradients = cnp.nn.chain_rule({output_var: cnp.asarray(incoming_gradient)}, input_vars_to_differentiate)
+        cnp_gradients = cnp.nn.evaluate(*cnp_gradients)
+        cnp_gradients = {
+            input_var.name: gradient for gradient, input_var in zip(cnp_gradients, input_vars_to_differentiate)
+        }
 
         # Accumulate gradients
         for key, value in cnp_gradients.items():

@@ -39,7 +39,7 @@ def get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_s
 
 def create_composit_parameters(model):
     return {
-        cnp.asarray(array=value, name=name)
+        name: cnp.asarray(array=value, name=name)
         for name, value in convert_parameters_to_numpy(model).items()
         if "position_embeddings" not in name
     }
@@ -70,39 +70,35 @@ def create_hierarchy(var, tile_shape):
 
 
 def composit_model(
-    batch_size,
+    input_ids_var,
+    token_type_ids_var,
     num_encoders,
-    sequence_size,
     head_size,
     parameters,
 ):
-    input_ids_var = cnp.nn.variable(name="input_ids", shape=(batch_size, sequence_size), dtype=np.int64)
-    token_type_ids_var = cnp.nn.variable(name="token_type_ids", shape=(batch_size, sequence_size), dtype=np.int64)
+    output_var = bert(
+        input_ids_var,
+        token_type_ids_var,
+        None,
+        parameters,
+        num_encoders=num_encoders,
+        head_size=head_size,
+    )
 
-    with cnp.nn.module.disable_modules():
-        output_var = bert(
-            input_ids_var,
-            token_type_ids_var,
-            None,
-            {var.node.name: var for var in parameters},
-            num_encoders=num_encoders,
-            head_size=head_size,
-        )
-
-    # Use solver to figure out the tile levels
+    # Use a solver to figure out the tilization scheme
     input_var_to_scheme = {
         var: create_hierarchy(var, create_tile_shape(var, head_size))
-        for var in [input_ids_var, token_type_ids_var] + list(parameters)
+        for var in [input_ids_var, token_type_ids_var] + list(parameters.values())
     }
 
-    return output_var, (input_ids_var, token_type_ids_var), input_var_to_scheme
+    return output_var, input_var_to_scheme
 
 
-def setup_test(
+def create_and_compile_bert_model(
     request,
-    batch_size,
+    input_ids_var,
+    token_type_ids_var,
     num_encoders,
-    sequence_size,
     num_attention_heads,
     head_size,
     vocab_size,
@@ -118,8 +114,8 @@ def setup_test(
 
     transformers_model = get_transformers_model(num_encoders, num_attention_heads, head_size, vocab_size)
     composit_parameters = create_composit_parameters(transformers_model)
-    output_var, (input_ids_var, token_type_ids_var), input_var_to_scheme = composit_model(
-        batch_size, num_encoders, sequence_size, head_size, composit_parameters
+    output_var, input_var_to_scheme = composit_model(
+        input_ids_var, token_type_ids_var, num_encoders, head_size, composit_parameters
     )
     mosaic_model = compile_to_mosaic_model(
         output_var,
@@ -128,7 +124,7 @@ def setup_test(
         reuse_buffers=reuse_buffers,
         fuse_kernels=fuse_kernels,
     )
-    return mosaic_model, output_var, (input_ids_var, token_type_ids_var), transformers_model
+    return mosaic_model, output_var, transformers_model
 
 
 @pytest.mark.parametrize("num_inputs", [1])
@@ -152,25 +148,27 @@ def test_evaluates_correctly(
     reuse_buffers,
     fuse_kernels,
 ):
-    mosaic_model, output_var, (input_ids_var, token_type_ids_var), _ = setup_test(
-        request,
-        batch_size,
-        num_encoders,
-        sequence_size,
-        num_attention_heads,
-        head_size,
-        vocab_size,
-        reuse_buffers,
-        fuse_kernels,
-    )
-
     for _ in range(num_inputs):
         input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
         token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
 
-        inputs = {input_ids_var: input_ids, token_type_ids_var: token_type_ids}
-        golden_output = cnp.nn.evaluate(output_var, inputs=inputs)
-        output = evaluate_mosaic_model(mosaic_model, output_var, inputs=inputs)
+        input_ids_var = cnp.asarray(input_ids, name="input_ids")
+        token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
+
+        mosaic_model, output_var, _ = create_and_compile_bert_model(
+            request,
+            input_ids_var,
+            token_type_ids_var,
+            num_encoders,
+            num_attention_heads,
+            head_size,
+            vocab_size,
+            reuse_buffers,
+            fuse_kernels,
+        )
+
+        golden_output = cnp.nn.evaluate(output_var)
+        output = evaluate_mosaic_model(mosaic_model, output_var)
         assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
 
@@ -195,11 +193,17 @@ def test_benchmark(
 ):
     torch.set_num_threads(1)
 
-    mosaic_model, output_var, (input_ids_var, token_type_ids_var), transformers_model = setup_test(
+    input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
+    token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
+
+    input_ids_var = cnp.asarray(input_ids, name="input_ids")
+    token_type_ids_var = cnp.asarray(token_type_ids, name="token_type_ids")
+
+    mosaic_model, output_var, transformers_model = create_and_compile_bert_model(
         request,
-        batch_size,
+        input_ids_var,
+        token_type_ids_var,
         num_encoders,
-        sequence_size,
         num_attention_heads,
         head_size,
         vocab_size,
@@ -207,12 +211,8 @@ def test_benchmark(
         fuse_kernels=False,
     )
 
-    input_ids = create_random_long((batch_size, sequence_size), minimum=0, maximum=vocab_size)
-    token_type_ids = np.zeros((batch_size, sequence_size), dtype=np.int64)
-
-    inputs = {input_ids_var: input_ids, token_type_ids_var: token_type_ids}
-    golden_output = cnp.nn.evaluate(output_var, inputs=inputs)
-    output = evaluate_mosaic_model(mosaic_model, output_var, inputs=inputs)
+    golden_output = cnp.nn.evaluate(output_var)
+    output = evaluate_mosaic_model(mosaic_model, output_var)
     assert np.allclose(output, golden_output, atol=1e-4, rtol=1e-5)
 
     execution_times = []
@@ -231,7 +231,7 @@ def test_benchmark(
     execution_times = []
     for _ in range(num_iterations):
         start = time.time_ns()
-        output = evaluate_mosaic_model(mosaic_model, output_var, inputs=inputs)
+        output = evaluate_mosaic_model(mosaic_model, output_var)
         end = time.time_ns()
         execution_times.append(end - start)
     execution_times = np.asarray(execution_times) / 1e6

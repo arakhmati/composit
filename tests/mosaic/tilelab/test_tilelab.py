@@ -144,22 +144,14 @@ def test_buffer_slice_block_slice_tile_concatenate(
 def test_matmul_add_subtract_sum(input_0_shape, input_1_shape):
     matmul_shape = input_0_shape[:-1] + input_1_shape[-1:]
 
-    input_var_0 = cnp.nn.variable(name="input_var_0", shape=input_0_shape)
-    input_var_1 = cnp.nn.variable(name="input_var_1", shape=input_1_shape)
-    input_var_2 = cnp.nn.variable(name="input_var_2", shape=matmul_shape)
-    input_var_3 = cnp.nn.variable(name="input_var_3", shape=matmul_shape)
+    input_var_0 = cnp.asarray(np.random.uniform(-0.5, 0.5, input_0_shape), name="input_var_0")
+    input_var_1 = cnp.asarray(np.random.uniform(-0.5, 0.5, input_1_shape), name="input_var_1")
+    input_var_2 = cnp.asarray(np.random.uniform(-0.5, 0.5, matmul_shape), name="input_var_2")
+    input_var_3 = cnp.asarray(np.random.uniform(-0.5, 0.5, matmul_shape), name="input_var_3")
     matmul_output_var = input_var_0 @ input_var_1
     add_output_var = matmul_output_var + input_var_2
     output_var = add_output_var + matmul_output_var - cnp.sum(input_var_3, -1, keepdims=True)
-
-    evaluate_inputs = {
-        input_var_0: np.random.uniform(-0.5, 0.5, input_var_0.shape),
-        input_var_1: np.random.uniform(-0.5, 0.5, input_var_1.shape),
-        input_var_2: np.random.uniform(-0.5, 0.5, input_var_2.shape),
-        input_var_3: np.random.uniform(-0.5, 0.5, input_var_3.shape),
-    }
-
-    output, cache = cnp.nn.evaluate(output_var, inputs=evaluate_inputs, return_cache=True)
+    output, cache = cnp.nn.evaluate(output_var, return_cache=True)
 
     input_var_to_scheme = {
         input_var_0: [

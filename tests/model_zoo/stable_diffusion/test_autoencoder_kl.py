@@ -33,9 +33,9 @@ def test_torch_vs_composit(batch_size, height, width, channels_last, latent_chan
         for name, value in convert_parameters_to_numpy(torch_decoder, channels_last).items()
     }
 
-    latents_var = cnp.nn.variable(name="latents", shape=latents.shape, dtype=latents.dtype)
+    latents_var = cnp.asarray(latents, name="latents")
     model = decoder(latents_var, parameters, channels_last=channels_last)
 
-    output = cnp.nn.evaluate(model, inputs={latents_var: latents})
+    output = cnp.nn.evaluate(model)
 
     assert np.allclose(output, torch_output, atol=1e-5)

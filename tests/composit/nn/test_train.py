@@ -39,31 +39,23 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
     np_parameter_2 = np.random.random(output_shape)
     np_incoming_gradients = [np.random.random(output_shape) for _ in range(num_iterations)]
 
-    input_var = cnp.nn.variable(name="input_var", shape=input_shape)
-    parameter_0 = cnp.nn.variable(name="parameter_0", shape=np_parameter_0.shape)
-    parameter_1 = cnp.nn.variable(name="parameter_1", shape=np_parameter_1.shape)
-    parameter_2 = cnp.nn.variable(name="parameter_2", shape=np_parameter_2.shape)
-    output_var = cnp_model(input_var, parameter_0, parameter_1, parameter_2)
+    parameters = [
+        cnp.asarray(np_parameter_0, name="parameter_0"),
+        cnp.asarray(np_parameter_1, name="parameter_1"),
+        cnp.asarray(np_parameter_2, name="parameter_2"),
+    ]
 
-    parameters = {
-        parameter_0: np_parameter_0,
-        parameter_1: np_parameter_1,
-        parameter_2: np_parameter_2,
-    }
-
-    torch_parameters = [torch.from_numpy(np_parameter.copy()) for np_parameter in parameters.values()]
+    torch_parameters = [torch.from_numpy(cnp.evaluate(parameter).copy()) for parameter in parameters]
     for torch_parameter in torch_parameters:
         torch_parameter.requires_grad = True
 
     for np_input, np_incoming_gradient in zip(np_inputs, np_incoming_gradients):
-        gradients = cnp.nn.differentiate(
-            [output_var],
-            [parameter_0, parameter_1, parameter_2],
-            {
-                input_var: np_input,
-                **parameters,
-            },
-            {output_var: np_incoming_gradient},
+        input_var = cnp.asarray(np_input, name="input_var")
+        output_var = cnp_model(input_var, *parameters)
+
+        gradients = cnp.nn.chain_rule(
+            {output_var: cnp.asarray(np_incoming_gradient)},
+            parameters,
         )
 
         parameters = apply_gradients(parameters, gradients, sgd_optimizer(learning_rate=learning_rate))
@@ -79,6 +71,5 @@ def test_matmul_add_subtract_sum_autograd_with_multiple_consumers(
 
         torch_optimizer.step()
 
-    assert np.allclose(parameters[parameter_0], torch_parameters[0].detach().numpy())
-    assert np.allclose(parameters[parameter_1], torch_parameters[1].detach().numpy())
-    assert np.allclose(parameters[parameter_2], torch_parameters[2].detach().numpy())
+    for parameter, torch_parameter in zip(parameters, torch_parameters):
+        assert np.allclose(cnp.evaluate(parameter), torch_parameter.detach().numpy())

@@ -45,9 +45,9 @@ def test_torch_vs_composit(channels_last):
         for name, value in convert_parameters_to_numpy(torch_model, channels_last).items()
     }
 
-    image_var = cnp.nn.variable(name="image", shape=image.shape, dtype=image.dtype)
+    image_var = cnp.asarray(image, name="image")
     model = resnet(image_var, parameters, channels_last=channels_last)
 
-    output = cnp.nn.evaluate(model, inputs={image_var: image})
+    output = cnp.nn.evaluate(model)
 
     assert np.allclose(output, torch_output, atol=1e-4)
