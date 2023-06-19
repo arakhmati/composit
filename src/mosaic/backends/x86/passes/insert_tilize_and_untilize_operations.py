@@ -15,7 +15,7 @@ class Untilize(PClass):
         return input_tensor
 
 
-def insert_tilize_and_untilize_instructions(graph):
+def insert_tilize_and_untilize_operations(graph):
     new_graph = MultiDiGraph()
     operand_to_new_operand = {}
     for node in topological_traversal(graph):
@@ -24,11 +24,11 @@ def insert_tilize_and_untilize_instructions(graph):
         new_graph = new_graph.add_node(node, **attributes)
         operand_to_new_operand[(node, 0)] = (node, 0)
 
-        if isinstance(graph.nodes[node]["instruction"], Input):
+        if isinstance(graph.nodes[node]["operation"], Input):
             tilize_node = Node(name=f"tilize_{node.name}")
             new_graph = new_graph.add_node(
                 tilize_node,
-                instruction=Tilize(),
+                operation=Tilize(),
                 shapes=attributes["shapes"],
                 dtypes=attributes["dtypes"],
                 tile_configs=attributes["tile_configs"],
@@ -39,7 +39,7 @@ def insert_tilize_and_untilize_instructions(graph):
             untilize_node = Node(name=f"untilize_{node.name}")
             new_graph = new_graph.add_node(
                 untilize_node,
-                instruction=Untilize(),
+                operation=Untilize(),
                 shapes=attributes["shapes"],
                 dtypes=attributes["dtypes"],
                 tile_configs=attributes["tile_configs"],

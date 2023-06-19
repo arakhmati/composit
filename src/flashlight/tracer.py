@@ -802,9 +802,9 @@ def scaled_dot_product_attention(run_torch):
 
 def interpolate(run_torch):
     def implementation(*args, **kwargs):
-        from composit.nn import wrap_as_instruction
+        from composit.nn import wrap_as_operation
 
-        @wrap_as_instruction()
+        @wrap_as_operation()
         def interpolate(input_tensor, *args, **kwargs):
             input_tensor = torch.from_numpy(input_tensor)
             output_tensor = TORCH_NN_FUNCTIONAL["interpolate"](input_tensor, *args, **kwargs)

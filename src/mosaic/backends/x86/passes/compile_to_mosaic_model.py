@@ -3,7 +3,7 @@ import toolz
 from composit.multidigraph import compose_all
 from mosaic.backends.x86.passes.create_buffers import create_buffers
 from mosaic.backends.x86.passes.generate_and_compile import generate_and_compile_run_model, generate_and_compile_kernels
-from mosaic.backends.x86.passes.insert_tilize_and_untilize_instructions import insert_tilize_and_untilize_instructions
+from mosaic.backends.x86.passes.insert_tilize_and_untilize_operations import insert_tilize_and_untilize_operations
 from mosaic.backends.x86.types import (
     ModelWithKernelFusion,
     ModelWithoutKernelFusion,
@@ -32,7 +32,7 @@ def compile_to_mosaic_model(
 ):
     graph = compose_all(*tuple(output_var.graph for output_var in output_vars))
     graph = propagate_tile_config(graph, input_var_to_scheme)
-    graph = insert_tilize_and_untilize_instructions(graph)
+    graph = insert_tilize_and_untilize_operations(graph)
     graph, buffer_descriptor_to_buffer = create_buffers(graph, reuse_buffers)
 
     if fuse_kernels:

@@ -8,7 +8,7 @@ from pyrsistent import PClass, field
 
 from composit.numpy.core import (
     create_input,
-    create_from_numpy_compute_instruction,
+    create_from_numpy_compute_operation,
     create_numpy_compute_function,
     create_numpy_binary_compute_function,
     create_numpy_concatenate_function,
@@ -70,7 +70,7 @@ class DynamicGetItem(PClass):
 def get_item(self, indices) -> "LazyTensor":
     if isinstance(indices[0], slice):
         indices = process_indices(indices)
-        return create_from_numpy_compute_instruction(self, instruction=GetItem(indices=indices))
+        return create_from_numpy_compute_operation(self, operation=GetItem(indices=indices))
 
     if not isinstance(indices, LazyTensor):
         name = f"Indices({indices})"
@@ -81,7 +81,7 @@ def get_item(self, indices) -> "LazyTensor":
 
         indices = create_input(name, initialize_callback, indices_as_array.shape, indices_as_array.dtype)
 
-    return create_from_numpy_compute_instruction(self, indices, instruction=DynamicGetItem())
+    return create_from_numpy_compute_operation(self, indices, operation=DynamicGetItem())
 
 
 __all__.append("get_item")
@@ -101,7 +101,7 @@ class SetItem(PClass):
 
 def set_item(self, indices, values) -> "LazyTensor":
     indices = process_indices(indices)
-    return create_from_numpy_compute_instruction(self, values, instruction=SetItem(indices=indices))
+    return create_from_numpy_compute_operation(self, values, operation=SetItem(indices=indices))
 
 
 __all__.append("set_item")

@@ -36,11 +36,11 @@ class LazyTensor(PClass):
 
 def visualize(*lazy_tensors, **kwargs):
     def visualize_node(graphviz_graph, graph, node):
-        instruction = graph.nodes[node]["instruction"]
+        operation = graph.nodes[node]["operation"]
         shapes = graph.nodes[node]["shapes"]
         if len(shapes) == 1:
             (shapes,) = shapes
-        graphviz_graph.node(node.name, label=f"{node}\n{class_name(instruction)}\n{shapes}")
+        graphviz_graph.node(node.name, label=f"{node}\n{class_name(operation)}\n{shapes}")
 
     graph = compose_all(*(lazy_tensor.graph for lazy_tensor in lazy_tensors))
 

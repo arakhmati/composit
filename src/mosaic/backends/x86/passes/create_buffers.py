@@ -42,19 +42,19 @@ def create_constant_input_buffer_descriptor(name, array):
     return ConstantBufferDescriptor(name=normalize_name(name), array=array)
 
 
-def is_instruction_a_no_operation(instruction):
-    return class_name(instruction) in {"reshape"}
+def is_operation_a_no_operation(operation):
+    return class_name(operation) in {"reshape"}
 
 
-def can_instruction_reuse_buffer(instruction):
-    return class_name(instruction) not in {"Tilize", "Untilize", "matmul", "mean", "sum", "transpose"}
+def can_operation_reuse_buffer(operation):
+    return class_name(operation) not in {"Tilize", "Untilize", "matmul", "mean", "sum", "transpose"}
 
 
 def try_returning_buffer_descriptor_to_queue(
     graph, node, node_to_users, buffer_descriptor_to_current_node, dtype_to_buffer_descriptor_stack
 ):
     for predecessor, _ in graph.in_edges(node):
-        if isinstance(graph.nodes[predecessor]["instruction"], Input):
+        if isinstance(graph.nodes[predecessor]["operation"], Input):
             continue
 
         if predecessor not in node_to_users:
@@ -88,8 +88,8 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     if dtype != successor_dtype:
         return graph, node_to_users, buffer_descriptor_to_current_node
 
-    successor_instruction = graph.nodes[successor]["instruction"]
-    if not can_instruction_reuse_buffer(successor_instruction):
+    successor_operation = graph.nodes[successor]["operation"]
+    if not can_operation_reuse_buffer(successor_operation):
         return graph, node_to_users, buffer_descriptor_to_current_node
 
     if "buffer_descriptors" in graph.nodes[successor]:
@@ -103,7 +103,7 @@ def propagate_buffer_down(graph, node, node_to_users, buffer_descriptor_to_curre
     return propagate_buffer_down(graph, successor, node_to_users, buffer_descriptor_to_current_node)
 
 
-def is_constant_input(instruction):
+def is_constant_input(operation):
     # TODO: figure out how to specify that the input is constant
     return False
 
@@ -117,18 +117,18 @@ def populate_buffer_descriptors(graph, reuse_buffers=False):
         node_to_users = node_to_users.set(node, graph.out_degree(node))
 
     for node in topological_traversal(graph):
-        instruction = graph.nodes[node]["instruction"]
+        operation = graph.nodes[node]["operation"]
 
-        if is_constant_input(instruction):
+        if is_constant_input(operation):
             graph = graph.add_node(
                 node,
                 buffer_descriptors=tuple(
-                    [create_constant_input_buffer_descriptor(node.name, array=instruction.initializer_callback())]
+                    [create_constant_input_buffer_descriptor(node.name, array=operation.initializer_callback())]
                 ),
             )
             continue
 
-        elif is_instruction_a_no_operation(instruction):
+        elif is_operation_a_no_operation(operation):
             graph = graph.add_node(
                 node,
                 buffer_descriptors=tuple([first(graph.nodes[first(graph.predecessors(node))]["buffer_descriptors"])]),
@@ -217,9 +217,7 @@ def allocate_buffers(graph):
 
 def populate_constant_buffers(graph, buffer_descriptor_to_buffer):
     constant_nodes_with_attributes = (
-        (node, attributes)
-        for node, attributes in graph.nodes(data=True)
-        if is_constant_input(attributes["instruction"])
+        (node, attributes) for node, attributes in graph.nodes(data=True) if is_constant_input(attributes["operation"])
     )
     for node, attributes in constant_nodes_with_attributes:
         tile_config = first(attributes["tile_configs"])

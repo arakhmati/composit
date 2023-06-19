@@ -57,7 +57,7 @@ def chain_rule(output_vars_with_incoming_gradients, input_vars_to_differentiate)
         if reversed_forward_subgraph.out_degree(node) == 0:
             continue
 
-        forward_instruction = forward_graph.nodes[node]["instruction"]
+        forward_operation = forward_graph.nodes[node]["operation"]
         forward_operands = tuple(operand for operand in get_operands(forward_graph, node))
         forward_input_vars = tuple(
             LazyTensor(
@@ -68,9 +68,9 @@ def chain_rule(output_vars_with_incoming_gradients, input_vars_to_differentiate)
             for (operand_node, operand_output_index) in forward_operands
         )
 
-        create_outgoing_gradients = getattr(jacobians, f"{class_name(forward_instruction)}_jacobian")
+        create_outgoing_gradients = getattr(jacobians, f"{class_name(forward_operation)}_jacobian")
         incoming_gradients = get_incoming_gradients(forward_subgraph, node, node_to_incoming_gradients)
-        outgoing_gradients = create_outgoing_gradients(forward_instruction, incoming_gradients, forward_input_vars)
+        outgoing_gradients = create_outgoing_gradients(forward_operation, incoming_gradients, forward_input_vars)
 
         for (operand_node, output_index), outgoing_gradient in zip(forward_operands, outgoing_gradients):
             if operand_node in node_to_incoming_gradients:
