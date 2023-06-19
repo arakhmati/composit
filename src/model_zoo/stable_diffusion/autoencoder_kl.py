@@ -1,7 +1,6 @@
 import torch
 
 import composit as cnp
-import composit.nn
 from composit.nn.layers import group_norm, multi_head_attention
 from composit.nn.core import wrap_as_instruction
 

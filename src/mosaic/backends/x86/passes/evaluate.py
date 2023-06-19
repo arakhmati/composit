@@ -4,16 +4,21 @@ import numpy as np
 
 from toolz import first
 
+from composit.numpy.core import Input
 from composit.multidigraph import topological_traversal
 from composit.numpy.core import get_operands
 
 from mosaic.backends.x86.types import ModelWithoutKernelFusion, ModelWithKernelFusion
 
 
-def initialize_variable_buffers(graph, inputs, buffer_descriptor_to_buffer):
-    for input_var, array in inputs.items():
-        input_node = input_var.node
-        buffer = buffer_descriptor_to_buffer[first(graph.nodes[input_node]["buffer_descriptors"])]
+def initialize_input_buffers(graph, buffer_descriptor_to_buffer):
+    for node in graph:
+        instruction = graph.nodes[node]["instruction"]
+        if not isinstance(instruction, Input):
+            continue
+
+        array = instruction()
+        buffer = buffer_descriptor_to_buffer[first(graph.nodes[node]["buffer_descriptors"])]
         buffer.array[:] = array.flatten()
 
 
@@ -40,8 +45,8 @@ def evaluate_mosaic_model_with_kernel_fusion(model: ModelWithKernelFusion):
     model.run_model(*pointers)
 
 
-def evaluate_mosaic_model(model: ModelWithoutKernelFusion | ModelWithKernelFusion, output_var, inputs):
-    initialize_variable_buffers(model.graph, inputs, model.buffer_descriptor_to_buffer)
+def evaluate_mosaic_model(model: ModelWithoutKernelFusion | ModelWithKernelFusion, output_var):
+    initialize_input_buffers(model.graph, model.buffer_descriptor_to_buffer)
 
     if isinstance(model, ModelWithKernelFusion):
         evaluate_mosaic_model_with_kernel_fusion(model)

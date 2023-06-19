@@ -21,9 +21,9 @@ def test_ndarray(np):
 
 @pytest.mark.parametrize("np", [numpy, composit])
 def test_named_ndarray(np):
-    if not hasattr(np, "named_ndarray"):
-        pytest.skip("current np library doesn't have named_ndarray")
-    array = np.named_ndarray((5, 10), name="activations")
+    if np == numpy:
+        pytest.skip("current np library doesn't have ndarray")
+    array = np.ndarray((5, 10), name="activations")
     assert array.shape == (5, 10)
     assert len(array.graph) == 1
 

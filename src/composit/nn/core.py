@@ -1,12 +1,8 @@
-from pyrsistent import immutable, PClass
+from pyrsistent import immutable
 from toolz.functoolz import partial
 
 
 from composit.numpy.core import create_from_numpy_compute_instruction
-
-
-class Variable(PClass):
-    ...
 
 
 def wrap_as_instruction():
@@ -26,6 +22,5 @@ def wrap_as_instruction():
 
 
 __all__ = [
-    "Variable",
     "wrap_as_instruction",
 ]

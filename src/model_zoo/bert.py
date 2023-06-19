@@ -2,7 +2,6 @@ import numpy as np
 import transformers
 
 import composit as cnp
-from composit.nn.module import wrap_module
 from composit.nn.layers import layer_norm, multi_head_attention, feedforward
 
 
@@ -88,7 +87,6 @@ def create_parameters(num_encoders, hidden_size, vocab_size, num_question_answer
     return {name: array.numpy() for name, array in parameters.items()}
 
 
-@wrap_module
 def bert_encoder(
     hidden_states,
     attention_mask,
@@ -134,7 +132,6 @@ def bert_encoder(
     return feedforward_add_and_layer_norm_output
 
 
-@wrap_module
 def bert(
     input_ids,
     token_type_ids,
@@ -167,7 +164,6 @@ def bert(
     return encoder_output
 
 
-@wrap_module
 def bert_for_question_answering(
     input_ids,
     token_type_ids,

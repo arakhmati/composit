@@ -6,7 +6,6 @@ import random
 import numpy as np
 
 import composit as cnp
-import composit.nn
 from composit.hash import deterministic_hash
 from mosaic.backends.x86.passes.compile_to_mosaic_model import compile_to_mosaic_model
 from mosaic.backends.x86.passes.evaluate import evaluate_mosaic_model
@@ -72,12 +71,12 @@ def test_matrix_multiplication_with_bias(
     np_weights = np.random.random((hidden_size, hidden_size)).astype(np.float32)
     np_bias = np.random.random((hidden_size,)).astype(np.float32)
 
-    input_var = cnp.nn.variable(name="input_var", shape=np_input.shape, dtype=np_input.dtype)
+    input_var = cnp.asarray(np_input)
     weights_var = cnp.asarray(np_weights)
     bias_var = cnp.asarray(np_bias)
     output_var = cnp_model(input_var, weights_var, bias_var)
 
-    cnp_output = cnp.nn.evaluate(output_var, inputs={input_var: np_input})
+    cnp_output = cnp.nn.evaluate(output_var)
 
     input_var_to_scheme = specify_input_var_to_scheme(input_var, weights_var, bias_var, tilize_l1_cache=tilize_l1_cache)
     mosaic_model = compile_to_mosaic_model(
@@ -87,5 +86,5 @@ def test_matrix_multiplication_with_bias(
         reuse_buffers=True,
         fuse_kernels=fuse_kernels,
     )
-    mosaic_output = evaluate_mosaic_model(mosaic_model, output_var, inputs={input_var: np_input})
+    mosaic_output = evaluate_mosaic_model(mosaic_model, output_var)
     assert np.allclose(cnp_output, mosaic_output)

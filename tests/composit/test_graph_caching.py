@@ -16,7 +16,7 @@ def test_matmul(m=5, k=10, n=3):
     first_hash = hash(output_var)
     assert first_hash == hash(function(input_var))
 
-    input_var = cnp.named_ndarray((m, k), name="input_var")
+    input_var = cnp.ndarray((m, k), name="input_var")
     output_var = function(input_var)
     assert first_hash == hash(output_var)
 

@@ -2,16 +2,8 @@ import math
 
 import numpy as np
 
-from composit.multidigraph import MultiDiGraph
-from composit.nn.core import Variable, wrap_as_instruction
+from composit.nn.core import wrap_as_instruction
 from composit.nn import vectorized_functions
-from composit.types import LazyTensor, Node
-
-
-def variable(*, name: str, shape: tuple, dtype=None) -> LazyTensor:
-    node = Node(name=name)
-    graph = MultiDiGraph().add_node(node, instruction=Variable(), shapes=(shape,), dtypes=(np.dtype(dtype),))
-    return LazyTensor(graph=graph, node=node)
 
 
 @wrap_as_instruction()
@@ -222,7 +214,6 @@ def max_pool(*args, **kwargs):
 
 
 __all__ = [
-    "variable",
     "embedding",
     "gelu",
     "relu",

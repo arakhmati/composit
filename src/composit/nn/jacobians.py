@@ -8,7 +8,9 @@ from composit.nn.vectorized_functions import cdf, pdf
 THIS_MODULE = sys.modules[__name__]
 
 
-def matmul_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def matmul_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var_0 = forward_input_vars[0]
     input_var_1 = forward_input_vars[1]
 
@@ -41,7 +43,9 @@ def _maybe_reduce_jacobian(outgoing_gradient, input_var):
     return outgoing_gradient
 
 
-def add_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def add_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var_1 = forward_input_vars[1]
     outgoing_gradient_0 = incoming_gradient
     outgoing_gradient_1 = incoming_gradient
@@ -49,7 +53,9 @@ def add_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     return outgoing_gradient_0, outgoing_gradient_1
 
 
-def subtract_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def subtract_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var_1 = forward_input_vars[1]
     outgoing_gradient_0 = incoming_gradient
     outgoing_gradient_1 = incoming_gradient * -1
@@ -57,7 +63,9 @@ def subtract_jacobian(forward_instruction, incoming_gradient, forward_input_vars
     return outgoing_gradient_0, outgoing_gradient_1
 
 
-def multiply_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def multiply_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var_0 = forward_input_vars[0]
     input_var_1 = forward_input_vars[1]
     outgoing_gradient_0 = incoming_gradient * input_var_1
@@ -66,7 +74,9 @@ def multiply_jacobian(forward_instruction, incoming_gradient, forward_input_vars
     return outgoing_gradient_0, outgoing_gradient_1
 
 
-def divide_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def divide_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var_0 = forward_input_vars[0]
     input_var_1 = forward_input_vars[1]
     outgoing_gradient_0 = incoming_gradient / input_var_1
@@ -75,7 +85,9 @@ def divide_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     return outgoing_gradient_0, outgoing_gradient_1
 
 
-def transpose_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def transpose_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     rank = len(forward_instruction.axes)
     axes = [None] * rank
     for index, axis in enumerate(forward_instruction.axes):
@@ -85,19 +97,25 @@ def transpose_jacobian(forward_instruction, incoming_gradient, forward_input_var
     return (outgoing_gradient,)
 
 
-def reshape_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def reshape_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var = forward_input_vars[0]
     outgoing_gradient = cnp.reshape(incoming_gradient, input_var.shape)
     return (outgoing_gradient,)
 
 
-def sum_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def sum_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var = forward_input_vars[0]
     outgoing_gradient = cnp.broadcast_to(incoming_gradient, input_var.shape)
     return (outgoing_gradient,)
 
 
-def max_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def max_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     axis: int = forward_instruction.axis
     keepdims: int = forward_instruction.keepdims
 
@@ -113,7 +131,9 @@ def max_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     return (outgoing_gradient,)
 
 
-def mean_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def mean_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var = forward_input_vars[0]
     axes = list(range(len(input_var.shape)))
     if isinstance(forward_instruction.axis, int):
@@ -125,17 +145,21 @@ def mean_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     return (outgoing_gradient,)
 
 
-def var_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def var_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
     raise NotImplementedError
 
 
-def sqrt_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def sqrt_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var = forward_input_vars[0]
     outgoing_gradient = cnp.reciprocal(cnp.sqrt(input_var) * 2) * incoming_gradient
     return (outgoing_gradient,)
 
 
-def gelu_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def gelu_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     @cnp.nn.wrap_as_instruction()
     def gelu_jacobian(incoming_gradient, input_var):
         return incoming_gradient * (cdf(input_var) + input_var * pdf(input_var))
@@ -145,14 +169,17 @@ def gelu_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
     return (outgoing_gradient,)
 
 
-def exp_jacobian(forward_instruction, incoming_gradient, forward_input_vars):
+def exp_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
+    incoming_gradient = incoming_gradients[0]
+
     input_var = forward_input_vars[0]
     outgoing_gradient = cnp.exp(input_var) * incoming_gradient
     return (outgoing_gradient,)
 
 
 def split_jacobian(forward_instruction, incoming_gradients, forward_input_vars):
-    return (cnp.concatenate(incoming_gradients, axis=forward_instruction.axis),)
+    outgoing_gradient = cnp.concatenate(incoming_gradients, axis=forward_instruction.axis)
+    return (outgoing_gradient,)
 
 
 __all__ = [attr for attr in THIS_MODULE.__dict__.keys() if "jacobian" in attr]

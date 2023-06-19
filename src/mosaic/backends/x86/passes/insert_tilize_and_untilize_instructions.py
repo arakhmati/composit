@@ -1,6 +1,6 @@
 from pyrsistent import PClass
 
-from composit.introspection import class_name
+from composit.numpy.core import Input
 from composit.multidigraph import topological_traversal, MultiDiGraph
 from composit.types import Node
 
@@ -24,7 +24,7 @@ def insert_tilize_and_untilize_instructions(graph):
         new_graph = new_graph.add_node(node, **attributes)
         operand_to_new_operand[(node, 0)] = (node, 0)
 
-        if class_name(graph.nodes[node]["instruction"]) == "Variable":
+        if isinstance(graph.nodes[node]["instruction"], Input):
             tilize_node = Node(name=f"tilize_{node.name}")
             new_graph = new_graph.add_node(
                 tilize_node,
