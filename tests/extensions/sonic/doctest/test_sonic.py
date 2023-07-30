@@ -7,9 +7,25 @@ TEST_DIR = pathlib.Path(__file__).parent
 INCLUDE_DIR = pathlib.Path(".") / "src" / "extensions" / "sonic" / "include"
 
 INCLUDES = ["-I", INCLUDE_DIR]
-FLAGS = ["-std=c++2a", "-fconcepts"]
+FLAGS = [
+    "-std=c++2a",
+    "-fconcepts",
+    "-fPIC",
+    "-march=native",
+    "-mavx2",
+    "-msse4",
+    "-mfma",
+    "-maes",
+    "-fno-omit-frame-pointer",
+    "-fno-exceptions",
+    "-Wall",
+    "-Wno-deprecated",
+    "-Wno-unused-function",
+    "-Wno-multichar",
+    "-Wno-format",
+]
 
-CPP_FILES = TEST_DIR.glob("*.cpp")
+CPP_FILES = TEST_DIR.glob("test_*.cpp")
 
 
 @pytest.mark.parametrize("cpp_file_name", CPP_FILES)

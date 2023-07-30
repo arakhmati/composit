@@ -4,9 +4,10 @@ namespace sonic {
 
 namespace shape {
 
-template <auto... Dims>
-struct Shape {
-  static constexpr auto volume = (1 * ... * Dims);
+template <std::size_t... Dimensions>
+struct shape_t {
+  static constexpr std::size_t volume = (1 * ... * Dimensions);
+  static constexpr std::size_t rank = sizeof...(Dimensions);
 };
 
 }  // namespace shape
