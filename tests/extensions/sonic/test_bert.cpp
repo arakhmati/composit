@@ -1,8 +1,9 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.hpp"
 
+#include "sonic/lazy_tensor.hpp"
 #include "sonic/tensor.hpp"
-#include "sonic/vector.hpp"
+#include "sonic/shape.hpp"
 
 template<
     auto QueryWeights,
@@ -30,7 +31,7 @@ struct Parameters {
 
 template<typename DataType, auto HiddenSize>
 constexpr auto create_parameters() {
-    using namespace sonic::tensor;
+    using namespace sonic::lazy_tensor;
     constexpr auto query_weights = arange<DataType, Shape<HiddenSize, HiddenSize>>();
     constexpr auto query_bias = arange<DataType, Shape<HiddenSize>>();
     constexpr auto key_weights = arange<DataType, Shape<HiddenSize, HiddenSize>>();
@@ -51,7 +52,7 @@ constexpr auto create_parameters() {
 
 template<auto BatchSize, auto SequenceSize, auto NumHeads, auto HeadSize>
 constexpr auto encoder(const auto& hidden_states, const auto& parameters) {
-    using namespace sonic::tensor;
+    using namespace sonic::lazy_tensor;
     auto query_matmul = matmul(hidden_states, parameters.query_weights);
     auto query_matmul_plus_bias = query_matmul + parameters.query_bias;
     auto reshaped_query_matmul_plus_bias = reshape<Shape<BatchSize, SequenceSize, NumHeads, HeadSize>>(query_matmul_plus_bias);
@@ -67,7 +68,7 @@ constexpr auto encoder(const auto& hidden_states, const auto& parameters) {
 }
 
 TEST_CASE("test bert encoder") {
-    using namespace sonic::tensor;
+    using namespace sonic::lazy_tensor;
 
     using data_type_t = float;
     constexpr auto batch_size = 1;
@@ -90,7 +91,7 @@ TEST_CASE("test bert encoder") {
     static_assert(output_shape::volume == sequence_size * hidden_size);
 
     const auto golden_output_data = std::array<data_type_t, shape_t::volume>{33.4664,33.8969,34.322,34.7419,35.1568,35.5668,35.9722,36.3731,53.963,54.8179,55.6597,56.4889,57.3062,58.112,58.9067,59.6909,68.5857,69.7209,70.8378,71.9375,73.0205,74.0878,75.1399,76.1774,80.5978,81.9573,83.2947,84.6109,85.9069,87.1837,88.4421,89.6828};
-    constexpr auto golden_output = as_tensor<data_type_t, shape_t>(golden_output_data);
+    constexpr auto golden_output = as_lazy_tensor<data_type_t, shape_t>(golden_output_data);
 
     CHECK(allclose(output, golden_output));
 }
