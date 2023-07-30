@@ -10,16 +10,16 @@ namespace tensor {
 
 using sonic::shape::Shape;
 
-template <typename DataType, auto Size>
+template <typename DataType, typename Shape>
 struct Tensor {
   using data_type_t = DataType;
-//  using shape_t = Shape;
+  using shape_t = Shape;
 
-  explicit Tensor(std::array<DataType, Size>&& data) : data(data) {}
+  explicit Tensor(std::array<DataType, Shape::volume>&& data) : data(data) {}
 
   template <typename Expression>
   explicit Tensor(const Expression& expression) {
-    for (auto index = 0; index < Size; index++) {
+    for (auto index = 0; index < Shape::volume; index++) {
       this->data[index] = expression[index];
     }
   }
@@ -30,13 +30,13 @@ struct Tensor {
   std::size_t size() const { return this->data.size(); }
 
  private:
-  std::array<DataType, Size> data;
+  std::array<DataType, Shape::volume> data;
 };
 
-template <typename DataType, auto Size>
-bool operator==(const Tensor<DataType, Size>& tensor_a,
-                const Tensor<DataType, Size>& tensor_b) {
-  for (auto index = 0; index < Size; index++) {
+template <typename DataType, typename Shape>
+bool operator==(const Tensor<DataType, Shape>& tensor_a,
+                const Tensor<DataType, Shape>& tensor_b) {
+  for (auto index = 0; index < Shape::volume; index++) {
     if (tensor_a[index] != tensor_b[index]) {
       return false;
     }
