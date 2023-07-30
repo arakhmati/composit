@@ -85,16 +85,19 @@ constexpr auto matmul(
   const auto function = [input_tensor_a, input_tensor_b] {
     const auto input_a = input_tensor_a();
     const auto input_b = input_tensor_b();
-    auto output = std::array<DataType, output_shape_t::volume>{};
+    auto output = tensor::Tensor<DataType, output_shape_t>{
+        std::array<DataType, output_shape_t::volume>{}};
 
     for (auto m = 0; m < M; m++) {
       for (auto k = 0; k < K; k++) {
         for (auto n = 0; n < N; n++) {
-          output[m * N + n] += input_a[m * K + k] * input_b[k * N + n];
+          output[std::make_tuple(0, m, n)] +=
+              input_a[std::make_tuple(0, m, k)] *
+              input_b[std::make_tuple(k, n)];
         }
       }
     }
-    return tensor::Tensor<DataType, output_shape_t>{std::move(output)};
+    return output;
   };
   return LazyTensor<DataType, output_shape_t, decltype(function)>{function};
 }
@@ -135,34 +138,31 @@ constexpr auto operator+(
       function};
 }
 
-template <typename DataType, auto... Dims, typename Function>
-constexpr auto exp(
-    const LazyTensor<DataType, Shape<Dims...>, Function>& input_tensor) {
+template <typename DataType, typename Shape, typename Function>
+constexpr auto exp(const LazyTensor<DataType, Shape, Function>& input_tensor) {
   const auto function = [input_tensor] {
     const auto input = input_tensor();
-    return tensor::exp(input);
+    return tensor::exp<Shape>(input);
   };
-  return LazyTensor<DataType, Shape<Dims...>, decltype(function)>{function};
+  return LazyTensor<DataType, Shape, decltype(function)>{function};
 }
 
-template <typename DataType, auto... Dims, typename Function>
-constexpr auto sqrt(
-    const LazyTensor<DataType, Shape<Dims...>, Function>& input_tensor) {
+template <typename DataType, typename Shape, typename Function>
+constexpr auto sqrt(const LazyTensor<DataType, Shape, Function>& input_tensor) {
   const auto function = [input_tensor] {
     const auto input = input_tensor();
-    return tensor::sqrt(input);
+    return tensor::sqrt<Shape>(input);
   };
-  return LazyTensor<DataType, Shape<Dims...>, decltype(function)>{function};
+  return LazyTensor<DataType, Shape, decltype(function)>{function};
 }
 
-template <typename DataType, auto... Dims, typename Function>
-constexpr auto abs(
-    const LazyTensor<DataType, Shape<Dims...>, Function>& input_tensor) {
+template <typename DataType, typename Shape, typename Function>
+constexpr auto abs(const LazyTensor<DataType, Shape, Function>& input_tensor) {
   const auto function = [input_tensor] {
     const auto input = input_tensor();
-    return tensor::abs(input);
+    return tensor::abs<Shape>(input);
   };
-  return LazyTensor<DataType, Shape<Dims...>, decltype(function)>{function};
+  return LazyTensor<DataType, Shape, decltype(function)>{function};
 }
 
 template <typename DataType, auto... Dims, typename FunctionA,
@@ -187,8 +187,7 @@ bool allclose(
 }
 
 template <typename DataType, typename Shape, typename Function>
-const auto evaluate(
-    const LazyTensor<DataType, Shape, Function>& input_tensor) {
+const auto evaluate(const LazyTensor<DataType, Shape, Function>& input_tensor) {
   const auto input = input_tensor();
   return tensor::Tensor<DataType, Shape>(input);
 }

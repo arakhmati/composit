@@ -5,6 +5,21 @@
 #include "sonic/tensor.hpp"
 #include "sonic/shape.hpp"
 
+
+TEST_CASE("test lazy tensor indexing") {
+    using namespace sonic::lazy_tensor;
+
+    using data_type_t = float;
+    using shape_t = Shape<3, 4, 8>;
+
+    constexpr auto input = arange<data_type_t, shape_t>();
+
+    CHECK(input()[std::make_tuple(0, 0, 0)] == 0.0f);
+    CHECK(input()[std::make_tuple(0, 0, 1)] == 1.0f);
+    CHECK(input()[std::make_tuple(0, 1, 0)] == 8.0f);
+    CHECK(input()[std::make_tuple(2, 3, 1)] == 89.0f);
+}
+
 TEST_CASE("test lazy tensor exp") {
     using namespace sonic::lazy_tensor;
 
