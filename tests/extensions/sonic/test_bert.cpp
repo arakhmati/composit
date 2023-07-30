@@ -89,8 +89,8 @@ TEST_CASE("test bert encoder") {
     static_assert(std::is_same_v<output_shape, Shape<batch_size, sequence_size, hidden_size>>);
     static_assert(output_shape::volume == sequence_size * hidden_size);
 
-    constexpr auto golden_output_data = std::array<data_type_t, shape_t::volume>{33.4664,33.8969,34.322,34.7419,35.1568,35.5668,35.9722,36.3731,53.963,54.8179,55.6597,56.4889,57.3062,58.112,58.9067,59.6909,68.5857,69.7209,70.8378,71.9375,73.0205,74.0878,75.1399,76.1774,80.5978,81.9573,83.2947,84.6109,85.9069,87.1837,88.4421,89.6828};
-    constexpr auto golden_output = as_tensor<data_type_t, shape_t, golden_output_data>();
+    const auto golden_output_data = std::array<data_type_t, shape_t::volume>{33.4664,33.8969,34.322,34.7419,35.1568,35.5668,35.9722,36.3731,53.963,54.8179,55.6597,56.4889,57.3062,58.112,58.9067,59.6909,68.5857,69.7209,70.8378,71.9375,73.0205,74.0878,75.1399,76.1774,80.5978,81.9573,83.2947,84.6109,85.9069,87.1837,88.4421,89.6828};
+    constexpr auto golden_output = as_tensor<data_type_t, shape_t>(golden_output_data);
 
     CHECK(allclose(output, golden_output));
 }

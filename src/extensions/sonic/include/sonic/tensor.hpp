@@ -18,41 +18,43 @@ struct Shape {
 template<auto ... Axes>
 struct Order {};
 
-template<typename DataType, typename Shape, auto Function>
+template<typename DataType, typename Shape, typename Function>
 struct Tensor {
     using data_type_t = DataType;
     using shape_t = Shape;
-    auto operator()() const {
-        return Function();
+    const Function function;
+
+    constexpr Tensor(const Function& function) : function(function) {}
+    constexpr auto operator()() const {;
+        return this->function();
     }
 };
 
-template<typename DataType, typename Shape, auto data>
-constexpr auto as_tensor() {
-    constexpr auto function = [] () -> const auto& {
+template<typename DataType, typename Shape>
+constexpr auto as_tensor(auto&& data) {
+    const auto function = [data = std::move(data)] {
         return data;
     };
-    return Tensor<DataType, Shape, function>{};
+    return Tensor<DataType, Shape, decltype(function)>{function};
 }
 
 template<typename DataType, typename Shape>
 constexpr auto arange() {
-    constexpr auto function = [&] {
+    constexpr auto function = [] {
         auto output = std::array<DataType, Shape::volume>{};
         auto index = 0.0f;
         for (auto& value : output) {
             value = index++;
         }
         return vector::Vector{std::move(output)};
-
     };
-    return Tensor<DataType, Shape, function>{};
+    return Tensor<DataType, Shape, decltype(function)>{function};
 }
 
 
 template<typename DataType, typename Shape>
 constexpr auto random() {
-    constexpr auto function = [&] {
+    constexpr auto function = [] {
         std::mt19937 generator(0);
         std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
         auto output = std::array<DataType, Shape::volume>{};
@@ -60,36 +62,35 @@ constexpr auto random() {
             value = distribution(generator);
         }
         return vector::Vector{std::move(output)};
-
     };
-    return Tensor<DataType, Shape, function>{};
+    return Tensor<DataType, Shape, decltype(function)>{function};
 }
 
-template<typename OutputShape, typename DataType, typename InputShape, auto Function>
+template<typename OutputShape, typename DataType, typename InputShape, typename Function>
 constexpr auto reshape(
     const Tensor<DataType, InputShape, Function>& input_tensor
 ) {
     static_assert(InputShape::volume == OutputShape::volume);
-    return Tensor<DataType, OutputShape, Function>{};
+    return Tensor<DataType, OutputShape, Function>{input_tensor.function};
 }
 
-template<typename Order, typename DataType, auto ... Dims, auto Function>
+template<typename Order, typename DataType, auto ... Dims, typename Function>
 constexpr auto transpose(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
 //    static_assert(InputShape::volume == OutputShape::volume);
-    return Tensor<DataType, Shape<Dims...>, Function>{};
+    return Tensor<DataType, Shape<Dims...>, Function>{input_tensor.function};
 }
 
-template<typename DataType, auto M, auto K, auto N, auto FunctionA, auto FunctionB>
+template<typename DataType, auto M, auto K, auto N, typename FunctionA, typename FunctionB>
 constexpr auto matmul(
     const Tensor<DataType, Shape<1, M, K>, FunctionA>& input_tensor_a,
     const Tensor<DataType, Shape<K, N>, FunctionB>& input_tensor_b
 ) {
     using output_shape_t =  Shape<1, M, N>;
-    constexpr auto function = [&] {
-        const auto input_a = FunctionA();
-        const auto input_b = FunctionB();
+    const auto function = [input_tensor_a, input_tensor_b] {
+        const auto input_a = input_tensor_a();
+        const auto input_b = input_tensor_b();
         auto output = std::array<DataType, output_shape_t::volume>{};
 
         for (auto m = 0; m < M; m++) {
@@ -100,32 +101,31 @@ constexpr auto matmul(
             }
         }
         return vector::Vector{std::move(output)};
-
     };
-    return Tensor<DataType, output_shape_t, function>{};
+    return Tensor<DataType, output_shape_t, decltype(function)>{function};
 }
 
-template<typename DataType, auto ... Dims, auto FunctionA, auto FunctionB>
+template<typename DataType, auto ... Dims, typename FunctionA, typename FunctionB>
 constexpr auto operator+(
     const Tensor<DataType, Shape<Dims...>, FunctionA>& input_tensor_a,
     const Tensor<DataType, Shape<Dims...>, FunctionB>& input_tensor_b
 ) {
-    constexpr auto function = [&] {
-        const auto input_a = FunctionA();
-        const auto input_b = FunctionB();
+    const auto function = [input_tensor_a, input_tensor_b] {
+        const auto input_a = input_tensor_a();
+        const auto input_b = input_tensor_b();
         return input_a + input_b;
     };
-    return Tensor<DataType, Shape<Dims...>, function>{};
+    return Tensor<DataType, Shape<Dims...>, decltype(function)>{function};
 }
 
-template<typename DataType, auto Dim_0, auto Dim_1, auto Dim_2, auto FunctionA, auto FunctionB>
+template<typename DataType, auto Dim_0, auto Dim_1, auto Dim_2, typename FunctionA, typename FunctionB>
 constexpr auto operator+(
     const Tensor<DataType, Shape<Dim_0, Dim_1, Dim_2>, FunctionA>& input_tensor_a,
     const Tensor<DataType, Shape<Dim_2>, FunctionB>& input_tensor_b
 ) {
-    constexpr auto function = [&] {
-        auto input_a = FunctionA();
-        const auto input_b = FunctionB();
+    const auto function = [input_tensor_a, input_tensor_b] {
+        auto input_a = input_tensor_a();
+        const auto input_b = input_tensor_b();
         auto index = 0;
         for (auto dim_0 = 0; dim_0 < Dim_0; dim_0++) {
             for (auto dim_1 = 0; dim_1 < Dim_1; dim_1++) {
@@ -135,45 +135,44 @@ constexpr auto operator+(
             }
         }
         return input_a;
-
     };
-    return Tensor<DataType, Shape<Dim_0, Dim_1, Dim_2>, function>{};
+    return Tensor<DataType, Shape<Dim_0, Dim_1, Dim_2>, decltype(function)>{function};
 }
 
-template<typename DataType, auto ... Dims, auto Function>
+template<typename DataType, auto ... Dims, typename Function>
 constexpr auto exp(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
-    constexpr auto function = [&] {
-        const auto input = Function();
+    const auto function = [input_tensor] {
+        const auto input = input_tensor();
         return vector::exp(input);
     };
-    return Tensor<DataType, Shape<Dims...>, function>{};
+    return Tensor<DataType, Shape<Dims...>, decltype(function)>{function};
 }
 
-template<typename DataType, auto ... Dims, auto Function>
+template<typename DataType, auto ... Dims, typename Function>
 constexpr auto sqrt(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
-    constexpr auto function = [&] {
-        const auto input = Function();
+    const auto function = [input_tensor] {
+        const auto input = input_tensor();
         return vector::sqrt(input);
     };
-    return Tensor<DataType, Shape<Dims...>, function>{};
+    return Tensor<DataType, Shape<Dims...>, decltype(function)>{function};
 }
 
-template<typename DataType, auto ... Dims, auto Function>
+template<typename DataType, auto ... Dims, typename Function>
 constexpr auto abs(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
-    constexpr auto function = [&] {
-        const auto input = Function();
+    const auto function = [input_tensor] {
+        const auto input = input_tensor();
         return vector::abs(input);
     };
-    return Tensor<DataType, Shape<Dims...>, function>{};
+    return Tensor<DataType, Shape<Dims...>, decltype(function)>{function};
 }
 
-template<typename DataType, auto ... Dims, auto FunctionA, auto FunctionB>
+template<typename DataType, auto ... Dims, typename FunctionA, typename FunctionB>
 bool allclose(
     const Tensor<DataType, Shape<Dims...>, FunctionA>& input_tensor_a,
     const Tensor<DataType, Shape<Dims...>, FunctionB>& input_tensor_b,
@@ -184,8 +183,8 @@ bool allclose(
         return std::abs(a - b) <= (atol + rtol * std::abs(b));
     };
 
-    const auto input_a = FunctionA();
-    const auto input_b = FunctionB();
+    const auto input_a = input_tensor_a();
+    const auto input_b = input_tensor_b();
     constexpr auto volume = Shape<Dims...>::volume;
     for (auto index = 0; index < volume; index++) {
         if (not scalar_allclose(input_a[index], input_b[index])) {
@@ -196,22 +195,22 @@ bool allclose(
 }
 
 
-template<typename DataType, auto ... Dims, auto Function>
-auto evaluate(
+template<typename DataType, auto ... Dims, typename Function>
+const auto evaluate(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
-    const auto input = Function();
+    const auto input = input_tensor();
     constexpr auto volume = Shape<Dims...>::volume;
     return vector::Vector<DataType, volume>(input);
 }
 
 
-template<typename DataType, auto ... Dims, auto Function>
+template<typename DataType, auto ... Dims, typename Function>
 void print(
     const Tensor<DataType, Shape<Dims...>, Function>& input_tensor
 ) {
     constexpr auto volume = Shape<Dims...>::volume;
-    const auto input = Function();
+    const auto input = input_tensor();
     std::cout << "{";
     for (auto index = 0; index < volume; index++) {
         std::cout << input[index];
