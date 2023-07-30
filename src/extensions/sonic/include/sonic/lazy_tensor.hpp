@@ -42,7 +42,7 @@ constexpr auto arange() {
     for (auto& value : output) {
       value = index++;
     }
-    return tensor::Tensor{std::move(output)};
+    return tensor::Tensor<DataType, Shape>{std::move(output)};
   };
   return LazyTensor<DataType, Shape, decltype(function)>{function};
 }
@@ -56,7 +56,7 @@ constexpr auto random() {
     for (auto& value : output) {
       value = distribution(generator);
     }
-    return tensor::Tensor{std::move(output)};
+    return tensor::Tensor<DataType, Shape>{std::move(output)};
   };
   return LazyTensor<DataType, Shape, decltype(function)>{function};
 }
@@ -94,7 +94,7 @@ constexpr auto matmul(
         }
       }
     }
-    return tensor::Tensor{std::move(output)};
+    return tensor::Tensor<DataType, output_shape_t>{std::move(output)};
   };
   return LazyTensor<DataType, output_shape_t, decltype(function)>{function};
 }
@@ -186,12 +186,11 @@ bool allclose(
   return true;
 }
 
-template <typename DataType, auto... Dims, typename Function>
+template <typename DataType, typename Shape, typename Function>
 const auto evaluate(
-    const LazyTensor<DataType, Shape<Dims...>, Function>& input_tensor) {
+    const LazyTensor<DataType, Shape, Function>& input_tensor) {
   const auto input = input_tensor();
-  constexpr auto volume = Shape<Dims...>::volume;
-  return tensor::Tensor<DataType, volume>(input);
+  return tensor::Tensor<DataType, Shape>(input);
 }
 
 }  // namespace lazy_tensor
