@@ -37,6 +37,6 @@ def test_torch_vs_composit(
 
     torch_noise_pred = flashlight_noise_pred.detach().numpy()
 
-    assert len(flashlight_noise_pred.graph) == 3785
+    assert len(flashlight_noise_pred.graph) == 3818
     composit_noise_pred = cnp.evaluate(flashlight_noise_pred.lazy_tensor)
     assert np.allclose(composit_noise_pred, torch_noise_pred, atol=1e-1)

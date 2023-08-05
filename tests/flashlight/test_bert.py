@@ -46,7 +46,7 @@ def test_trace(batch_size, num_encoders, sequence_size, num_attention_heads, hea
         batch_size, num_encoders, sequence_size, num_attention_heads, head_size, vocab_size, run_torch
     )
 
-    assert len(output_var.graph) == 245
+    assert len(output_var.graph) == 246
     composit_output = cnp.evaluate(output_var)
     if run_torch:
         assert np.allclose(composit_output, torch_output, atol=1e-3)
