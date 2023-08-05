@@ -35,21 +35,19 @@ def inspect(*outputs):
         type_name = class_name(operation)
 
         shapes = attributes["shapes"]
-        assert len(shapes) == 1
-        shape = shapes[0]
-
         dtypes = attributes["dtypes"]
-        assert len(dtypes) == 1
-        dtype = dtypes[0]
 
-        volume = math.prod(shape)
-        memory_in_bytes = volume * np.dtype(dtype).itemsize
+        volume = 0
+        memory_in_bytes = 0
+        for shape, dtype in zip(shapes, dtypes):
+            volume += math.prod(shape)
+            memory_in_bytes += volume * np.dtype(dtype).itemsize
 
         dataframe.loc[len(dataframe)] = [
             name,
             type_name,
-            shape,
-            dtype,
+            shapes,
+            dtypes,
             volume,
             memory_in_bytes,
         ]
