@@ -1,5 +1,4 @@
 # ruff: noqa: F401
-from .core import wrap_as_operation
 from .operations import *
 from .evaluate import Cache, evaluate
 
