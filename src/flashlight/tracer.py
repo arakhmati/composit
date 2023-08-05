@@ -1,9 +1,10 @@
 from contextlib import contextmanager
 import math
 
+from loguru import logger
+import numpy as np
 import torch
 import torch.nn.functional
-from loguru import logger
 
 import composit as cnp
 from flashlight.introspection import convert_torch_tensors_to_lazy_tensors, reset_graph_input_index
@@ -45,6 +46,9 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "get_default_dtype",
     "group_norm",  # TODO: override?
     "int",
+    "int8",
+    "int16",
+    "int32",
     "int64",
     "isfinite",
     "_is_functional_tensor",
@@ -59,6 +63,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "max_pool2d",  # TODO: override?
     "nn",
     "no_grad",
+    "ones",
     "optim",
     "overrides",
     "rand",
@@ -76,8 +81,10 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "tensor",
     "Tensor",
     "Size",
+    "SymFloat",
     "_tensor_str",
     "torch",
+    "uint8",
     "utils",
     "__version__",
     "zeros",
@@ -223,6 +230,19 @@ def truediv(run_torch):
     return implementation
 
 
+def neg(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = lazy_input * -1
+        if run_torch:
+            output = TORCH["neg"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def getitem(run_torch):
     def implementation(*args):
         lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
@@ -237,7 +257,16 @@ def getitem(run_torch):
             if isinstance(indices, int):
                 indices = [indices]
             else:
-                indices = [index.tolist() if isinstance(index, torch.Tensor) else index for index in indices]
+
+                def process_index(index):
+                    if isinstance(index, torch.Tensor):
+                        index = index.tolist()
+                        assert len(index) == 1
+                        return index[0]
+                    else:
+                        return index
+
+                indices = [process_index(index) for index in indices]
             lazy_output = cnp.get_item(lazy_input, indices)
 
         if run_torch:
@@ -322,7 +351,18 @@ def contiguous(run_torch):
 def to(run_torch):
     def implementation(*args, **kwargs):
         lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
-        lazy_output = lazy_input
+        if len(args) == 2:
+            _, target = args
+        else:
+            assert len(args) == 1
+            target = kwargs["dtype"]
+        if isinstance(target, torch.dtype):
+            numpy_dtype = {torch.float32: np.float32, torch.bool: bool, torch.int32: np.int32}[target]
+            lazy_output = cnp.astype(lazy_input, dtype=numpy_dtype)
+        else:
+            logger.warning(f"to({target}) is not implemented")
+            lazy_output = lazy_input
+
         if run_torch:
             output = TORCH_TENSOR["to"](*args, **kwargs)
             return Tensor(output, lazy_output)
@@ -407,6 +447,30 @@ def chunk(run_torch):
     return implementation
 
 
+def masked_fill(run_torch):
+    def implementation(*args, **kwargs):
+        @cnp.wrap_as_operation()
+        def masked_fill(input_tensor, mask, value):
+            input_tensor = torch.from_numpy(input_tensor)
+            mask = torch.from_numpy(mask)
+            value = torch.from_numpy(value)
+            output_tensor = TORCH_TENSOR["masked_fill"](input_tensor, mask, value)
+            output_tensor = output_tensor.detach().numpy()
+            return output_tensor
+
+        lazy_input, lazy_mask = convert_torch_tensors_to_lazy_tensors(*args)
+        value = args[2]
+        lazy_output = masked_fill(lazy_input, lazy_mask, value)
+
+        if run_torch:
+            output = TORCH_TENSOR["masked_fill"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def matmul(run_torch):
     def implementation(*args):
         lazy_input_a, lazy_input_b = convert_torch_tensors_to_lazy_tensors(*args)
@@ -485,12 +549,68 @@ def tanh(run_torch):
     return implementation
 
 
+def rsqrt(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.reciprocal(cnp.sqrt(lazy_input))
+        if run_torch:
+            output = TORCH["rsqrt"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def sigmoid(run_torch):
     def implementation(*args):
         (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
         lazy_output = cnp.nn.sigmoid(lazy_input)
         if run_torch:
             output = TORCH["sigmoid"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def pow(run_torch):
+    def implementation(*args):
+        lazy_input_a, power = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = cnp.power(lazy_input_a, power)
+        if run_torch:
+            output = TORCH["pow"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def mean(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 1 and "keepdim" in kwargs
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        _, axis = args
+        keepdims = kwargs["keepdim"]
+        lazy_output = cnp.mean(lazy_input, axis, keepdims=keepdims)
+        if run_torch:
+            output = TORCH["mean"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def max_(run_torch):
+    def implementation(*args, **kwargs):
+        # TODO: implement this function properly
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(args[0])
+        lazy_output = lazy_input
+        if run_torch:
+            output = TORCH["max"](*args, **kwargs)
             return Tensor(output, lazy_output)
         else:
             return lazy_output
@@ -521,6 +641,42 @@ def flatten(run_torch):
         lazy_output = cnp.reshape(lazy_input, (math.prod(lazy_input.shape),))
         if run_torch:
             output = TORCH["flatten"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def squeeze(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        _, axis = args
+        old_shape = lazy_input.shape
+        axis = (axis + len(old_shape)) % len(old_shape)
+        new_shape = tuple(old_shape[:axis]) + tuple(old_shape[axis + 1 :])
+        lazy_output = cnp.reshape(lazy_input, new_shape)
+        if run_torch:
+            output = TORCH["squeeze"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def unsqueeze(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+        lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
+        _, axis = args
+        old_shape = lazy_input.shape
+        axis = (axis + len(old_shape)) % len(old_shape)
+        new_shape = tuple(old_shape[:axis]) + (1,) + tuple(old_shape[axis:])
+        lazy_output = cnp.reshape(lazy_input, new_shape)
+        if run_torch:
+            output = TORCH["unsqueeze"](*args, **kwargs)
             return Tensor(output, lazy_output)
         else:
             return lazy_output
@@ -851,13 +1007,18 @@ def trace(*, run_torch=False):
 
     setattr(torch, "matmul", matmul(run_torch))
     setattr(torch, "bmm", bmm(run_torch))
+    setattr(torch, "neg", neg(run_torch))
     setattr(torch, "exp", exp(run_torch))
     setattr(torch, "sin", sin(run_torch))
     setattr(torch, "cos", cos(run_torch))
     setattr(torch, "tanh", tanh(run_torch))
+    setattr(torch, "rsqrt", rsqrt(run_torch))
     setattr(torch, "sigmoid", sigmoid(run_torch))
+    setattr(torch, "pow", pow(run_torch))
     setattr(torch, "cat", cat(run_torch))
     setattr(torch, "flatten", flatten(run_torch))
+    setattr(torch, "mean", mean(run_torch))
+    setattr(torch, "max", max_(run_torch))
 
     setattr(torch.nn.functional, "linear", linear(run_torch))
     setattr(torch.nn.functional, "conv2d", conv2d(run_torch))
@@ -883,17 +1044,24 @@ def trace(*, run_torch=False):
     setattr(torch.Tensor, "__mul__", mul(run_torch))
     setattr(torch.Tensor, "__rmul__", rmul(run_torch))
     setattr(torch.Tensor, "__truediv__", truediv(run_torch))
+    setattr(torch.Tensor, "__neg__", neg(run_torch))
     setattr(torch.Tensor, "__matmul__", matmul(run_torch))
     setattr(torch.Tensor, "__getitem__", getitem(run_torch))
     setattr(torch.Tensor, "view", view(run_torch))
     setattr(torch.Tensor, "reshape", reshape(run_torch))
     setattr(torch.Tensor, "expand", expand(run_torch))
+    setattr(torch.Tensor, "unsqueeze", unsqueeze(run_torch))
+    setattr(torch.Tensor, "squeeze", squeeze(run_torch))
     setattr(torch.Tensor, "permute", permute(run_torch))
     setattr(torch.Tensor, "transpose", transpose(run_torch))
     setattr(torch.Tensor, "contiguous", contiguous(run_torch))
     setattr(torch.Tensor, "to", to(run_torch))
     setattr(torch.Tensor, "float", float(run_torch))
     setattr(torch.Tensor, "chunk", chunk(run_torch))
+    setattr(torch.Tensor, "masked_fill", masked_fill(run_torch))
+    setattr(torch.Tensor, "pow", pow(run_torch))
+    setattr(torch.Tensor, "mean", mean(run_torch))
+    setattr(torch.Tensor, "max", max_(run_torch))
 
     yield
 
