@@ -4,7 +4,7 @@ import inspect
 
 import numpy as np
 from pyrsistent import immutable, PClass, field
-from toolz import functoolz, memoize
+from toolz import functoolz, memoize, partial
 
 from composit.introspection import class_name
 from composit.multidigraph import MultiDiGraph, merge_graphs
@@ -224,6 +224,20 @@ def create_numpy_concatenate_function():
     return function
 
 
+def wrap_as_operation():
+    def outer_wrapper(compute_function):
+        def wrapper(*operands, **klass_kwargs):
+            klass_attributes = list(klass_kwargs.keys())
+            klass = immutable(klass_attributes, name=compute_function.__name__)
+            klass.__call__ = partial(compute_function, **klass_kwargs)
+            operation = klass(**klass_kwargs)
+            return create_from_numpy_compute_operation(*operands, operation=operation)
+
+        return wrapper
+
+    return outer_wrapper
+
+
 __all__ = [
     "create_input",
     "create_from_numpy_compute_operation",
@@ -231,4 +245,5 @@ __all__ = [
     "create_numpy_binary_compute_function",
     "create_numpy_concatenate_function",
     "get_operands",
+    "wrap_as_operation",
 ]

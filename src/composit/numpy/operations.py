@@ -12,6 +12,7 @@ from composit.numpy.core import (
     create_numpy_compute_function,
     create_numpy_binary_compute_function,
     create_numpy_concatenate_function,
+    wrap_as_operation,
 )
 from composit.introspection import get_name_from_args_and_kwargs
 from composit.types import LazyTensor
@@ -180,7 +181,7 @@ COMPUTE_FUNCTIONS = [
     "sin",
     "cos",
     "tanh",
-    # Data Movement
+    # Data Manipulation
     "transpose",
     "reshape",
     "split",
@@ -220,3 +221,11 @@ for function_name in BINARY_COMPUTE_FUNCTIONS:
 
 setattr(THIS_MODULE, "concatenate", create_numpy_concatenate_function())
 __all__.append("concatenate")
+
+
+@wrap_as_operation()
+def astype(input_tensor, *, dtype: np.dtype):
+    return input_tensor.astype(dtype)
+
+
+__all__.append("astype")

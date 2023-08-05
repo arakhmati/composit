@@ -129,9 +129,8 @@ As an example, let's implement `relu`:
 import numpy as np
 
 import composit.numpy as cnp
-from composit.nn.core import wrap_as_operation
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def relu(input_tensor: np.ndarray) -> np.ndarray:
     return np.maximum(input_tensor, 0)
 

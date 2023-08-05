@@ -2,31 +2,31 @@ import math
 
 import numpy as np
 
-from composit.nn.core import wrap_as_operation
+import composit as cnp
 from composit.nn import numpy_functions
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def embedding(input_tensor, weights):
     return numpy_functions.embedding(input_tensor, weights)
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def gelu(input_tensor):
     return numpy_functions.gelu(input_tensor)
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def relu(input_tensor):
     return np.maximum(input_tensor, 0)
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def sigmoid(input_tensor):
     return numpy_functions.sigmoid(input_tensor)
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def silu(input_tensor):
     return input_tensor * numpy_functions.sigmoid(input_tensor)
 
@@ -112,7 +112,7 @@ def convolution_channels_last(image, filters, strides, padding):
     return output
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def convolution(image, filters, *, channels_last, strides=(1, 1), padding=(0, 0)):
     data_format_to_function = {
         False: convolution_channels_first,
@@ -195,7 +195,7 @@ def pool_channels_last(image, *, kernel_size, strides, padding, pool_function):
     return output
 
 
-@wrap_as_operation()
+@cnp.wrap_as_operation()
 def pool(image, *, pool_function, kernel_size, channels_last, strides=(1, 1), padding=(0, 0)):
     data_format_to_function = {
         False: pool_channels_first,
