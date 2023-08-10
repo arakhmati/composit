@@ -215,7 +215,7 @@ auto comparison_loop(const Function& function, const sonic::shape::shape_t<Limit
     }
   }
   return true;
-};
+}
 }  // namespace detail
 
 template <typename data_type_t, typename shape_t, typename stride_type_t>
@@ -255,7 +255,7 @@ void void_loop(const Function& function, const sonic::shape::shape_t<Limit, Limi
       void_loop(function, sonic::shape::shape_t<Limits...>{}, indices..., index);
     }
   }
-};
+}
 }  // namespace detail
 
 template <typename data_type_t, typename shape_t, typename stride_t>
