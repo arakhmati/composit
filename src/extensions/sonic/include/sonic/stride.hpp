@@ -24,7 +24,7 @@ constexpr auto compute_stride(const sonic::shape::shape_t<Dimension, Dimensions.
   return sonic::metaprogramming::merge(outer_stride, inner_stride);
 }
 
-constexpr auto compute_flat_index(const stride_t<>&, const std::tuple<>& indices) {
+constexpr auto compute_flat_index(const stride_t<>&, const std::tuple<>&) {
   return 0;
 }
 

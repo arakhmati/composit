@@ -16,6 +16,8 @@ FLAGS = [
     "-maes",
     "-fPIC",
     "-Wall",
+    "-Wpedantic",
+    "-Wextra",
     "-Wno-deprecated",
     "-Wno-unused-function",
     "-Wno-multichar",
