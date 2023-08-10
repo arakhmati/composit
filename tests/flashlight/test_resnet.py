@@ -26,7 +26,7 @@ def load_image(url):
     return input_tensor.unsqueeze(0).numpy()
 
 
-def test_resnet(run_torch=True):
+def trace_resnet(run_torch=True):
     torch_model = torch.hub.load("pytorch/vision:v0.10.0", "resnet18", pretrained=True).eval()
 
     image = load_image("https://github.com/pytorch/hub/raw/master/images/dog.jpg")
@@ -44,7 +44,7 @@ def test_resnet(run_torch=True):
 
 @pytest.mark.parametrize("run_torch", [True])
 def test_trace(run_torch):
-    output_var, torch_output = test_resnet(run_torch)
+    output_var, torch_output = trace_resnet(run_torch)
     assert len(output_var.graph) == 414
     composit_output = cnp.evaluate(output_var)
     if run_torch:
@@ -52,8 +52,8 @@ def test_trace(run_torch):
 
 
 def test_graph_cache():
-    output_var, _ = test_resnet()
+    output_var, _ = trace_resnet()
     first_hash = hash(output_var)
 
-    output_var, _ = test_resnet()
+    output_var, _ = trace_resnet()
     assert first_hash == hash(output_var)

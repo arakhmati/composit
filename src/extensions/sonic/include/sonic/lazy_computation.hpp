@@ -177,11 +177,11 @@ constexpr auto matmul(
                                                     const auto n_end) {
       for (std::size_t batch_index = 0; batch_index < batch_size; batch_index++) {
         for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += tile_size) {
-          for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += tile_size) {
-            for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
+          for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
+            for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += tile_size) {
               for (std::size_t m = m_tile; m < m_tile + tile_size; m++) {
-                for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
-                  for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
+                for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
+                  for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
                     output[std::make_tuple(batch_index, m, n)] +=
                         input_a[std::make_tuple(batch_index, m, k)] * input_b[std::make_tuple(k, n)];
                   }
@@ -232,6 +232,53 @@ constexpr auto matmul(
 }
 
 template <typename data_type_t,
+          auto batch_size,
+          auto m_size,
+          auto k_size,
+          auto n_size,
+          typename... rest_a_t,
+          typename... rest_b_t>
+constexpr auto matmul_with_transposed_input_b(
+    const lazy_computation_t<data_type_t, const sonic::shape::shape_t<batch_size, m_size, k_size>, const rest_a_t...>&
+        input_computation_a,
+    const lazy_computation_t<data_type_t, const sonic::shape::shape_t<n_size, k_size>, const rest_b_t...>&
+        input_computation_b,
+    auto output_storage) {
+  using output_shape_t = sonic::shape::shape_t<batch_size, m_size, n_size>;
+  using output_stride_t = decltype(sonic::stride::compute_stride(output_shape_t{}));
+  const auto function = [input_computation_a, input_computation_b, output_storage] {
+    const auto input_a = input_computation_a();
+    const auto input_b = input_computation_b();
+    auto output =
+        tensor::tensor_t<data_type_t, output_shape_t, output_stride_t, decltype(output_storage)>{output_storage};
+
+    constexpr std::size_t tile_size = 16;
+    static_assert(m_size % tile_size == 0);
+    static_assert(k_size % tile_size == 0);
+    static_assert(n_size % tile_size == 0);
+
+    for (std::size_t batch_index = 0; batch_index < batch_size; batch_index++) {
+      for (std::size_t m_tile = 0; m_tile < m_size; m_tile += tile_size) {
+        for (std::size_t n_tile = 0; n_tile < n_size; n_tile += tile_size) {
+          for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
+            for (std::size_t m = m_tile; m < m_tile + tile_size; m++) {
+              for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
+                for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
+                  output[std::make_tuple(batch_index, m, n)] +=
+                      input_a[std::make_tuple(batch_index, m, k)] * input_b[std::make_tuple(n, k)];
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return output;
+  };
+  return lazy_computation_t<data_type_t, const output_shape_t, const output_stride_t, decltype(function)>{function};
+}
+
+template <typename data_type_t,
           auto batch_size_0,
           auto batch_size_1,
           auto m_size,
@@ -253,17 +300,28 @@ constexpr auto matmul(const lazy_computation_t<data_type_t,
     const auto input_b = input_computation_b();
     auto output = tensor::tensor_t<data_type_t, output_shape_t, output_stride_t>{std::move(output_storage)};
 
+    constexpr std::size_t tile_size = 16;
+    static_assert(m_size % tile_size == 0);
+    static_assert(k_size % tile_size == 0);
+    static_assert(n_size % tile_size == 0);
+
     auto run_thread = [&input_a, &input_b, &output](const std::size_t batch_1_start, const std::size_t batch_1_end,
                                                     const std::size_t m_start, const std::size_t m_end,
                                                     const std::size_t n_start, const std::size_t n_end) {
       for (std::size_t batch_index_0 = 0; batch_index_0 < batch_size_0; batch_index_0++) {
         for (std::size_t batch_index_1 = batch_1_start; batch_index_1 < batch_1_end; batch_index_1++) {
-          for (std::size_t m = m_start; m < m_end; m++) {
-            for (std::size_t n = n_start; n < n_end; n++) {
-              for (std::size_t k = 0; k < k_size; k++) {
-                output[std::make_tuple(batch_index_0, batch_index_1, m, n)] +=
-                    input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)] *
-                    input_b[std::make_tuple(batch_index_0, batch_index_1, k, n)];
+          for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += tile_size) {
+            for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
+              for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += tile_size) {
+                for (std::size_t m = m_tile; m < m_tile + tile_size; m++) {
+                  for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
+                    for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
+                      output[std::make_tuple(batch_index_0, batch_index_1, m, n)] +=
+                          input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)] *
+                          input_b[std::make_tuple(batch_index_0, batch_index_1, k, n)];
+                    }
+                  }
+                }
               }
             }
           }
