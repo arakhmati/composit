@@ -50,7 +50,7 @@ template <typename data_type_t, typename shape_t>
 constexpr auto arange() {
   using stride_t = decltype(sonic::stride::compute_stride(shape_t{}));
   constexpr auto function = [] {
-    auto storage = std::array<data_type_t, shape_t::volume>{};
+    auto storage = sonic::tensor::aligned_array<data_type_t, shape_t::volume>{};
     auto index = 0.0f;
     for (auto& value : storage) {
       value = index++;
@@ -66,7 +66,7 @@ constexpr auto random() {
   constexpr auto function = [] {
     std::mt19937 generator(0);
     std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
-    auto storage = std::array<data_type_t, shape_t::volume>{};
+    auto storage = sonic::tensor::aligned_array<data_type_t, shape_t::volume>{};
     for (auto& value : storage) {
       value = distribution(generator);
     }
@@ -228,7 +228,8 @@ constexpr auto matmul(
     const lazy_computation_t<data_type_t, const sonic::shape::shape_t<k_size, n_size>, const rest_b_t...>&
         input_computation_b) {
   using output_shape_t = sonic::shape::shape_t<batch_size, m_size, n_size>;
-  return matmul(input_computation_a, input_computation_b, std::array<data_type_t, output_shape_t::volume>{});
+  return matmul(input_computation_a, input_computation_b,
+                sonic::tensor::aligned_array<data_type_t, output_shape_t::volume>{});
 }
 
 template <typename data_type_t,
@@ -371,7 +372,8 @@ constexpr auto matmul(const lazy_computation_t<data_type_t,
                                                const sonic::shape::shape_t<batch_size_0, batch_size_1, k_size, n_size>,
                                                const rest_b_t...>& input_computation_b) {
   using output_shape_t = sonic::shape::shape_t<batch_size_0, batch_size_1, m_size, n_size>;
-  return matmul(input_computation_a, input_computation_b, std::array<data_type_t, output_shape_t::volume>{});
+  return matmul(input_computation_a, input_computation_b,
+                sonic::tensor::aligned_array<data_type_t, output_shape_t::volume>{});
 }
 
 template <typename data_type_t, typename shape_t, typename stride_t, typename... rest_a_t, typename... rest_b_t>
@@ -493,7 +495,8 @@ constexpr auto softmax(
   const auto function = [input_computation] {
     auto input = input_computation();
 
-    auto temporary = tensor::tensor_t<data_type_t, reduced_shape_t>{std::array<data_type_t, reduced_shape_t::volume>{}};
+    auto temporary = tensor::tensor_t<data_type_t, reduced_shape_t>{
+        sonic::tensor::aligned_array<data_type_t, reduced_shape_t::volume>{}};
     for (std::size_t dim_0 = 0; dim_0 < Dimension_0; dim_0++) {
       for (std::size_t dim_1 = 0; dim_1 < Dimension_1; dim_1++) {
         for (std::size_t dim_2 = 0; dim_2 < Dimension_2; dim_2++) {
@@ -520,7 +523,8 @@ constexpr auto softmax(
       }
     }
 
-    temporary = tensor::tensor_t<data_type_t, reduced_shape_t>{std::array<data_type_t, reduced_shape_t::volume>{}};
+    temporary = tensor::tensor_t<data_type_t, reduced_shape_t>{
+        sonic::tensor::aligned_array<data_type_t, reduced_shape_t::volume>{}};
     for (std::size_t dim_0 = 0; dim_0 < Dimension_0; dim_0++) {
       for (std::size_t dim_1 = 0; dim_1 < Dimension_1; dim_1++) {
         for (std::size_t dim_2 = 0; dim_2 < Dimension_2; dim_2++) {
