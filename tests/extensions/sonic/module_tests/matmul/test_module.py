@@ -115,3 +115,21 @@ def test_benchmark(tmp_path, num_iterations, batch_size, m_size, k_size, n_size)
     logger.info(f"sonic_duration: {sonic_duration}")
 
     logger.info(f"torch is {sonic_duration / torch_duration}x faster")
+
+
+@pytest.mark.parametrize("num_iterations", [10])
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("m_size", [128])
+@pytest.mark.parametrize("k_size", [128])
+@pytest.mark.parametrize("n_size", [128])
+def test_profile(tmp_path, num_iterations, batch_size, m_size, k_size, n_size):
+    weights = torch.zeros(k_size, n_size)
+
+    sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
+
+    def sonic_function():
+        input_tensor = torch.zeros(batch_size, m_size, k_size)
+        sonic_model(input_tensor, weights)
+
+    for _ in range(num_iterations):
+        sonic_function()
