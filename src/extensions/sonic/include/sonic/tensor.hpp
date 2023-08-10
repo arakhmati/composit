@@ -11,10 +11,13 @@ namespace sonic {
 
 namespace tensor {
 
+template <typename T, std::size_t N>
+struct __attribute__((aligned(32))) aligned_array : public std::array<T, N> {};
+
 template <typename data_type_template,
           typename shape_template,
           typename stride_template = decltype(sonic::stride::compute_stride(shape_template{})),
-          typename storage_t = std::array<data_type_template, shape_template::volume>>
+          typename storage_t = aligned_array<data_type_template, shape_template::volume>>
 struct tensor_t {
   using data_type_t = data_type_template;
   using shape_t = shape_template;
@@ -24,9 +27,9 @@ struct tensor_t {
 
   explicit tensor_t(const data_type_t* storage) : storage{storage} {}
 
-  explicit tensor_t(std::array<data_type_t, shape_t::volume>&& storage) : storage{storage} {}
+  explicit tensor_t(aligned_array<data_type_t, shape_t::volume>&& storage) : storage{storage} {}
 
-  explicit tensor_t(const std::array<data_type_t, shape_t::volume>& storage) : storage{storage} {}
+  explicit tensor_t(const aligned_array<data_type_t, shape_t::volume>& storage) : storage{storage} {}
 
   inline auto& operator[](std::int64_t index) { return this->storage[index]; }
   inline auto operator[](std::int64_t index) const { return this->storage[index]; }
@@ -276,7 +279,7 @@ auto to_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) 
   if constexpr (std::is_same_v<expression_t<data_type_t, shape_t, rest_t...>, tensor_t<data_type_t, shape_t>>) {
     return expression;
   } else {
-    std::array<data_type_t, shape_t::volume> storage;
+    aligned_array<data_type_t, shape_t::volume> storage;
     copy(expression, storage.data());
     return tensor_t<data_type_t, shape_t>(std::move(storage));
   }
@@ -284,7 +287,7 @@ auto to_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) 
 
 template <typename data_type_t, typename shape_t, typename... rest_t, template <typename...> typename expression_t>
 auto copy_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) {
-  std::array<data_type_t, shape_t::volume> storage;
+  aligned_array<data_type_t, shape_t::volume> storage;
   copy(expression, storage.data());
   return tensor_t<data_type_t, shape_t>(std::move(storage));
 }
