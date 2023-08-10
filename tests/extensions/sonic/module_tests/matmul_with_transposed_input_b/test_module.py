@@ -16,7 +16,7 @@ TEST_DIRECTORY = pathlib.Path(__file__).parent
 
 
 def torch_model(input_tensor, weights):
-    return input_tensor @ weights
+    return input_tensor @ weights.T
 
 
 def create_sonic_model(batch_size, m_size, k_size, n_size):
@@ -46,7 +46,7 @@ def create_sonic_model(batch_size, m_size, k_size, n_size):
     run = getattr(shared_library, "run")
 
     def run_model(torch_input_tensor, torch_weights):
-        output_shape = torch_input_tensor.shape[:-1] + torch_weights.shape[-1:]
+        output_shape = torch_input_tensor.shape[:-1] + torch_weights.shape[-2:-1]
 
         np_input_tensor = torch_input_tensor.numpy()
         np_weights = torch_weights.numpy()
@@ -64,12 +64,12 @@ def create_sonic_model(batch_size, m_size, k_size, n_size):
 
 
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("m_size", [128])
-@pytest.mark.parametrize("k_size", [128])
-@pytest.mark.parametrize("n_size", [128])
+@pytest.mark.parametrize("m_size", [16])
+@pytest.mark.parametrize("k_size", [48])
+@pytest.mark.parametrize("n_size", [32])
 def test_torch_vs_sonic(tmp_path, batch_size, m_size, k_size, n_size):
     input_tensor = torch.randn(batch_size, m_size, k_size)
-    weights = torch.randn(k_size, n_size)
+    weights = torch.randn(k_size, n_size).T.contiguous()
 
     sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
 
@@ -87,7 +87,7 @@ def test_torch_vs_sonic(tmp_path, batch_size, m_size, k_size, n_size):
 @pytest.mark.parametrize("k_size", [128])
 @pytest.mark.parametrize("n_size", [128])
 def test_benchmark(tmp_path, num_iterations, batch_size, m_size, k_size, n_size):
-    weights = torch.rand(k_size, n_size)
+    weights = torch.rand(k_size, n_size).T.contiguous()
 
     sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
 
