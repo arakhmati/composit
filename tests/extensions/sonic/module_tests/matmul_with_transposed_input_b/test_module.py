@@ -1,10 +1,8 @@
 import pytest
 
 import pathlib
-import time
 from ctypes import cdll
 
-from loguru import logger
 import jinja2
 import numpy as np
 import torch
@@ -68,7 +66,7 @@ def create_sonic_model(batch_size, m_size, k_size, n_size):
 @pytest.mark.parametrize("m_size", [16])
 @pytest.mark.parametrize("k_size", [48])
 @pytest.mark.parametrize("n_size", [32])
-def test_torch_vs_sonic(tmp_path, batch_size, m_size, k_size, n_size):
+def test_torch_vs_sonic(batch_size, m_size, k_size, n_size):
     input_tensor = torch.randn(batch_size, m_size, k_size)
     weights = torch.randn(k_size, n_size).T.contiguous()
 
@@ -82,37 +80,26 @@ def test_torch_vs_sonic(tmp_path, batch_size, m_size, k_size, n_size):
     ), f"{list(torch_output.flatten())} != {list(sonic_encoder_output.flatten())}"
 
 
-@pytest.mark.parametrize("num_iterations", [1000])
+@pytest.mark.parametrize("module", ["torch", "sonic"])
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("m_size", [128])
 @pytest.mark.parametrize("k_size", [128])
 @pytest.mark.parametrize("n_size", [128])
-def test_benchmark(tmp_path, num_iterations, batch_size, m_size, k_size, n_size):
+def test_benchmark(benchmark, module, batch_size, m_size, k_size, n_size):
     weights = torch.rand(k_size, n_size).T.contiguous()
 
-    sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
+    function = None
+    if module == "torch":
 
-    def torch_function():
-        input_tensor = torch.randn(batch_size, m_size, k_size)
-        torch_model(input_tensor, weights)
+        def function():
+            input_tensor = torch.randn(batch_size, m_size, k_size)
+            torch_model(input_tensor, weights)
 
-    torch_function()
-    start = time.time_ns()
-    for _ in range(num_iterations):
-        torch_function()
-    end = time.time_ns()
-    torch_duration = (end - start) / num_iterations / 1e3
-    logger.info(f"torch_duration: {torch_duration}")
+    elif module == "sonic":
+        sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
 
-    def sonic_function():
-        input_tensor = torch.randn(batch_size, m_size, k_size)
-        sonic_model(input_tensor, weights)
+        def function():
+            input_tensor = torch.randn(batch_size, m_size, k_size)
+            sonic_model(input_tensor, weights)
 
-    start = time.time_ns()
-    for _ in range(num_iterations):
-        sonic_function()
-    end = time.time_ns()
-    sonic_duration = (end - start) / num_iterations / 1e3
-    logger.info(f"sonic_duration: {sonic_duration}")
-
-    logger.info(f"torch is {sonic_duration / torch_duration}x faster")
+    benchmark(function)

@@ -1,10 +1,8 @@
 import pytest
 
 import pathlib
-import time
 from ctypes import cdll
 
-from loguru import logger
 import jinja2
 import numpy as np
 import torch
@@ -139,7 +137,7 @@ def create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_he
 @pytest.mark.parametrize("sequence_size", [128])
 @pytest.mark.parametrize("num_attention_heads", [12])
 @pytest.mark.parametrize("head_size", [64])
-def test_torch_vs_sonic(tmp_path, batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
+def test_torch_vs_sonic(batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
     hidden_size = num_attention_heads * head_size
 
     hidden_states = torch.rand(batch_size, sequence_size, hidden_size)
@@ -155,40 +153,28 @@ def test_torch_vs_sonic(tmp_path, batch_size, num_encoders, sequence_size, num_a
     ), f"{list(encoder_output.flatten())} != {list(sonic_encoder_output.flatten())}"
 
 
-@pytest.mark.parametrize("num_iterations", [50])
+@pytest.mark.parametrize("module", ["torch", "sonic"])
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [1])
 @pytest.mark.parametrize("sequence_size", [128])
 @pytest.mark.parametrize("num_attention_heads", [1])
 @pytest.mark.parametrize("head_size", [128])
-def test_benchmark(tmp_path, num_iterations, batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
+def test_benchmark(benchmark, module, batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
     hidden_size = num_attention_heads * head_size
-
     parameters = create_parameters(num_encoders, hidden_size)
 
-    sonic_model = create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size)
+    function = None
+    if module == "torch":
 
-    def torch_function():
-        hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
-        torch_model(hidden_states, parameters, num_encoders, head_size)
+        def function():
+            hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
+            torch_model(hidden_states, parameters, num_encoders, head_size)
 
-    torch_function()
-    start = time.time_ns()
-    for _ in range(num_iterations):
-        torch_function()
-    end = time.time_ns()
-    torch_duration = (end - start) / num_iterations / 1e3
-    logger.info(f"torch_duration: {torch_duration}")
+    elif module == "sonic":
+        sonic_model = create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size)
 
-    def sonic_function():
-        hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
-        sonic_model(hidden_states, parameters)
+        def function():
+            hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
+            sonic_model(hidden_states, parameters)
 
-    start = time.time_ns()
-    for _ in range(num_iterations):
-        sonic_function()
-    end = time.time_ns()
-    sonic_duration = (end - start) / num_iterations / 1e3
-    logger.info(f"sonic_duration: {sonic_duration}")
-
-    logger.info(f"torch is {sonic_duration / torch_duration}x faster")
+    benchmark(function)
