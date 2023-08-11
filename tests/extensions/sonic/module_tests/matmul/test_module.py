@@ -20,7 +20,7 @@ def torch_model(input_tensor, weights):
 
 
 def create_sonic_model(batch_size, m_size, k_size, n_size):
-    output_file = TEST_DIRECTORY / f"{batch_size}_{m_size}_{k_size}_{n_size}.cpp"
+    output_file = TEST_DIRECTORY / "test_output" / f"{batch_size}_{m_size}_{k_size}_{n_size}.cpp"
     output_file.unlink(missing_ok=True)
 
     template_loader = jinja2.FileSystemLoader(searchpath=TEST_DIRECTORY)
@@ -33,6 +33,7 @@ def create_sonic_model(batch_size, m_size, k_size, n_size):
         n_size=n_size,
     )
 
+    output_file.parent.mkdir(exist_ok=True)
     with open(output_file, "w") as f:
         f.write(output_text)
 

@@ -203,6 +203,5 @@ extern "C" void run(const data_type_t* input_buffer,
   auto parameters = create_parameters<hidden_size>(parameter_buffers);
   auto output = encoder_loop<head_size, 0>(input, parameters);
 
-  auto output_tensor = evaluate(output);
-  sonic::tensor::copy(output_tensor, output_buffer);
+  evaluate_to(output, output_buffer);
 }
