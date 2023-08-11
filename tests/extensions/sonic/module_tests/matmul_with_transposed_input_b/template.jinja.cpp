@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "sonic/lazy_computation.hpp"
 #include "sonic/shape.hpp"
 #include "sonic/tensor.hpp"
