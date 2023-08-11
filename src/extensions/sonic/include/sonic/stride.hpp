@@ -1,9 +1,10 @@
 #pragma once
 
-#include <tuple>
-
 #include "metaprogramming.hpp"
 #include "shape.hpp"
+
+#include <cstdint>
+#include <tuple>
 
 namespace sonic {
 

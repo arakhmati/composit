@@ -1,11 +1,12 @@
 #pragma once
 
-#include <array>
-#include <cmath>
-#include <tuple>
-
 #include "shape.hpp"
 #include "stride.hpp"
+
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <tuple>
 
 namespace sonic {
 
@@ -259,8 +260,8 @@ void void_loop(const Function& function, const sonic::shape::shape_t<Limit, Limi
 }  // namespace detail
 
 template <typename data_type_t, typename shape_t, typename stride_t>
-void print(const tensor_t<data_type_t, shape_t, stride_t>& tensor) {
-  auto function = [&tensor](auto&& index) -> void { std::cout << tensor[index] << std::endl; };
+void print(const tensor_t<data_type_t, shape_t, stride_t>& tensor, auto& stream) {
+  auto function = [&tensor, &stream](auto&& index) -> void { stream << tensor[index] << ","; };
   detail::void_loop(function, shape_t{});
 }
 
