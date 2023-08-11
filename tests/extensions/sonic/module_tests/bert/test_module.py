@@ -88,7 +88,11 @@ def torch_model(hidden_states, parameters, num_encoders, head_size):
 
 
 def create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
-    output_file = TEST_DIRECTORY / f"{batch_size}_{num_encoders}_{sequence_size}_{num_attention_heads}_{head_size}.cpp"
+    output_file = (
+        TEST_DIRECTORY
+        / "test_output"
+        / f"{batch_size}_{num_encoders}_{sequence_size}_{num_attention_heads}_{head_size}.cpp"
+    )
     output_file.unlink(missing_ok=True)
 
     template_loader = jinja2.FileSystemLoader(searchpath=TEST_DIRECTORY)
@@ -102,6 +106,7 @@ def create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_he
         head_size=head_size,
     )
 
+    output_file.parent.mkdir(exist_ok=True)
     with open(output_file, "w") as f:
         f.write(output_text)
 

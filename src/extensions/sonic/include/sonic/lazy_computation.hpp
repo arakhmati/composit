@@ -564,6 +564,14 @@ const auto evaluate(
   return tensor::to_tensor(input);
 }
 
+template <typename data_type_t, typename shape_t, typename stride_t, typename function_type_t>
+void evaluate_to(
+    const lazy_computation_t<data_type_t, const shape_t, const stride_t, const function_type_t>& input_computation,
+    data_type_t* output_buffer) {
+  const auto input = input_computation();
+  tensor::copy(input, output_buffer);
+}
+
 }  // namespace lazy_computation
 
 }  // namespace sonic
