@@ -92,7 +92,7 @@ constexpr auto reshape(
     if constexpr (std::is_same_v<input_stride_t, decltype(sonic::stride::compute_stride(input_shape_t{}))>) {
       return tensor::view<data_type_t, output_shape_t, output_stride_t>(input_tensor);
     } else {
-      auto reshaped_input_tensor = tensor::to_tensor(input_tensor);
+      auto reshaped_input_tensor = tensor::as_tensor(input_tensor);
       return tensor::view<data_type_t, output_shape_t, output_stride_t>(reshaped_input_tensor);
     }
   };
@@ -509,7 +509,7 @@ constexpr auto softmax(
       }
     }
 
-    auto output = tensor::copy_tensor(input);
+    auto output = tensor::copy(input);
     for (std::size_t dim_0 = 0; dim_0 < Dimension_0; dim_0++) {
       for (std::size_t dim_1 = 0; dim_1 < Dimension_1; dim_1++) {
         for (std::size_t dim_2 = 0; dim_2 < Dimension_2; dim_2++) {
@@ -557,19 +557,27 @@ auto linear = [](const auto& activations, const auto& weights, const auto& bias)
   return add_in_place(matmul(activations, weights), bias);
 };
 
-template <typename data_type_t, typename shape_t, typename stride_t, typename function_type_t>
+template <typename compute_data_type_t = float,
+          typename data_type_t,
+          typename shape_t,
+          typename stride_t,
+          typename function_type_t>
 const auto evaluate(
     const lazy_computation_t<data_type_t, const shape_t, const stride_t, const function_type_t>& input_computation) {
   const auto input = input_computation();
-  return tensor::to_tensor(input);
+  return tensor::as_tensor<compute_data_type_t>(input);
 }
 
-template <typename data_type_t, typename shape_t, typename stride_t, typename function_type_t>
+template <typename compute_data_type_t = float,
+          typename data_type_t,
+          typename shape_t,
+          typename stride_t,
+          typename function_type_t>
 void evaluate_to(
     const lazy_computation_t<data_type_t, const shape_t, const stride_t, const function_type_t>& input_computation,
     data_type_t* output_buffer) {
   const auto input = input_computation();
-  tensor::copy(input, output_buffer);
+  tensor::write<compute_data_type_t>(input, output_buffer);
 }
 
 }  // namespace lazy_computation

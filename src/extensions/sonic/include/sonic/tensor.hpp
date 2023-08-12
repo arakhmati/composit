@@ -3,6 +3,8 @@
 #include "shape.hpp"
 #include "stride.hpp"
 
+#include <immintrin.h>
+
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -12,8 +14,10 @@ namespace sonic {
 
 namespace tensor {
 
+struct vector8_float32;
+
 template <typename T, std::size_t N>
-struct __attribute__((aligned(32))) aligned_array : public std::array<T, N> {};
+struct __attribute__((aligned(sizeof(T)))) aligned_array : public std::array<T, N> {};
 
 template <typename data_type_template,
           typename shape_template,
@@ -47,6 +51,42 @@ struct tensor_t {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
+  }
+
+  template <typename compute_data_type_t>
+  inline auto load(std::int64_t index) const {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index);
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      return _mm256_load_ps(this->storage + index);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline auto load(const std::tuple<Indices...>& indices) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    return this->load<compute_data_type_t>(flat_index);
+  }
+
+  template <typename compute_data_type_t>
+  inline void store(std::int64_t index, auto value) {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index) = value;
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      _mm256_store_ps(this->storage + index, value);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline void store(const std::tuple<Indices...>& indices, auto value) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    this->store<compute_data_type_t>(flat_index, value);
   }
 
   inline const data_type_t* data() const {
@@ -120,6 +160,25 @@ struct sqrt_expression_t {
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
   }
+
+  template <typename compute_data_type_t>
+  inline auto load(std::int64_t index) const {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index);
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      auto input = this->expression.template load<compute_data_type_t>(index);
+      return _mm256_sqrt_ps(input);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline auto load(const std::tuple<Indices...>& indices) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    return this->load<compute_data_type_t>(flat_index);
+  }
 };
 
 template <typename data_type_t, typename shape_t, typename stride_t, typename expression_t>
@@ -145,6 +204,37 @@ struct exp_expression_t {
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
   }
+
+  template <typename compute_data_type_t>
+  inline auto load(std::int64_t index) const {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index);
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      auto input = this->expression.template load<compute_data_type_t>(index);
+      data_type_t array[8];
+      _mm256_store_ps(array, input);
+
+      array[0] = std::exp(input[0]);
+      array[1] = std::exp(input[1]);
+      array[2] = std::exp(input[2]);
+      array[3] = std::exp(input[3]);
+      array[4] = std::exp(input[4]);
+      array[5] = std::exp(input[5]);
+      array[6] = std::exp(input[6]);
+      array[7] = std::exp(input[7]);
+
+      return _mm256_load_ps(array);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline auto load(const std::tuple<Indices...>& indices) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    return this->load<compute_data_type_t>(flat_index);
+  }
 };
 
 template <typename data_type_t, typename shape_t, typename stride_t, typename expression_t>
@@ -169,6 +259,26 @@ struct abs_expression_t {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
+  }
+
+  template <typename compute_data_type_t>
+  inline auto load(std::int64_t index) const {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index);
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      auto input = this->expression.template load<compute_data_type_t>(index);
+      __m256 mask = _mm256_set1_ps(-0.0f);
+      return _mm256_andnot_ps(mask, input);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline auto load(const std::tuple<Indices...>& indices) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    return this->load<compute_data_type_t>(flat_index);
   }
 };
 
@@ -247,49 +357,97 @@ bool allclose(const tensor_t<data_type_t, shape_t, rest_a_t...>& tensor_a,
 }
 
 namespace detail {
-template <typename Function, auto Limit, auto... Limits, typename... Indices>
+
+template <typename compute_data_type_t>
+constexpr auto get_vector_size() {
+  if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+    return 1;
+  } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+    return 8;
+  } else {
+    metaprogramming::raise_static_error<compute_data_type_t>();
+  }
+}
+
+template <typename compute_data_type_t, typename Function, auto Limit, auto... Limits, typename... Indices>
 void void_loop(const Function& function, const sonic::shape::shape_t<Limit, Limits...>&, Indices... indices) {
-  for (std::size_t index = 0; index < Limit; index++) {
-    if constexpr (sizeof...(Limits) == 0) {
+  if constexpr (sizeof...(Limits) == 0) {
+    constexpr auto vector_size = get_vector_size<compute_data_type_t>();
+    static_assert(Limit % vector_size == 0);
+    for (std::size_t index = 0; index < Limit; index += vector_size) {
       function(std::make_tuple(indices..., index));
-    } else {
-      void_loop(function, sonic::shape::shape_t<Limits...>{}, indices..., index);
+    }
+  } else {
+    for (std::size_t index = 0; index < Limit; index++) {
+      void_loop<compute_data_type_t>(function, sonic::shape::shape_t<Limits...>{}, indices..., index);
     }
   }
 }
+
 }  // namespace detail
 
 template <typename data_type_t, typename shape_t, typename stride_t>
 void print(const tensor_t<data_type_t, shape_t, stride_t>& tensor, auto& stream) {
   auto function = [&tensor, &stream](auto&& index) -> void { stream << tensor[index] << ","; };
-  detail::void_loop(function, shape_t{});
+  detail::void_loop<1>(function, shape_t{});
 }
 
-template <typename data_type_t, typename shape_t, typename... rest_t, template <typename...> typename expression_t>
-auto copy(const expression_t<data_type_t, shape_t, rest_t...>& expression, data_type_t* output_buffer) {
+template <typename compute_data_type_t,
+          typename data_type_t,
+          typename shape_t,
+          typename... rest_t,
+          template <typename...>
+          typename expression_t>
+auto write(const expression_t<data_type_t, shape_t, rest_t...>& expression, data_type_t* output_buffer) {
+  static_assert(std::is_arithmetic_v<compute_data_type_t> or (std::is_same_v<compute_data_type_t, vector8_float32>));
+
+  constexpr auto vector_size = detail::get_vector_size<compute_data_type_t>();
   std::size_t flat_index = 0;
-  auto function = [&expression, &flat_index, &output_buffer](auto&& index) -> void {
-    output_buffer[flat_index] = expression[index];
-    flat_index++;
-  };
-  detail::void_loop(function, shape_t{});
+
+  if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+    auto function = [&expression, &flat_index, &output_buffer](auto&& index) -> void {
+      output_buffer[flat_index] = expression[index];
+      flat_index += vector_size;
+    };
+    detail::void_loop<compute_data_type_t>(function, shape_t{});
+  } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+    auto function = [&expression, &flat_index, &output_buffer](auto&& index) -> void {
+      _mm256_store_ps(output_buffer + flat_index, expression.template load<compute_data_type_t>(index));
+      flat_index += vector_size;
+    };
+    detail::void_loop<compute_data_type_t>(function, shape_t{});
+  } else {
+    metaprogramming::raise_static_error<compute_data_type_t>();
+  }
 }
 
-template <typename data_type_t, typename shape_t, typename... rest_t, template <typename...> typename expression_t>
-auto to_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) {
+template <typename compute_data_type_t = float,
+          typename data_type_t,
+          typename shape_t,
+          typename... rest_t,
+          template <typename...>
+          typename expression_t>
+auto as_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) {
+  static_assert(std::is_arithmetic_v<compute_data_type_t> or (std::is_same_v<compute_data_type_t, vector8_float32>));
   if constexpr (std::is_same_v<expression_t<data_type_t, shape_t, rest_t...>, tensor_t<data_type_t, shape_t>>) {
     return expression;
   } else {
     aligned_array<data_type_t, shape_t::volume> storage;
-    copy(expression, storage.data());
+    write<compute_data_type_t>(expression, storage.data());
     return tensor_t<data_type_t, shape_t>(std::move(storage));
   }
 }
 
-template <typename data_type_t, typename shape_t, typename... rest_t, template <typename...> typename expression_t>
-auto copy_tensor(const expression_t<data_type_t, shape_t, rest_t...>& expression) {
+template <typename compute_data_type_t = float,
+          typename data_type_t,
+          typename shape_t,
+          typename... rest_t,
+          template <typename...>
+          typename expression_t>
+auto copy(const expression_t<data_type_t, shape_t, rest_t...>& expression) {
+  static_assert(std::is_arithmetic_v<compute_data_type_t> or (std::is_same_v<compute_data_type_t, vector8_float32>));
   aligned_array<data_type_t, shape_t::volume> storage;
-  copy(expression, storage.data());
+  write<compute_data_type_t>(expression, storage.data());
   return tensor_t<data_type_t, shape_t>(std::move(storage));
 }
 
