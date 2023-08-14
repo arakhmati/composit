@@ -7,7 +7,7 @@ import jinja2
 import numpy as np
 import torch
 
-from mosaic.backends.ctypes import cast_numpy_array_to_pointer, cast_numpy_arrays_to_pointer
+from mosaic.ctypes import cast_numpy_array_to_pointer, cast_numpy_arrays_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
 
 TEST_DIRECTORY = pathlib.Path(__file__).parent

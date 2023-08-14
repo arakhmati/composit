@@ -6,6 +6,7 @@ import numpy as np
 from pyrsistent import PClass, field
 
 from composit.introspection import class_name
+from mosaic.aligned_array import create_aligned_array
 from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile_view import TileLevel, TileView, ScalarTileLevel
 
@@ -93,14 +94,6 @@ def create_tile_config(tile_view: TileView) -> TileConfig | AtomicTileConfig:
             shape=shape,
             layout=tile_level.layout,
         )
-
-
-def create_aligned_array(shape, dtype, align=32):
-    size = np.prod(shape) * np.dtype(dtype).itemsize
-    buffer = np.empty(size + align, dtype=np.uint8)
-    offset = buffer.ctypes.data % align
-    array = np.ndarray(shape, dtype=dtype, buffer=buffer, offset=offset)
-    return array
 
 
 def get_all_num_tiles_per_axis(tile_config):

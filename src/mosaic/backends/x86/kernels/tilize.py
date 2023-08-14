@@ -7,7 +7,7 @@ from mosaic.tilelab.layout import TransposedLayout
 from mosaic.tilelab.tile import TileConfig
 from mosaic.backends.x86.constants import MEMORY_ALIGNMENT
 from mosaic.backends.x86.kernel_name import create_kernel_name
-from mosaic.backends.ctypes import get_ctype_string_from_numpy_dtype
+from mosaic.ctypes import get_ctype_string_from_numpy_dtype
 
 
 def generate_module(input_tile_configs, output_tile_config, input_dtypes, output_dtype):

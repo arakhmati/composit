@@ -9,13 +9,14 @@ from composit.introspection import class_name
 from composit.multidigraph import topological_traversal
 from composit.numpy.core import Input, get_operands
 
+from mosaic.aligned_array import create_aligned_array
 from mosaic.backends.x86.types import (
     BufferDescriptor,
     ConstantBufferDescriptor,
     Buffer,
 )
 from mosaic.passes.inspect import format_bytes
-from mosaic.tilelab.tile import create_aligned_array, to_tilized_array
+from mosaic.tilelab.tile import to_tilized_array
 
 
 def buffer_descriptor_factory():

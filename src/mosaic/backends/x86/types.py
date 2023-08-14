@@ -2,7 +2,7 @@ import numpy as np
 
 from pyrsistent import PClass, field
 
-from mosaic.backends.ctypes import cast_numpy_array_to_pointer
+from mosaic.ctypes import cast_numpy_array_to_pointer
 
 
 class BufferDescriptor(PClass):

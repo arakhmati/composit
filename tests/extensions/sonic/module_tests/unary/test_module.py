@@ -7,8 +7,10 @@ import jinja2
 import numpy as np
 import torch
 
-from mosaic.backends.ctypes import cast_numpy_array_to_pointer
+from mosaic.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
+
+from mosaic.aligned_array import create_aligned_array, align_array
 
 TEST_DIRECTORY = pathlib.Path(__file__).parent
 
@@ -67,20 +69,6 @@ def create_sonic_model(batch_size, height_size, width_size):
         return np_output_tensor
 
     return run_model
-
-
-def create_aligned_array(shape, dtype, align=32):
-    size = np.prod(shape) * np.dtype(dtype).itemsize
-    buffer = np.empty(size + align, dtype=np.uint8)
-    offset = buffer.ctypes.data % align
-    array = np.ndarray(shape, dtype=dtype, buffer=buffer, offset=offset)
-    return array
-
-
-def align_array(array, align=32):
-    aligned_array = create_aligned_array(array.shape, array.dtype, align=align)
-    aligned_array[:] = array
-    return aligned_array
 
 
 @pytest.mark.parametrize("batch_size", [1])

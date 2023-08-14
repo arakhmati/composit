@@ -13,7 +13,7 @@ import numpy as np
 
 import composit as cnp
 from composit.hash import deterministic_hash
-from mosaic.backends.ctypes import cast_numpy_array_to_pointer
+from mosaic.ctypes import cast_numpy_array_to_pointer
 from mosaic.tilelab.tile_view import TileLevel, propagate_tile_views, ScalarTileLevel
 from mosaic.tilelab.tile import create_tile_config, to_tilized_array, from_tilized_array
 from mosaic.backends.x86.kernels import reduce
