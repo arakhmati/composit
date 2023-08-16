@@ -7,10 +7,9 @@ import jinja2
 import numpy as np
 import torch
 
+from mosaic.aligned_array import create_aligned_array, align_array
 from mosaic.ctypes import cast_numpy_array_to_pointer
 from mosaic.backends.x86.compile import compile_shared_library
-
-from mosaic.aligned_array import create_aligned_array, align_array
 
 TEST_DIRECTORY = pathlib.Path(__file__).parent
 

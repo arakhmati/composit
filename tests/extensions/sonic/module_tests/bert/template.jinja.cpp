@@ -2,6 +2,8 @@
 #include "sonic/shape.hpp"
 #include "sonic/tensor.hpp"
 
+#include <memory>
+
 using data_type_t = float;
 
 constexpr auto num_encoders = {{num_encoders}};
@@ -85,24 +87,30 @@ auto create_encoder_parameters(const data_type_t** parameter_buffers) {
 
   constexpr auto intermediate_size = hidden_size * 4;
 
-  auto query_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(parameter_buffers[0]);
-  auto query_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(parameter_buffers[1]);
-  auto key_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(parameter_buffers[2]);
-  auto key_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(parameter_buffers[3]);
-  auto value_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(parameter_buffers[4]);
-  auto value_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(parameter_buffers[5]);
-  auto self_output_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(parameter_buffers[6]);
-  auto self_output_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(parameter_buffers[7]);
-  auto ff1_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, intermediate_size>>(parameter_buffers[8]);
-  auto ff1_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<intermediate_size>>(parameter_buffers[9]);
-  auto ff2_weights =
-      as_lazy_computation<data_type_t, sonic::shape::shape_t<intermediate_size, hidden_size>>(parameter_buffers[10]);
-  auto ff2_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(parameter_buffers[11]);
+  auto query_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[0]));
+  auto query_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[1]));
+  auto key_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[2]));
+  auto key_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[3]));
+  auto value_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[4]));
+  auto value_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[5]));
+  auto self_output_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[6]));
+  auto self_output_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[7]));
+  auto ff1_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size, intermediate_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[8]));
+  auto ff1_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<intermediate_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[9]));
+  auto ff2_weights = as_lazy_computation<data_type_t, sonic::shape::shape_t<intermediate_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[10]));
+  auto ff2_bias = as_lazy_computation<data_type_t, sonic::shape::shape_t<hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(parameter_buffers[11]));
   return encoder_parameters_t{
       multi_head_attention_parameters_t{std::move(query_weights), std::move(query_bias), std::move(key_weights),
                                         std::move(key_bias), std::move(value_weights), std::move(value_bias),
@@ -197,9 +205,9 @@ extern "C" void run(const data_type_t* input_buffer,
                     const data_type_t** parameter_buffers) {
   using namespace sonic::lazy_computation;
 
-  auto input = as_lazy_computation<data_type_t, shape_t>(input_buffer);
+  auto input = as_lazy_computation<data_type_t, shape_t>(std::assume_aligned<sizeof(data_type_t)>(input_buffer));
   auto parameters = create_parameters<hidden_size>(parameter_buffers);
   auto output = encoder_loop<head_size, 0>(input, parameters);
 
-  evaluate_to(output, output_buffer);
+  evaluate_to(output, std::assume_aligned<sizeof(data_type_t)>(output_buffer));
 }

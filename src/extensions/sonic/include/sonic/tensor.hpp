@@ -14,10 +14,12 @@ namespace sonic {
 
 namespace tensor {
 
-struct vector8_float32;
+struct vector8_float32 {
+  static constexpr std::size_t size = 8;
+};
 
 template <typename T, std::size_t N>
-struct __attribute__((aligned(sizeof(T)))) aligned_array : public std::array<T, N> {};
+struct alignas(32) aligned_array : public std::array<T, N> {};
 
 template <typename data_type_template,
           typename shape_template,
@@ -58,7 +60,11 @@ struct tensor_t {
     if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
       return this->operator[](index);
     } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
-      return _mm256_load_ps(this->storage + index);
+      if constexpr (std::is_pointer_v<storage_t>) {
+        return _mm256_load_ps(this->storage + index);
+      } else {
+        return _mm256_load_ps(this->storage.data() + index);
+      }
     } else {
       metaprogramming::raise_static_error<compute_data_type_t>();
     }
@@ -74,16 +80,20 @@ struct tensor_t {
   template <typename compute_data_type_t>
   inline void store(std::int64_t index, auto value) {
     if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
-      return this->operator[](index) = value;
+      this->operator[](index) = value;
     } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
-      _mm256_store_ps(this->storage + index, value);
+      if constexpr (std::is_pointer_v<storage_t>) {
+        _mm256_store_ps(this->storage + index, value);
+      } else {
+        _mm256_store_ps(this->storage.data() + index, value);
+      }
     } else {
       metaprogramming::raise_static_error<compute_data_type_t>();
     }
   }
 
   template <typename compute_data_type_t, typename... Indices>
-  inline void store(const std::tuple<Indices...>& indices, auto value) const {
+  inline void store(const std::tuple<Indices...>& indices, auto value) {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     this->store<compute_data_type_t>(flat_index, value);
@@ -99,7 +109,7 @@ struct tensor_t {
 
  private:
   storage_t storage;
-};
+};  // namespace tensor
 
 template <typename data_type_template,
           typename shape_template,

@@ -168,23 +168,52 @@ constexpr auto matmul(
     auto output =
         tensor::tensor_t<data_type_t, output_shape_t, output_stride_t, decltype(output_storage)>{output_storage};
 
-    constexpr std::size_t tile_size = 16;
-    static_assert(m_size % tile_size == 0);
-    static_assert(k_size % tile_size == 0);
-    static_assert(n_size % tile_size == 0);
-
     auto run_thread = [&input_a, &input_b, &output](const auto m_start, const auto m_end, const auto n_start,
                                                     const auto n_end) {
-      for (std::size_t batch_index = 0; batch_index < batch_size; batch_index++) {
-        for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += tile_size) {
-          for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
-            for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += tile_size) {
-              for (std::size_t m = m_tile; m < m_tile + tile_size; m++) {
-                for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
-                  for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
-                    output[std::make_tuple(batch_index, m, n)] +=
-                        input_a[std::make_tuple(batch_index, m, k)] * input_b[std::make_tuple(k, n)];
+      constexpr std::size_t m_tile_size = 32;
+      constexpr std::size_t k_tile_size = 32;
+      constexpr std::size_t n_tile_size = 32;
+      if constexpr (m_size % m_tile_size == 0 and k_size % k_tile_size == 0 and n_size % n_tile_size == 0) {
+        for (std::size_t batch_index = 0; batch_index < batch_size; batch_index++) {
+          for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += m_tile_size) {
+            for (std::size_t k_tile = 0; k_tile < k_size; k_tile += k_tile_size) {
+              for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += n_tile_size) {
+                for (std::size_t m = m_tile; m < m_tile + m_tile_size; m++) {
+                  for (std::size_t k = k_tile; k < k_tile + k_tile_size; k++) {
+                    auto input_a_vector = _mm256_set1_ps(input_a[std::make_tuple(batch_index, m, k)]);
+                    for (std::size_t n = n_tile; n < n_tile + n_tile_size; n += sonic::tensor::vector8_float32::size) {
+                      auto input_b_vector =
+                          input_b.template load<sonic::tensor::vector8_float32>(std::make_tuple(k, n));
+                      auto output_vector =
+                          output.template load<sonic::tensor::vector8_float32>(std::make_tuple(batch_index, m, n));
+                      output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);
+                      output.template store<sonic::tensor::vector8_float32>(std::make_tuple(batch_index, m, n),
+                                                                            output_vector);
+                    }
                   }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (std::size_t batch_index = 0; batch_index < batch_size; batch_index++) {
+          for (std::size_t m = m_start; m < m_end; m++) {
+            for (std::size_t k = 0; k < k_size; k++) {
+              if constexpr (n_size % sonic::tensor::vector8_float32::size == 0) {
+                auto input_a_vector = _mm256_set1_ps(input_a[std::make_tuple(batch_index, m, k)]);
+                for (std::size_t n = n_start; n < n_end; n += sonic::tensor::vector8_float32::size) {
+                  auto input_b_vector = input_b.template load<sonic::tensor::vector8_float32>(std::make_tuple(k, n));
+                  auto output_vector =
+                      output.template load<sonic::tensor::vector8_float32>(std::make_tuple(batch_index, m, n));
+                  output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);
+                  output.template store<sonic::tensor::vector8_float32>(std::make_tuple(batch_index, m, n),
+                                                                        output_vector);
+                }
+              } else {
+                for (std::size_t n = n_start; n < n_end; n++) {
+                  output[std::make_tuple(batch_index, m, n)] +=
+                      input_a[std::make_tuple(batch_index, m, k)] * input_b[std::make_tuple(k, n)];
                 }
               }
             }
@@ -298,29 +327,63 @@ constexpr auto matmul(const lazy_computation_t<data_type_t,
   using output_stride_t = const decltype(sonic::stride::compute_stride(output_shape_t{}));
   const auto function = [input_computation_a, input_computation_b, output_storage = std::move(output_storage)] {
     const auto input_a = input_computation_a();
-    const auto input_b = input_computation_b();
+    const auto input_b = tensor::as_tensor(input_computation_b());
     auto output = tensor::tensor_t<data_type_t, output_shape_t, output_stride_t>{std::move(output_storage)};
-
-    constexpr std::size_t tile_size = 16;
-    static_assert(m_size % tile_size == 0);
-    static_assert(k_size % tile_size == 0);
-    static_assert(n_size % tile_size == 0);
 
     auto run_thread = [&input_a, &input_b, &output](const std::size_t batch_1_start, const std::size_t batch_1_end,
                                                     const std::size_t m_start, const std::size_t m_end,
                                                     const std::size_t n_start, const std::size_t n_end) {
-      for (std::size_t batch_index_0 = 0; batch_index_0 < batch_size_0; batch_index_0++) {
-        for (std::size_t batch_index_1 = batch_1_start; batch_index_1 < batch_1_end; batch_index_1++) {
-          for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += tile_size) {
-            for (std::size_t k_tile = 0; k_tile < k_size; k_tile += tile_size) {
-              for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += tile_size) {
-                for (std::size_t m = m_tile; m < m_tile + tile_size; m++) {
-                  for (std::size_t k = k_tile; k < k_tile + tile_size; k++) {
-                    for (std::size_t n = n_tile; n < n_tile + tile_size; n++) {
-                      output[std::make_tuple(batch_index_0, batch_index_1, m, n)] +=
-                          input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)] *
-                          input_b[std::make_tuple(batch_index_0, batch_index_1, k, n)];
+      constexpr std::size_t m_tile_size = 32;
+      constexpr std::size_t k_tile_size = 32;
+      constexpr std::size_t n_tile_size = 32;
+      if constexpr (m_size % m_tile_size == 0 and k_size % k_tile_size == 0 and n_size % n_tile_size == 0) {
+        for (std::size_t batch_index_0 = 0; batch_index_0 < batch_size_0; batch_index_0++) {
+          for (std::size_t batch_index_1 = batch_1_start; batch_index_1 < batch_1_end; batch_index_1++) {
+            for (std::size_t m_tile = m_start; m_tile < m_end; m_tile += m_tile_size) {
+              for (std::size_t k_tile = 0; k_tile < k_size; k_tile += k_tile_size) {
+                for (std::size_t n_tile = n_start; n_tile < n_end; n_tile += n_tile_size) {
+                  for (std::size_t m = m_tile; m < m_tile + m_tile_size; m++) {
+                    for (std::size_t k = k_tile; k < k_tile + k_tile_size; k++) {
+                      auto input_a_vector =
+                          _mm256_set1_ps(input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)]);
+                      for (std::size_t n = n_tile; n < n_tile + n_tile_size;
+                           n += sonic::tensor::vector8_float32::size) {
+                        auto input_b_vector = input_b.template load<sonic::tensor::vector8_float32>(
+                            std::make_tuple(batch_index_0, batch_index_1, k, n));
+                        auto output_vector = output.template load<sonic::tensor::vector8_float32>(
+                            std::make_tuple(batch_index_0, batch_index_1, m, n));
+                        output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);
+                        output.template store<sonic::tensor::vector8_float32>(
+                            std::make_tuple(batch_index_0, batch_index_1, m, n), output_vector);
+                      }
                     }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (std::size_t batch_index_0 = 0; batch_index_0 < batch_size_0; batch_index_0++) {
+          for (std::size_t batch_index_1 = batch_1_start; batch_index_1 < batch_1_end; batch_index_1++) {
+            for (std::size_t m = m_start; m < m_end; m++) {
+              for (std::size_t k = 0; k < k_size; k++) {
+                if constexpr (n_size % sonic::tensor::vector8_float32::size == 0) {
+                  auto input_a_vector = _mm256_set1_ps(input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)]);
+                  for (std::size_t n = n_start; n < n_end; n += sonic::tensor::vector8_float32::size) {
+                    auto input_b_vector = input_b.template load<sonic::tensor::vector8_float32>(
+                        std::make_tuple(batch_index_0, batch_index_1, k, n));
+                    auto output_vector = output.template load<sonic::tensor::vector8_float32>(
+                        std::make_tuple(batch_index_0, batch_index_1, m, n));
+                    output_vector = _mm256_fmadd_ps(input_a_vector, input_b_vector, output_vector);
+                    output.template store<sonic::tensor::vector8_float32>(
+                        std::make_tuple(batch_index_0, batch_index_1, m, n), output_vector);
+                  }
+                } else {
+                  for (std::size_t n = n_start; n < n_end; n++) {
+                    output[std::make_tuple(batch_index_0, batch_index_1, m, n)] +=
+                        input_a[std::make_tuple(batch_index_0, batch_index_1, m, k)] *
+                        input_b[std::make_tuple(batch_index_0, batch_index_1, k, n)];
                   }
                 }
               }
