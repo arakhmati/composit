@@ -72,7 +72,7 @@ def create_sonic_model(batch_size, m_size, k_size, n_size):
 
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("m_size", [16])
-@pytest.mark.parametrize("k_size", [48])
+@pytest.mark.parametrize("k_size", [48, 3])
 @pytest.mark.parametrize("n_size", [32])
 def test_torch_vs_sonic(batch_size, m_size, k_size, n_size):
     input_tensor = np.random.randn(batch_size, m_size, k_size).astype(np.float32)
