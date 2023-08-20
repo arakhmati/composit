@@ -40,9 +40,9 @@ constexpr auto as_lazy_computation(auto&& storage) {
 }
 
 template <typename data_type_t, typename shape_t>
-constexpr auto as_lazy_computation(const tensor::tensor_t<data_type_t, shape_t>& tensor) {
+constexpr auto as_lazy_computation(tensor::tensor_t<data_type_t, shape_t>&& tensor) {
   using stride_t = tensor::tensor_t<data_type_t, shape_t>::stride_t;
-  const auto function = [tensor] { return tensor; };
+  const auto function = [tensor = std::move(tensor)] { return tensor; };
   return lazy_computation_t<data_type_t, const shape_t, const stride_t, decltype(function)>{function};
 }
 
