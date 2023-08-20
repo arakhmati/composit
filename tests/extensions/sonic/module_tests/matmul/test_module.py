@@ -117,3 +117,74 @@ def test_benchmark(benchmark, module, batch_size, m_size, k_size, n_size):
             sonic_model(input_tensor, weights)
 
     benchmark(function)
+
+
+@pytest.mark.skip
+@pytest.mark.parametrize("batch_size", [1])
+def test_compare_frameworks(benchmark, batch_size):
+    import time
+    import matplotlib.pyplot as plt
+
+    framework_to_average_duration_per_shape = {
+        "torch": [],
+        "numpy": [],
+        "sonic": [],
+    }
+
+    for m_size, k_size, n_size in [
+        (1, 1, 1),
+        (8, 8, 8),
+        (16, 16, 16),
+        (32, 32, 32),
+        (64, 64, 64),
+        (128, 128, 128),
+        (256, 256, 256),
+        (512, 512, 512),
+        (768, 768, 768),
+        (1024, 1024, 1024),
+        (2048, 2048, 2048),
+        (4096, 4096, 4096),
+    ]:
+        weights = align_array(np.random.randn(k_size, n_size).astype(np.float32))
+        sonic_model = create_sonic_model(batch_size, m_size, k_size, n_size)
+
+        framework_to_durations = {
+            "torch": [],
+            "numpy": [],
+            "sonic": [],
+        }
+
+        def torch_function():
+            start = time.time_ns()
+            input_tensor = np.random.randn(batch_size, m_size, k_size).astype(np.float32)
+            torch_model(input_tensor, weights)
+            end = time.time_ns()
+            framework_to_durations["torch"].append(end - start)
+
+        def numpy_function():
+            start = time.time_ns()
+            input_tensor = np.random.randn(batch_size, m_size, k_size).astype(np.float32)
+            np_model(input_tensor, weights)
+            end = time.time_ns()
+            framework_to_durations["numpy"].append(end - start)
+
+        def sonic_function():
+            start = time.time_ns()
+            input_tensor = np.random.randn(batch_size, m_size, k_size).astype(np.float32)
+            sonic_model(input_tensor, weights)
+            end = time.time_ns()
+            framework_to_durations["sonic"].append(end - start)
+
+        for _ in range(5):
+            torch_function()
+            numpy_function()
+            sonic_function()
+
+        for framework, average_duration_per_shape in framework_to_average_duration_per_shape.items():
+            durations = framework_to_durations[framework]
+            average_duration_per_shape.append(np.mean(durations))
+
+    for framework, average_duration_per_shape in framework_to_average_duration_per_shape.items():
+        plt.plot(np.log(average_duration_per_shape), label=framework)
+    plt.legend()
+    plt.savefig("framework_matmul_comparison.png")
