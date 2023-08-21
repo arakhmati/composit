@@ -23,6 +23,7 @@ FLAGS = [
     "-Wno-unused-function",
     "-Wno-multichar",
     "-Wno-format",
+    "-lpthread",
 ]
 
 CPP_FILES = TEST_DIR.glob("test_*.cpp")
