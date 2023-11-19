@@ -5,10 +5,6 @@ from pathlib import Path
 
 from loguru import logger
 
-logger.info("Setting stack limit to unlimited")
-set_unlimited_stack_command = "ulimit -s unlimited"
-subprocess.run(set_unlimited_stack_command, shell=True)
-
 FLAGS = [
     "-std=c++2a",
     "-O3",
@@ -70,6 +66,7 @@ def compile_shared_library(
     include_paths=None,
     flags=None,
     enable_tracy=False,
+    compile_assembly=False,
 ):
     output_path = source_file.parent
 
@@ -111,7 +108,8 @@ def compile_shared_library(
     result = subprocess.run(command)
     assert result.returncode == 0
 
-    assembly_file = source_file.with_suffix(".s")
-    compile_source_file_to_assembly(source_file, process_include_paths(include_paths), flags, assembly_file)
+    if compile_assembly:
+        assembly_file = source_file.with_suffix(".s")
+        compile_source_file_to_assembly(source_file, process_include_paths(include_paths), flags, assembly_file)
 
     return shared_library
