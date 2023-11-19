@@ -9,7 +9,11 @@ namespace sonic {
 namespace thread_safe_queue {
 
 template <class T>
-struct thread_safe_queue_t {
+class thread_safe_queue_t {
+  std::queue<T> queue;
+  mutable std::mutex mutex;
+
+ public:
   ~thread_safe_queue_t() {}
 
   void push_back(T value) {
@@ -36,9 +40,6 @@ struct thread_safe_queue_t {
     std::scoped_lock<std::mutex> lock(mutex);
     return this->queue.size();
   }
-
-  std::queue<T> queue;
-  mutable std::mutex mutex;
 };
 
 }  // namespace thread_safe_queue

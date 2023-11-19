@@ -22,10 +22,10 @@ TEST_CASE("test empty queue") {
   {
     auto thread_pool = thread_pool_t<num_threads>{};
     for (auto i = 0; i < num_elements; i++)
-      thread_pool.push_back_computation(std::function([&data, i](std::size_t thread_index) {
+      thread_pool.push_back_computation([&data, i](std::size_t thread_index) {
         data[i].value += i;
         data[i].thread_index = thread_index;
-      }));
+      });
   }
 
   for (auto i = 0; i < num_elements; i++) {
