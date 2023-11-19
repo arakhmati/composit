@@ -183,7 +183,7 @@ auto feedforward(const auto& hidden_states, const auto& parameters) {
   return linear(ff1, parameters.ff2_weights, parameters.ff2_bias);
 }
 
-template <std::size_t head_size, std::size_t index>
+template <std::size_t head_size>
 auto encoder(const auto& hidden_states, const auto& parameters) {
   auto mha_output = multi_head_attention<head_size>(hidden_states, parameters.multi_head_attention);
   auto ff_output = feedforward(mha_output, parameters.feedforward);
@@ -195,7 +195,7 @@ auto encoder_loop(const auto& encoder_input, const auto& parameters) {
   if constexpr (index == num_encoders) {
     return encoder_input;
   } else {
-    auto encoder_output = encoder<head_size, index>(encoder_input, parameters.encoders[index]);
+    auto encoder_output = encoder<head_size>(encoder_input, parameters.encoders[index]);
     return encoder_loop<head_size, index + 1>(encoder_output, parameters);
   }
 }
