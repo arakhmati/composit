@@ -1,8 +1,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.hpp"
 
+#include <array>
 #include <iostream>
-#include <vector>
 
 #include <CL/cl2.hpp>
 
@@ -50,19 +50,40 @@ void opencl_add(const cl::Context& context,
   queue.enqueueReadBuffer(output_buffer, CL_TRUE, 0, Size * sizeof(data_type_t), output);
 }
 
-const char* kernel_source = R"(
-   __kernel void add(const __global int* input_a, const __global int* input_b, __global int* output){
-       int index = get_global_id(0);
-       output[index] = input_a[index] + input_b[index];
-   }
-)";
+namespace detail {
+template <class>
+inline constexpr bool throw_unsupported_data_type_t = false;
+}
+
+template <typename data_type_t>
+constexpr auto get_kernel_source() {
+  if constexpr (std::is_same_v<data_type_t, std::int32_t>) {
+    return R"(
+        __kernel void
+        add(const __global int* input_a, const __global int* input_b, __global int* output) {
+          int index = get_global_id(0);
+          output[index] = input_a[index] + input_b[index];
+        }
+    )";
+  } else if constexpr (std::is_same_v<data_type_t, float>) {
+    return R"(
+        __kernel void
+        add(const __global float* input_a, const __global float* input_b, __global float* output) {
+          int index = get_global_id(0);
+          output[index] = input_a[index] + input_b[index];
+        }
+    )";
+  } else {
+    static_assert(detail::throw_unsupported_data_type_t<data_type_t>);
+  }
+}
 
 TEST_CASE("test opencl add") {
   using namespace sonic::opencl;
   using namespace sonic::profiler;
 
   constexpr std::size_t Size = 1 << 20;
-  using data_type_t = std::uint32_t;
+  using data_type_t = float;
 
   std::array<data_type_t, Size> input_a{};
   input_a.fill(3);
@@ -77,7 +98,7 @@ TEST_CASE("test opencl add") {
 
   const auto device = get_default_device();
   const auto context = cl::Context(device);
-  const auto program = create_program(context, kernel_source);
+  const auto program = create_program(context, get_kernel_source<data_type_t>());
   timeit<"opencl_add"_function_name, opencl_add<data_type_t, Size>>(context, device, program, input_a.data(),
                                                                     input_b.data(), actual_output.data());
 
