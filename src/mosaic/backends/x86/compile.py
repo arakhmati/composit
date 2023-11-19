@@ -5,6 +5,10 @@ from pathlib import Path
 
 from loguru import logger
 
+logger.info("Setting stack limit to unlimited")
+set_unlimited_stack_command = "ulimit -s unlimited"
+subprocess.run(set_unlimited_stack_command, shell=True)
+
 FLAGS = [
     "-std=c++2a",
     "-O3",
