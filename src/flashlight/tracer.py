@@ -256,6 +256,8 @@ def getitem(run_torch):
             _, indices = args
             if isinstance(indices, int):
                 indices = [indices]
+            elif isinstance(indices, slice):
+                indices = [indices]
             else:
 
                 def process_index(index):
@@ -702,6 +704,38 @@ def linear(run_torch):
     return implementation
 
 
+def conv1d(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+
+        lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
+
+        strides, padding, dilation, groups = args[3:]
+        assert (
+            isinstance(padding, tuple) and len(padding) == 1 and all(isinstance(element, int) for element in padding)
+        ), "padding should be a tuple of 1 integers"
+        assert dilation == (1,), f"dilation should be (1,) but is {dilation}"
+        assert groups == 1, f"groups should be 1 but is {groups}"
+
+        lazy_input = cnp.transpose(lazy_input, (0, 2, 1))
+        lazy_weight = cnp.transpose(lazy_weight, (0, 2, 1))
+        lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=True)
+
+        if len(rest) == 1:
+            (lazy_bias,) = rest
+            lazy_output += lazy_bias
+
+        lazy_output = cnp.transpose(lazy_output, (0, 2, 1))
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["conv1d"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def conv2d(run_torch):
     def implementation(*args, **kwargs):
         assert len(kwargs) == 0
@@ -1021,6 +1055,7 @@ def trace(*, run_torch=False):
     setattr(torch, "max", max_(run_torch))
 
     setattr(torch.nn.functional, "linear", linear(run_torch))
+    setattr(torch.nn.functional, "conv1d", conv1d(run_torch))
     setattr(torch.nn.functional, "conv2d", conv2d(run_torch))
     setattr(torch.nn.functional, "max_pool2d", max_pool2d(run_torch))
     setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d(run_torch))

@@ -29,6 +29,7 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'poetry'
+    - run: poetry lock
     - run: poetry install
     - run: poetry run black --check src tests
     - run: poetry run ruff .
@@ -53,6 +54,7 @@ jobs:
       with:
         python-version: '3.8'
         cache: 'poetry'
+    - run: poetry lock
     - run: poetry install
     - run: poetry run black --check src tests
     - run: poetry run ruff .
