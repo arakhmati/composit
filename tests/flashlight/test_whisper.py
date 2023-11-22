@@ -23,3 +23,4 @@ def test_whisper():
         transformers.activations.GELUActivation.forward = cached_forward
 
     assert tuple(flashlight_output.shape) == flashlight_output.lazy_tensor.shape
+    assert len(flashlight_output.graph) == 863

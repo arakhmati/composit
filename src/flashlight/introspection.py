@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from loguru import logger
 
 import composit as cnp
 import flashlight
@@ -19,7 +20,13 @@ def convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=False):
     first_arg = None
     for index, arg in enumerate(args):
         if isinstance(arg, flashlight.Tensor):
-            result = arg.lazy_tensor
+            if hasattr(arg, "lazy_tensor"):
+                result = arg.lazy_tensor
+            else:
+                logger.info("flashlight.Tensor's graph is discontinued! Starting a new one.")
+                np_tensor = arg.detach().numpy()
+                result = cnp.asarray(np_tensor, name=f"tensor_{graph_input_index:16}")
+                graph_input_index += 1
         elif isinstance(arg, torch.Tensor):
             np_tensor = arg.detach().numpy()
             result = cnp.asarray(np_tensor, name=f"tensor_{graph_input_index:16}")
