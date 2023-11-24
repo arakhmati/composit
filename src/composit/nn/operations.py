@@ -35,7 +35,75 @@ def convolution_output_dim(input_dim, kernel_dim, stride):
     return math.floor((input_dim - (kernel_dim - 1) - 1) / stride + 1)
 
 
-def convolution_channels_first(image, filters, strides, padding):
+def convolution_1d_channels_first(input_tensor, filters, strides, padding):
+    if isinstance(strides, tuple):
+        (strides,) = strides
+
+    if isinstance(padding, tuple):
+        (padding,) = padding
+
+    input_tensor = np.pad(
+        input_tensor,
+        ((0, 0), (0, 0), (padding, padding)),
+        mode="constant",
+        constant_values=0,
+    )
+
+    batch_size, _, size = input_tensor.shape
+    num_output_channels, num_input_channels, kernel_size = filters.shape
+
+    output_size = convolution_output_dim(size, kernel_size, strides)
+
+    output = np.zeros((batch_size, num_output_channels, output_size), dtype=input_tensor.dtype)
+    for batch_index in range(batch_size):
+        for output_channel_index in range(num_output_channels):
+            for input_channel_index in range(num_input_channels):
+                for output_size_index in range(output_size):
+                    output[batch_index, output_channel_index, output_size_index] += (
+                        input_tensor[
+                            batch_index,
+                            input_channel_index,
+                            output_size_index * strides : output_size_index * strides + kernel_size,
+                        ].flatten()
+                        @ filters[output_channel_index, input_channel_index].flatten()
+                    )
+    return output
+
+
+def convolution_1d_channels_last(input_tensor, filters, strides, padding):
+    if isinstance(strides, tuple):
+        (strides,) = strides
+
+    if isinstance(padding, tuple):
+        (padding,) = padding
+
+    input_tensor = np.pad(
+        input_tensor,
+        ((0, 0), (padding, padding), (0, 0)),
+        mode="constant",
+        constant_values=0,
+    )
+
+    batch_size, size, _ = input_tensor.shape
+    num_output_channels, kernel_size, _ = filters.shape
+
+    output_size = convolution_output_dim(size, kernel_size, strides)
+
+    output = np.zeros((batch_size, output_size, num_output_channels), dtype=input_tensor.dtype)
+    for batch_index in range(batch_size):
+        for output_size_index in range(output_size):
+            for output_channel_index in range(num_output_channels):
+                output[batch_index, output_size_index, output_channel_index] += (
+                    input_tensor[
+                        batch_index,
+                        output_size_index * strides : output_size_index * strides + kernel_size,
+                    ].flatten()
+                    @ filters[output_channel_index].flatten()
+                )
+    return output
+
+
+def convolution_2d_channels_first(image, filters, strides, padding):
     padding_height, padding_width = padding
     image = np.pad(
         image,
@@ -71,7 +139,7 @@ def convolution_channels_first(image, filters, strides, padding):
     return output
 
 
-def convolution_channels_last(image, filters, strides, padding):
+def convolution_2d_channels_last(image, filters, strides, padding):
     padding_height, padding_width = padding
     image = np.pad(
         image,
@@ -81,7 +149,7 @@ def convolution_channels_last(image, filters, strides, padding):
     )
 
     batch_size, height, width, _ = image.shape
-    num_output_channels, kernel_height, kernel_width, num_input_channels = filters.shape
+    num_output_channels, kernel_height, kernel_width, _ = filters.shape
 
     strides_height, strides_width = strides
 
@@ -113,13 +181,34 @@ def convolution_channels_last(image, filters, strides, padding):
 
 
 @cnp.wrap_as_operation()
-def convolution(image, filters, *, channels_last, strides=(1, 1), padding=(0, 0)):
-    data_format_to_function = {
-        False: convolution_channels_first,
-        True: convolution_channels_last,
-    }
-    function = data_format_to_function[channels_last]
-    return function(image, filters, strides, padding)
+def convolution(input_tensor, filters, *, channels_last, strides=None, padding=None):
+    if len(filters.shape) == 3:
+        if strides is None:
+            strides = (1,)
+        if padding is None:
+            padding = (0,)
+
+        data_format_to_function = {
+            False: convolution_1d_channels_first,
+            True: convolution_1d_channels_last,
+        }
+        function = data_format_to_function[channels_last]
+
+    elif len(filters.shape) == 4:
+        if strides is None:
+            strides = (1, 1)
+        if padding is None:
+            padding = (0, 0)
+
+        data_format_to_function = {
+            False: convolution_2d_channels_first,
+            True: convolution_2d_channels_last,
+        }
+        function = data_format_to_function[channels_last]
+
+    else:
+        raise RuntimeError("Invalid rank for filters of the convolution")
+    return function(input_tensor, filters, strides, padding)
 
 
 def pool_output_dim(input_dim, kernel_dim, stride, pool_function):

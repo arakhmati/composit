@@ -16,6 +16,7 @@ TORCH_NN_FUNCTIONAL = torch.nn.functional.__dict__.copy()
 
 TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "arange",
+    "argmax",  # TODO: override?
     "autograd",
     "backends",
     "batch_norm",  # TODO: override?
@@ -41,6 +42,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "_from_functional_tensor",
     "from_numpy",
     "full",  # TODO: override?
+    "full_like",  # TODO: override?
     "fx",
     "Generator",
     "get_default_dtype",
@@ -87,44 +89,61 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "uint8",
     "utils",
     "__version__",
+    "where",
     "zeros",
+    "zeros_like",
 ]
 
 
 TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
+    "__bool__",  # TODO: override?
     "__class__",
+    "__contains__",  # TODO: override?
     "__dict__",
+    "__eq__",  # TODO: override?
     "__getattribute__",
     "__gt__",  # TODO: override?
     "__hash__",
     "__init__",
+    "__index__",  # TODO: override?
+    "__le__",  # TODO: override?
+    "__lt__",  # TODO: override?
     "__new__",
     "__repr__",
     "__setattr__",
     "__torch_function__",
     "__torch_dispatch__",
     "_make_subclass",
+    "any",  # TODO: override?
     "add",  # TODO: override?
     "argmax",  # TODO: override?
     "as_subclass",
     "detach",  # TODO: potentially override?
     "dim",
     "div",  # TODO: override?
+    "eq",  # TODO: override?
     "fill_",  # TODO: override?
     "gt",  # TODO: override?
     "is_floating_point",
-    "fill_",  # TODO: override?
+    "item",  # TODO: override?
+    "le",  # TODO: override?
+    "lt",  # TODO: override?
     "masked_fill_",  # TODO: override?
     "mul",  # TODO: override?
+    "ne",  # TODO: override?
     "normal_",  # TODO: override?
     "numel",
     "numpy",
     "new",
+    "prod",  # TODO: override?
+    "repeat",  # TODO: override?
     "size",
     "softmax",  # TODO: override?
     "sub",  # TODO: override?
+    "tile",  # TODO: override?
     "tolist",
     "truediv",  # TODO: override?
+    "type_as",  # TODO: override?
     "uniform_",  # TODO: override?
     "zero_",  # TODO: override?
 }
@@ -158,6 +177,19 @@ def add(run_torch):
         lazy_output = lazy_input_a + lazy_input_b
         if run_torch:
             output = TORCH_TENSOR["__add__"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def radd(run_torch):
+    def implementation(*args):
+        lazy_input_b, lazy_input_a = convert_torch_tensors_to_lazy_tensors(*args, allow_scalars=True)
+        lazy_output = lazy_input_a + lazy_input_b
+        if run_torch:
+            output = TORCH_TENSOR["__radd__"](*args)
             return Tensor(output, lazy_output)
         else:
             return lazy_output
@@ -255,6 +287,8 @@ def getitem(run_torch):
         else:
             _, indices = args
             if isinstance(indices, int):
+                indices = [indices]
+            elif isinstance(indices, slice):
                 indices = [indices]
             else:
 
@@ -357,7 +391,9 @@ def to(run_torch):
             assert len(args) == 1
             target = kwargs["dtype"]
         if isinstance(target, torch.dtype):
-            numpy_dtype = {torch.float32: np.float32, torch.bool: bool, torch.int32: np.int32}[target]
+            numpy_dtype = {torch.float32: np.float32, torch.bool: bool, torch.int32: np.int32, torch.int64: np.int64}[
+                target
+            ]
             lazy_output = cnp.astype(lazy_input, dtype=numpy_dtype)
         else:
             logger.warning(f"to({target}) is not implemented")
@@ -389,6 +425,8 @@ def permute(run_torch):
     def implementation(*args):
         lazy_input, *_ = convert_torch_tensors_to_lazy_tensors(*args)
         order = args[1:]
+        if len(order) == 1 and isinstance(order[0], (tuple, list)):
+            order = tuple(order[0])
         lazy_output = cnp.transpose(lazy_input, order)
         if run_torch:
             output = TORCH_TENSOR["permute"](*args)
@@ -497,6 +535,19 @@ def bmm(run_torch):
     return implementation
 
 
+def abs(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.abs(lazy_input)
+        if run_torch:
+            output = TORCH["abs"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def exp(run_torch):
     def implementation(*args):
         (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
@@ -588,6 +639,19 @@ def pow(run_torch):
     return implementation
 
 
+def log(run_torch):
+    def implementation(*args):
+        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(*args)
+        lazy_output = cnp.log(lazy_input)
+        if run_torch:
+            output = TORCH["log"](*args)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
 def mean(run_torch):
     def implementation(*args, **kwargs):
         assert len(kwargs) == 1 and "keepdim" in kwargs
@@ -604,16 +668,28 @@ def mean(run_torch):
     return implementation
 
 
-def max_(run_torch):
+def max(run_torch):  # TODO: implement properly
     def implementation(*args, **kwargs):
-        # TODO: implement this function properly
-        (lazy_input,) = convert_torch_tensors_to_lazy_tensors(args[0])
-        lazy_output = lazy_input
+        if not run_torch:
+            raise RuntimeError("This can only be executed when running with torch")
         if run_torch:
             output = TORCH["max"](*args, **kwargs)
-            return Tensor(output, lazy_output)
+            return Tensor(output, cnp.asarray(output.detach().numpy()))
         else:
-            return lazy_output
+            ...
+
+    return implementation
+
+
+def min(run_torch):  # TODO: implement properly
+    def implementation(*args, **kwargs):
+        if not run_torch:
+            raise RuntimeError("This can only be executed when running with torch")
+        if run_torch:
+            output = TORCH["min"](*args, **kwargs)
+            return Tensor(output, cnp.asarray(output.detach().numpy()))
+        else:
+            ...
 
     return implementation
 
@@ -623,7 +699,7 @@ def cat(run_torch):
         input_tensors, *_ = args
         lazy_inputs = list(convert_torch_tensors_to_lazy_tensors(*input_tensors))
 
-        axis = kwargs["dim"]
+        axis = kwargs.get("dim", kwargs.get("axis", args[1] if len(args) > 1 else 0))
         lazy_output = cnp.concatenate(lazy_inputs, axis)
         if run_torch:
             output = TORCH["cat"](*args, **kwargs)
@@ -695,6 +771,38 @@ def linear(run_torch):
 
         if run_torch:
             output = TORCH_NN_FUNCTIONAL["linear"](*args, **kwargs)
+            return Tensor(output, lazy_output)
+        else:
+            return lazy_output
+
+    return implementation
+
+
+def conv1d(run_torch):
+    def implementation(*args, **kwargs):
+        assert len(kwargs) == 0
+
+        lazy_input, lazy_weight, *rest = convert_torch_tensors_to_lazy_tensors(*args)
+
+        strides, padding, dilation, groups = args[3:]
+        assert (
+            isinstance(padding, tuple) and len(padding) == 1 and all(isinstance(element, int) for element in padding)
+        ), "padding should be a tuple of 1 integers"
+        assert dilation == (1,), f"dilation should be (1,) but is {dilation}"
+        assert groups == 1, f"groups should be 1 but is {groups}"
+
+        lazy_input = cnp.transpose(lazy_input, (0, 2, 1))
+        lazy_weight = cnp.transpose(lazy_weight, (0, 2, 1))
+        lazy_output = cnp.nn.convolution(lazy_input, lazy_weight, strides=strides, padding=padding, channels_last=True)
+
+        if len(rest) == 1:
+            (lazy_bias,) = rest
+            lazy_output += lazy_bias
+
+        lazy_output = cnp.transpose(lazy_output, (0, 2, 1))
+
+        if run_torch:
+            output = TORCH_NN_FUNCTIONAL["conv1d"](*args, **kwargs)
             return Tensor(output, lazy_output)
         else:
             return lazy_output
@@ -1008,6 +1116,7 @@ def trace(*, run_torch=False):
     setattr(torch, "matmul", matmul(run_torch))
     setattr(torch, "bmm", bmm(run_torch))
     setattr(torch, "neg", neg(run_torch))
+    setattr(torch, "abs", abs(run_torch))
     setattr(torch, "exp", exp(run_torch))
     setattr(torch, "sin", sin(run_torch))
     setattr(torch, "cos", cos(run_torch))
@@ -1015,12 +1124,15 @@ def trace(*, run_torch=False):
     setattr(torch, "rsqrt", rsqrt(run_torch))
     setattr(torch, "sigmoid", sigmoid(run_torch))
     setattr(torch, "pow", pow(run_torch))
+    setattr(torch, "log", log(run_torch))
     setattr(torch, "cat", cat(run_torch))
     setattr(torch, "flatten", flatten(run_torch))
     setattr(torch, "mean", mean(run_torch))
-    setattr(torch, "max", max_(run_torch))
+    setattr(torch, "max", max(run_torch))
+    setattr(torch, "min", min(run_torch))
 
     setattr(torch.nn.functional, "linear", linear(run_torch))
+    setattr(torch.nn.functional, "conv1d", conv1d(run_torch))
     setattr(torch.nn.functional, "conv2d", conv2d(run_torch))
     setattr(torch.nn.functional, "max_pool2d", max_pool2d(run_torch))
     setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d(run_torch))
@@ -1039,6 +1151,7 @@ def trace(*, run_torch=False):
 
     setattr(torch.Tensor, "__add__", add(run_torch))
     setattr(torch.Tensor, "__iadd__", add(run_torch))
+    setattr(torch.Tensor, "__radd__", radd(run_torch))
     setattr(torch.Tensor, "__sub__", sub(run_torch))
     setattr(torch.Tensor, "__rsub__", rsub(run_torch))
     setattr(torch.Tensor, "__mul__", mul(run_torch))
@@ -1061,7 +1174,7 @@ def trace(*, run_torch=False):
     setattr(torch.Tensor, "masked_fill", masked_fill(run_torch))
     setattr(torch.Tensor, "pow", pow(run_torch))
     setattr(torch.Tensor, "mean", mean(run_torch))
-    setattr(torch.Tensor, "max", max_(run_torch))
+    setattr(torch.Tensor, "max", max(run_torch))
 
     yield
 

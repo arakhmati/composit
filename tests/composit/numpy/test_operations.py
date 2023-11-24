@@ -138,6 +138,15 @@ def test_exp():
     check_results(function)
 
 
+def test_log():
+    def function(np):
+        array = np.ones((5, 25, 15))
+        result = np.log(array)
+        return result
+
+    check_results(function)
+
+
 def test_sin():
     def function(np):
         array = np.ones((5, 25, 15))

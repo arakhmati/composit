@@ -189,6 +189,7 @@ COMPUTE_FUNCTIONS = [
     "sin",
     "cos",
     "tanh",
+    "log",
     # Data Manipulation
     "transpose",
     "reshape",

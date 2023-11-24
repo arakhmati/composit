@@ -74,10 +74,41 @@ def test_silu():
     assert np.allclose(cnp.evaluate(result), torch_result)
 
 
+@pytest.mark.parametrize("strides", [(1,), (2,)])
+@pytest.mark.parametrize("padding", [(0,), (3,)])
+@pytest.mark.parametrize("channels_last", [False, True])
+def test_convolution_1d(strides, padding, channels_last):
+    np_input_tensor = np.random.random((1, 3, 28))
+    np_filters = np.random.random((32, 3, 5))
+
+    input_tensor_var = cnp.asarray(np_input_tensor, name="input_tensor")
+    filters_var = cnp.asarray(np_filters, name="filters")
+
+    if channels_last:
+        input_tensor_var = cnp.transpose(input_tensor_var, (0, 2, 1))
+        filters_var = cnp.transpose(filters_var, (0, 2, 1))
+
+    result_var = cnp.nn.convolution(
+        input_tensor_var, filters_var, channels_last=channels_last, strides=strides, padding=padding
+    )
+
+    if channels_last:
+        result_var = cnp.transpose(result_var, (0, 2, 1))
+
+    result = cnp.nn.evaluate(result_var)
+
+    torch_result = torch.nn.functional.conv1d(
+        torch.from_numpy(np_input_tensor), torch.from_numpy(np_filters), stride=strides, padding=padding
+    ).numpy()
+
+    assert result.shape == torch_result.shape
+    assert np.allclose(result, torch_result)
+
+
 @pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
 @pytest.mark.parametrize("padding", [(0, 0), (3, 3)])
 @pytest.mark.parametrize("channels_last", [False, True])
-def test_convolution(strides, padding, channels_last):
+def test_convolution_2d(strides, padding, channels_last):
     np_image = np.random.random((1, 3, 28, 38))
     np_filters = np.random.random((32, 3, 5, 5))
 
