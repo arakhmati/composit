@@ -3,7 +3,7 @@
 #include "shape.hpp"
 #include "stride.hpp"
 #include "tensor.hpp"
-#include "thread_pool.hpp"
+//#include "thread_pool.hpp"
 
 #include <array>
 #include <random>
@@ -16,7 +16,7 @@ namespace sonic {
 
 namespace lazy_computation {
 
-inline auto thread_pool = sonic::thread_pool::thread_pool_t<12>{};
+// inline auto thread_pool = sonic::thread_pool::thread_pool_t<12>{};
 
 template <std::size_t... axes>
 struct order_t {};
@@ -225,36 +225,38 @@ constexpr auto matmul(
       }
     };
 
-    if constexpr (m_size % 2 == 0 and n_size % 4 == 0) {
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 0, n_size / 4 * 1);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 0, n_size / 4 * 1);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 1, n_size / 4 * 2);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 1, n_size / 4 * 2);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 2, n_size / 4 * 3);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 2, n_size / 4 * 3);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 3, n_size / 4 * 4);
-      }));
-      thread_pool.push_back_computation(std::function([&](std::size_t) {
-        run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 3, n_size / 4 * 4);
-      }));
+    /*
+      if constexpr (m_size % 2 == 0 and n_size % 4 == 0) {
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 0, n_size / 4 * 1);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 0, n_size / 4 * 1);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 1, n_size / 4 * 2);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 1, n_size / 4 * 2);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 2, n_size / 4 * 3);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 2, n_size / 4 * 3);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 0, m_size / 2 * 1, n_size / 4 * 3, n_size / 4 * 4);
+        }));
+        thread_pool.push_back_computation(std::function([&](std::size_t) {
+          run_thread(input_a, input_b, output, m_size / 2 * 1, m_size / 2 * 2, n_size / 4 * 3, n_size / 4 * 4);
+        }));
 
-      thread_pool.synchronize();
-    } else {
-      run_thread(input_a, input_b, output, 0, m_size, 0, n_size);
-    }
+        thread_pool.synchronize();
+      } else {
+      */
+    run_thread(input_a, input_b, output, 0, m_size, 0, n_size);
+    //    }
 
     return output;
   };
@@ -476,7 +478,7 @@ constexpr auto operator+(
   const auto function = [input_computation_a, input_computation_b] {
     const auto input_a = input_computation_a();
     const auto input_b = input_computation_b();
-    return add<data_type_t, shape_t, stride_t>(input_a, input_b);
+    return sonic::tensor::add<data_type_t, shape_t, const stride_t>(input_a, input_b);
   };
   return lazy_computation_t<data_type_t, const shape_t, const stride_t, decltype(function)>{function};
 }
