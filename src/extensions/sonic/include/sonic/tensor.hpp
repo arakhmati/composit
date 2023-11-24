@@ -135,6 +135,26 @@ struct add_expression_t {
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
   }
+
+  template <typename compute_data_type_t>
+  inline auto load(std::int64_t index) const {
+    if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
+      return this->operator[](index);
+    } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
+      auto input_a = this->expression_a.template load<compute_data_type_t>(index);
+      auto input_b = this->expression_b.template load<compute_data_type_t>(index);
+      return _mm256_add_ps(input_a, input_b);
+    } else {
+      metaprogramming::raise_static_error<compute_data_type_t>();
+    }
+  }
+
+  template <typename compute_data_type_t, typename... Indices>
+  inline auto load(const std::tuple<Indices...>& indices) const {
+    using sonic::stride::compute_flat_index;
+    auto flat_index = compute_flat_index(stride_t{}, indices);
+    return this->load<compute_data_type_t>(flat_index);
+  }
 };
 
 template <typename data_type_t,
