@@ -10,6 +10,7 @@ INCLUDE_DIR = pathlib.Path(".") / "src" / "extensions" / "sonic" / "include"
 INCLUDES = ["-I", INCLUDE_DIR, "-I", TEST_DIR]
 FLAGS = [
     "-std=c++2a",
+    "-O3",
     "-fconcepts",
     "-fPIC",
     "-march=native",
