@@ -6,8 +6,9 @@
 //#include "thread_pool.hpp"
 
 #include <array>
+#include <memory>
 #include <random>
-#include <thread>
+//#include <thread>
 #include <tuple>
 
 #include <experimental/array>
@@ -46,6 +47,16 @@ template <typename data_type_t, typename shape_t>
 constexpr auto as_lazy_computation(tensor::tensor_t<data_type_t, shape_t>&& tensor) {
   using stride_t = tensor::tensor_t<data_type_t, shape_t>::stride_t;
   const auto function = [tensor = std::move(tensor)] { return tensor; };
+  return lazy_computation_t<data_type_t, const shape_t, const stride_t, decltype(function)>{function};
+}
+
+template <typename data_type_t, typename shape_t>
+constexpr auto as_lazy_computation(const sonic::tensor::aligned_array<data_type_t, shape_t::volume>& array) {
+  using stride_t = tensor::tensor_t<data_type_t, shape_t>::stride_t;
+  const auto function = [&array] {
+    return tensor::tensor_t<data_type_t, shape_t, stride_t, decltype(std::assume_aligned<32>(array.data()))>{
+        array.data()};
+  };
   return lazy_computation_t<data_type_t, const shape_t, const stride_t, decltype(function)>{function};
 }
 
@@ -672,7 +683,8 @@ void evaluate_to(
     const lazy_computation_t<data_type_t, const shape_t, const stride_t, const function_type_t>& input_computation,
     data_type_t* output_buffer) {
   const auto input = input_computation();
-  tensor::write<compute_data_type_t>(input, output_buffer);
+  using tensor::write;
+  write<compute_data_type_t>(input, output_buffer);
 }
 
 }  // namespace lazy_computation

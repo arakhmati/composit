@@ -6,12 +6,13 @@
 
 #include <CL/cl2.hpp>
 
+#include "sonic/lazy_computation.hpp"
 #include "sonic/opencl.hpp"
 #include "sonic/profiler.hpp"
 
-template <typename data_type_t, std::size_t Size>
+template <typename data_type_t, std::size_t size>
 bool assert_equal(const data_type_t* tensor_a, const data_type_t* tensor_b) {
-  for (std::size_t i = 0; i < Size; i++) {
+  for (std::size_t i = 0; i < size; i++) {
     if (tensor_a[i] != tensor_b[i]) {
       std::cout << tensor_a[i] << " != " << tensor_b[i] << std::endl;
       return false;
@@ -20,14 +21,20 @@ bool assert_equal(const data_type_t* tensor_a, const data_type_t* tensor_b) {
   return true;
 }
 
-template <typename data_type_t, std::size_t Size>
-void add(const data_type_t* input_a, const data_type_t* input_b, data_type_t* output) {
-  for (std::size_t i = 0; i < Size; i++) {
-    output[i] = input_a[i] + input_b[i];
-  }
+template <typename data_type_t, std::size_t size>
+void add(const sonic::tensor::aligned_array<data_type_t, size>& input_buffer_a,
+         const sonic::tensor::aligned_array<data_type_t, size>& input_buffer_b,
+         sonic::tensor::aligned_array<data_type_t, size>& output_buffer) {
+  using namespace sonic::lazy_computation;
+  using namespace sonic::tensor;
+
+  const auto input_a = as_lazy_computation<data_type_t, sonic::shape::shape_t<size>>(input_buffer_a);
+  const auto input_b = as_lazy_computation<data_type_t, sonic::shape::shape_t<size>>(input_buffer_b);
+  const auto output = input_a + input_b;
+  evaluate_to<vector8_float32>(output, output_buffer.data());
 }
 
-template <typename data_type_t, std::size_t Size>
+template <typename data_type_t, std::size_t size>
 void opencl_add(cl::CommandQueue queue,
                 const cl::Program& program,
                 cl::Buffer cl_input_buffer_a,
@@ -73,18 +80,19 @@ constexpr auto get_kernel_source() {
 TEST_CASE("test opencl add") {
   using namespace sonic::opencl;
   using namespace sonic::profiler;
+  using namespace sonic::tensor;
 
   using data_type_t = float;
   constexpr std::size_t size = 1 << 20;
 
-  std::array<data_type_t, Size> input_buffer_a{};
+  aligned_array<data_type_t, size> input_buffer_a{};
   input_buffer_a.fill(3);
 
-  std::array<data_type_t, Size> input_buffer_b{};
+  aligned_array<data_type_t, size> input_buffer_b{};
   input_buffer_b.fill(5);
 
-  std::array<data_type_t, Size> golden_output_buffer{};
-  std::array<data_type_t, Size> actual_output_buffer{};
+  aligned_array<data_type_t, size> golden_output_buffer{};
+  aligned_array<data_type_t, size> actual_output_buffer{};
 
   timeit<"add"_function_name, add<data_type_t, size>>(input_buffer_a, input_buffer_b, golden_output_buffer);
 
@@ -102,6 +110,6 @@ TEST_CASE("test opencl add") {
                                                                     cl_input_buffer_b, cl_output_buffer);
   queue.enqueueReadBuffer(cl_output_buffer, CL_TRUE, 0, size * sizeof(data_type_t), actual_output_buffer.data());
 
-  bool equal = assert_equal<data_type_t, Size>(golden_output_buffer.data(), actual_output_buffer.data());
+  bool equal = assert_equal<data_type_t, size>(golden_output_buffer.data(), actual_output_buffer.data());
   CHECK(equal);
 }
