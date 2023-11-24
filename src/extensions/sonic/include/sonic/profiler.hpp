@@ -21,12 +21,12 @@ std::ostream& operator<<(std::ostream& os, function_name_t<chars...>) {
 }
 
 template <auto FunctionName, auto Function>
-auto timeit(const auto... args) {
+auto timeit(auto&&... args) {
   auto start = std::chrono::system_clock::now();
-  Function(args...);
+  Function(std::forward<decltype(args)>(args)...);
   auto end = std::chrono::system_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-  std::cout << "Function " << FunctionName << " took " << duration.count() << " nanoseconds to execute" << std::endl;
+  auto duration = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9;
+  std::cout << "Function " << FunctionName << " took " << duration << " seconds to execute" << std::endl;
 }
 }  // namespace profiler
 }  // namespace sonic
