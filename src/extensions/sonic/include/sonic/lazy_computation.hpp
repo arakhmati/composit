@@ -352,6 +352,23 @@ constexpr auto matmul_with_transposed_input_b(
 }
 
 template <typename data_type_t,
+          auto batch_size,
+          auto m_size,
+          auto k_size,
+          auto n_size,
+          typename... rest_a_t,
+          typename... rest_b_t>
+constexpr auto matmul_with_transposed_input_b(
+    const lazy_computation_t<data_type_t, const sonic::shape::shape_t<batch_size, m_size, k_size>, const rest_a_t...>&
+        input_computation_a,
+    const lazy_computation_t<data_type_t, const sonic::shape::shape_t<n_size, k_size>, const rest_b_t...>&
+        input_computation_b) {
+  using output_shape_t = sonic::shape::shape_t<batch_size, m_size, n_size>;
+  return matmul_with_transposed_input_b(input_computation_a, input_computation_b,
+                                        sonic::tensor::aligned_array<data_type_t, output_shape_t::volume>{});
+}
+
+template <typename data_type_t,
           auto batch_size_0,
           auto batch_size_1,
           auto m_size,
@@ -659,8 +676,12 @@ constexpr auto softmax(
   return lazy_computation_t<data_type_t, const shape_t, const stride_t, decltype(function)>{function};
 }
 
-auto linear = [](const auto& activations, const auto& weights, const auto& bias) {
+constexpr auto linear = [](const auto& activations, const auto& weights, const auto& bias) {
   return add_in_place(matmul(activations, weights), bias);
+};
+
+constexpr auto linear_with_transposed_input_b = [](const auto& activations, const auto& weights, const auto& bias) {
+  return add_in_place(matmul_with_transposed_input_b(activations, weights), bias);
 };
 
 template <typename compute_data_type_t = float,
