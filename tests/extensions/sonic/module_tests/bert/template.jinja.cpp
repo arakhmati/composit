@@ -12,7 +12,6 @@ constexpr auto sequence_size = {{sequence_size}};
 constexpr auto num_attention_heads = {{num_attention_heads}};
 constexpr auto head_size = {{head_size}};
 constexpr auto hidden_size = num_attention_heads * head_size;
-using shape_t = sonic::shape::shape_t<batch_size, sequence_size, hidden_size>;
 
 template <typename query_weights_t,
           typename query_bias_t,
@@ -212,7 +211,8 @@ extern "C" void run(const data_type_t* input_buffer,
                     const data_type_t** parameter_buffers) {
   using namespace sonic::lazy_computation;
 
-  auto input = as_lazy_computation<data_type_t, shape_t>(std::assume_aligned<sizeof(data_type_t)>(input_buffer));
+  auto input = as_lazy_computation<data_type_t, sonic::shape::shape_t<batch_size, sequence_size, hidden_size>>(
+      std::assume_aligned<sizeof(data_type_t)>(input_buffer));
   auto parameters = create_parameters<hidden_size>(parameter_buffers);
   auto output = encoder_loop<head_size, 0>(input, parameters);
 

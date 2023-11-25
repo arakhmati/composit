@@ -169,8 +169,8 @@ def test_torch_vs_sonic(batch_size, num_encoders, sequence_size, num_attention_h
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("num_encoders", [1])
 @pytest.mark.parametrize("sequence_size", [128])
-@pytest.mark.parametrize("num_attention_heads", [1])
-@pytest.mark.parametrize("head_size", [128])
+@pytest.mark.parametrize("num_attention_heads", [2])
+@pytest.mark.parametrize("head_size", [64])
 def test_benchmark(benchmark, module, batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
     hidden_size = num_attention_heads * head_size
     parameters = create_parameters(num_encoders, hidden_size)
