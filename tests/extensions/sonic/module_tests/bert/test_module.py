@@ -1,5 +1,6 @@
 import pytest
 
+import cProfile
 import pathlib
 from ctypes import cdll
 
@@ -113,20 +114,24 @@ def create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_he
         output_file,
         include_paths=["src/extensions/sonic/include"],
         flags=["-fconcepts"],
+        compile_assembly=True,
     )
 
     shared_library = cdll.LoadLibrary(shared_library_file)
     run = getattr(shared_library, "run")
 
-    def run_model(hidden_states, parameters):
+    def run_model(hidden_states, parameter_buffers):
         encoder_input = align_array(hidden_states.numpy())
         encoder_output = create_aligned_array(encoder_input.shape, encoder_input.dtype)
 
         input_buffer = cast_numpy_array_to_pointer(encoder_input)
         output_buffer = cast_numpy_array_to_pointer(encoder_output)
-        parameter_buffers = cast_numpy_arrays_to_pointer(list(parameters.values()))
 
-        run(input_buffer, output_buffer, parameter_buffers)
+        # Add run_c function so that the profiler picks it up
+        def run_c():
+            run(input_buffer, output_buffer, parameter_buffers)
+
+        run_c()
 
         return encoder_output
 
@@ -144,11 +149,12 @@ def test_torch_vs_sonic(batch_size, num_encoders, sequence_size, num_attention_h
     hidden_states = torch.rand(batch_size, sequence_size, hidden_size)
     parameters = create_parameters(num_encoders, hidden_size)
     sonic_parameters = {key: align_array(value.numpy()) for key, value in parameters.items()}
+    sonic_parameter_buffers = cast_numpy_arrays_to_pointer(sonic_parameters.values())
 
     sonic_model = create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size)
 
     encoder_output = torch_model(hidden_states, parameters, num_encoders, head_size)
-    sonic_encoder_output = sonic_model(hidden_states, sonic_parameters)
+    sonic_encoder_output = sonic_model(hidden_states, sonic_parameter_buffers)
 
     assert np.allclose(
         encoder_output.numpy(), sonic_encoder_output
@@ -174,10 +180,16 @@ def test_benchmark(benchmark, module, batch_size, num_encoders, sequence_size, n
 
     elif module == "sonic":
         sonic_parameters = {key: align_array(value.numpy()) for key, value in parameters.items()}
+        sonic_parameter_buffers = cast_numpy_arrays_to_pointer(sonic_parameters.values())
         sonic_model = create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size)
 
         def function():
             hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
-            sonic_model(hidden_states, sonic_parameters)
+            sonic_model(hidden_states, sonic_parameter_buffers)
+
+    with cProfile.Profile() as pr:
+        for _ in range(2000):
+            function()
+    pr.print_stats(sort="cumulative")
 
     benchmark(function)
