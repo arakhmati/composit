@@ -68,8 +68,9 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "ones",
     "optim",
     "overrides",
-    "rand",
-    "randn",
+    "rand",  # TODO: override?
+    "randint",  # TODO: override?
+    "randn",  # TODO: override?
     "relu",  # TODO: override?
     "relu_",  # TODO: override?
     "save",
@@ -84,6 +85,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "Tensor",
     "Size",
     "SymFloat",
+    "SymInt",
     "_tensor_str",
     "torch",
     "uint8",
@@ -100,6 +102,7 @@ TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "__class__",
     "__contains__",  # TODO: override?
     "__dict__",
+    "__dir__",
     "__eq__",  # TODO: override?
     "__getattribute__",
     "__gt__",  # TODO: override?
@@ -113,22 +116,27 @@ TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "__setattr__",
     "__torch_function__",
     "__torch_dispatch__",
-    "_make_subclass",
     "any",  # TODO: override?
     "add",  # TODO: override?
     "argmax",  # TODO: override?
     "as_subclass",
+    "data",
     "detach",  # TODO: potentially override?
+    "device",
     "dim",
     "div",  # TODO: override?
+    "dtype",
     "eq",  # TODO: override?
     "fill_",  # TODO: override?
     "gt",  # TODO: override?
+    "grad_fn",  # TODO: potentially override?
     "is_floating_point",
     "item",  # TODO: override?
     "le",  # TODO: override?
     "lt",  # TODO: override?
+    "_make_subclass",
     "masked_fill_",  # TODO: override?
+    "normal_",  # TODO: override?
     "mul",  # TODO: override?
     "ne",  # TODO: override?
     "normal_",  # TODO: override?
@@ -138,6 +146,7 @@ TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS = {
     "prod",  # TODO: override?
     "repeat",  # TODO: override?
     "size",
+    "shape",
     "softmax",  # TODO: override?
     "sub",  # TODO: override?
     "tile",  # TODO: override?
@@ -1100,7 +1109,7 @@ def trace(*, run_torch=False):
         setattr(torch.nn.functional, attr, TORCH_NN_FUNCTIONAL[attr])
 
     for attr in TORCH_TENSOR:
-        if attr in TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS or not callable(TORCH_TENSOR[attr]):
+        if attr in TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS:
             continue
 
         def not_implemented(attr):
@@ -1185,6 +1194,6 @@ def trace(*, run_torch=False):
         setattr(torch.nn.functional, attr, value)
 
     for attr, value in TORCH_TENSOR.items():
-        if attr in TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS or not callable(TORCH_TENSOR[attr]):
+        if attr in TORCH_TENSOR_ATTRIBUTES_TO_LEAVE_AS_IS:
             continue
         setattr(torch.Tensor, attr, value)
