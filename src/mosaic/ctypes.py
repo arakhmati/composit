@@ -27,12 +27,13 @@ def cast_numpy_array_to_pointer(array: np.array):
 
 
 def cast_numpy_arrays_to_pointer(arrays: Sequence[np.array]):
+    if not isinstance(arrays, (tuple, list)):
+        arrays = tuple(arrays)
     dtypes = set(array.dtype for array in arrays)
     assert len(dtypes) == 1
 
-    pointers = [cast_numpy_array_to_pointer(array) for array in arrays]
-    pointer_to_array = type(pointers[0])
-    result = (pointer_to_array * len(pointers))()
-    for index, pointer in enumerate(pointers):
-        result[index] = pointer
-    return result
+    pointer_to_array = type(cast_numpy_array_to_pointer(arrays[0]))
+    pointers = (pointer_to_array * len(arrays))()
+    for index, array in enumerate(arrays):
+        pointers[index] = cast_numpy_array_to_pointer(array)
+    return pointers
