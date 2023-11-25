@@ -40,11 +40,11 @@ void opencl_add(cl::CommandQueue queue,
                 cl::Buffer cl_input_buffer_a,
                 cl::Buffer cl_input_buffer_b,
                 cl::Buffer cl_output_buffer) {
-
   cl::Kernel kernel(program, "add");
   kernel.setArg(0, cl_input_buffer_a);
   kernel.setArg(1, cl_input_buffer_b);
   kernel.setArg(2, cl_output_buffer);
+
   queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(size));
   queue.finish();
 }
