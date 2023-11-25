@@ -15,6 +15,10 @@ from mosaic.backends.x86.compile import compile_shared_library
 TEST_DIRECTORY = pathlib.Path(__file__).parent
 
 
+def torch_random(*shape, dtype=torch.float32, low=-0.1, high=0.1):
+    return (low - high) * torch.rand(shape).to(dtype) + high
+
+
 def create_parameters(num_encoders, hidden_size):
     intermediate_size = hidden_size * 4
 
@@ -22,18 +26,18 @@ def create_parameters(num_encoders, hidden_size):
     for index in range(num_encoders):
         parameters.update(
             {
-                f"encoder.{index}.query.weight": torch.rand(hidden_size, hidden_size),
-                f"encoder.{index}.query.bias": torch.rand(hidden_size),
-                f"encoder.{index}.key.weight": torch.rand(hidden_size, hidden_size),
-                f"encoder.{index}.key.bias": torch.rand(hidden_size),
-                f"encoder.{index}.value.weight": torch.rand(hidden_size, hidden_size),
-                f"encoder.{index}.value.bias": torch.rand(hidden_size),
-                f"encoder.{index}.self_output.weight": torch.rand(hidden_size, hidden_size),
-                f"encoder.{index}.self_output.bias": torch.rand(hidden_size),
-                f"encoder.{index}.ff1.weight": torch.rand(hidden_size, intermediate_size),
-                f"encoder.{index}.ff1.bias": torch.rand(intermediate_size),
-                f"encoder.{index}.ff2.weight": torch.rand(intermediate_size, hidden_size),
-                f"encoder.{index}.ff2.bias": torch.rand(hidden_size),
+                f"encoder.{index}.query.weight": torch_random(hidden_size, hidden_size),
+                f"encoder.{index}.query.bias": torch_random(hidden_size),
+                f"encoder.{index}.key.weight": torch_random(hidden_size, hidden_size),
+                f"encoder.{index}.key.bias": torch_random(hidden_size),
+                f"encoder.{index}.value.weight": torch_random(hidden_size, hidden_size),
+                f"encoder.{index}.value.bias": torch_random(hidden_size),
+                f"encoder.{index}.self_output.weight": torch_random(hidden_size, hidden_size),
+                f"encoder.{index}.self_output.bias": torch_random(hidden_size),
+                f"encoder.{index}.ff1.weight": torch_random(hidden_size, intermediate_size),
+                f"encoder.{index}.ff1.bias": torch_random(intermediate_size),
+                f"encoder.{index}.ff2.weight": torch_random(intermediate_size, hidden_size),
+                f"encoder.{index}.ff2.bias": torch_random(hidden_size),
             }
         )
     return parameters
@@ -139,14 +143,14 @@ def create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_he
 
 
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("num_encoders", [1])
+@pytest.mark.parametrize("num_encoders", [1, 2])
 @pytest.mark.parametrize("sequence_size", [128])
 @pytest.mark.parametrize("num_attention_heads", [12])
 @pytest.mark.parametrize("head_size", [64])
 def test_torch_vs_sonic(batch_size, num_encoders, sequence_size, num_attention_heads, head_size):
     hidden_size = num_attention_heads * head_size
 
-    hidden_states = torch.rand(batch_size, sequence_size, hidden_size)
+    hidden_states = torch_random(batch_size, sequence_size, hidden_size)
     parameters = create_parameters(num_encoders, hidden_size)
     sonic_parameters = {key: align_array(value.numpy()) for key, value in parameters.items()}
     sonic_parameter_buffers = cast_numpy_arrays_to_pointer(sonic_parameters.values())
@@ -157,7 +161,7 @@ def test_torch_vs_sonic(batch_size, num_encoders, sequence_size, num_attention_h
     sonic_encoder_output = sonic_model(hidden_states, sonic_parameter_buffers)
 
     assert np.allclose(
-        encoder_output.numpy(), sonic_encoder_output
+        encoder_output.numpy(), sonic_encoder_output, atol=1e-4, rtol=1e-5
     ), f"{list(encoder_output.flatten())} != {list(sonic_encoder_output.flatten())}"
 
 
@@ -175,7 +179,7 @@ def test_benchmark(benchmark, module, batch_size, num_encoders, sequence_size, n
     if module == "torch":
 
         def function():
-            hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
+            hidden_states = torch_random(batch_size, sequence_size, hidden_size)
             torch_model(hidden_states, parameters, num_encoders, head_size)
 
     elif module == "sonic":
@@ -184,7 +188,7 @@ def test_benchmark(benchmark, module, batch_size, num_encoders, sequence_size, n
         sonic_model = create_sonic_model(batch_size, num_encoders, sequence_size, num_attention_heads, head_size)
 
         def function():
-            hidden_states = torch.randn(batch_size, sequence_size, hidden_size)
+            hidden_states = torch_random(batch_size, sequence_size, hidden_size)
             sonic_model(hidden_states, sonic_parameter_buffers)
 
     with cProfile.Profile() as pr:

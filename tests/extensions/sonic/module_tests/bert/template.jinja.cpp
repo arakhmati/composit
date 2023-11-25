@@ -126,10 +126,17 @@ auto create_encoder_parameters(const data_type_t** parameter_buffers) {
 template <auto hidden_size>
 auto create_parameters(const data_type_t** parameter_buffers) {
   using namespace sonic::lazy_computation;
-  return parameters_t{std::array{
-      create_encoder_parameters<hidden_size>(parameter_buffers),
-      //    create_encoder_parameters<hidden_size>(parameter_buffers + 12),
-  }};
+
+  auto create_parameters_for_encoder_at = [&parameter_buffers](auto index) {
+    // TODO: figure out num_parameters_per_encoder automatically
+    constexpr auto num_parameters_per_encoder = 12;
+    return create_encoder_parameters<hidden_size>(parameter_buffers + index * num_parameters_per_encoder);
+  };
+  auto create_parameters_for_all_encoders =
+      [&create_parameters_for_encoder_at]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{create_parameters_for_encoder_at(I)...};
+  };
+  return parameters_t{create_parameters_for_all_encoders(std::make_index_sequence<num_encoders>{})};
 }
 
 template <auto head_size,
