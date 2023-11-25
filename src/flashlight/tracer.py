@@ -38,6 +38,7 @@ TORCH_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "float",
     "float16",
     "float32",
+    "float64",
     "FloatTensor",
     "_from_functional_tensor",
     "from_numpy",
@@ -166,6 +167,14 @@ TORCH_NN_FUNCTIONAL_ATTRIBUTES_TO_LEAVE_AS_IS = [
     "torch",
     "_verify_batch_size",
 ]
+
+
+def decorate_traced_operation(function, name):
+    def wrapper(run_torch):
+        print(name)
+        return function(run_torch)
+
+    return wrapper
 
 
 def identity(run_torch):
@@ -1122,68 +1131,105 @@ def trace(*, run_torch=False):
 
     # Overrides
 
-    setattr(torch, "matmul", matmul(run_torch))
-    setattr(torch, "bmm", bmm(run_torch))
-    setattr(torch, "neg", neg(run_torch))
-    setattr(torch, "abs", abs(run_torch))
-    setattr(torch, "exp", exp(run_torch))
-    setattr(torch, "sin", sin(run_torch))
-    setattr(torch, "cos", cos(run_torch))
-    setattr(torch, "tanh", tanh(run_torch))
-    setattr(torch, "rsqrt", rsqrt(run_torch))
-    setattr(torch, "sigmoid", sigmoid(run_torch))
-    setattr(torch, "pow", pow(run_torch))
-    setattr(torch, "log", log(run_torch))
-    setattr(torch, "cat", cat(run_torch))
-    setattr(torch, "flatten", flatten(run_torch))
-    setattr(torch, "mean", mean(run_torch))
-    setattr(torch, "max", max(run_torch))
-    setattr(torch, "min", min(run_torch))
+    setattr(torch, "matmul", decorate_traced_operation(matmul, "torch.matmul")(run_torch))
+    setattr(torch, "bmm", decorate_traced_operation(bmm, "torch.matmul")(run_torch))
+    setattr(torch, "neg", decorate_traced_operation(neg, "torch.neg")(run_torch))
+    setattr(torch, "abs", decorate_traced_operation(abs, "torch.abs")(run_torch))
+    setattr(torch, "exp", decorate_traced_operation(exp, "torch.exp")(run_torch))
+    setattr(torch, "sin", decorate_traced_operation(sin, "torch.sin")(run_torch))
+    setattr(torch, "cos", decorate_traced_operation(cos, "torch.cos")(run_torch))
+    setattr(torch, "tanh", decorate_traced_operation(tanh, "torch.tanh")(run_torch))
+    setattr(torch, "rsqrt", decorate_traced_operation(rsqrt, "torch.rsqrt")(run_torch))
+    setattr(torch, "sigmoid", decorate_traced_operation(sigmoid, "torch.sigmoid")(run_torch))
+    setattr(torch, "pow", decorate_traced_operation(pow, "torch.pow")(run_torch))
+    setattr(torch, "log", decorate_traced_operation(log, "torch.log")(run_torch))
+    setattr(torch, "cat", decorate_traced_operation(cat, "torch.cat")(run_torch))
+    setattr(torch, "flatten", decorate_traced_operation(flatten, "torch.flatten")(run_torch))
+    setattr(torch, "mean", decorate_traced_operation(mean, "torch.mean")(run_torch))
+    setattr(torch, "max", decorate_traced_operation(max, "torch.max")(run_torch))
+    setattr(torch, "min", decorate_traced_operation(min, "torch.min")(run_torch))
 
-    setattr(torch.nn.functional, "linear", linear(run_torch))
-    setattr(torch.nn.functional, "conv1d", conv1d(run_torch))
-    setattr(torch.nn.functional, "conv2d", conv2d(run_torch))
-    setattr(torch.nn.functional, "max_pool2d", max_pool2d(run_torch))
-    setattr(torch.nn.functional, "adaptive_avg_pool2d", adaptive_avg_pool2d(run_torch))
-    setattr(torch.nn.functional, "embedding", embedding(run_torch))
-    setattr(torch.nn.functional, "dropout", identity(run_torch))
-    setattr(torch.nn.functional, "softmax", softmax(run_torch))
-    setattr(torch.nn.functional, "relu", relu(run_torch))
-    setattr(torch.nn.functional, "gelu", gelu(run_torch))
-    setattr(torch.nn.functional, "silu", silu(run_torch))
-    setattr(torch.nn.functional, "mish", identity(run_torch))
-    setattr(torch.nn.functional, "batch_norm", batch_norm(run_torch))
-    setattr(torch.nn.functional, "layer_norm", layer_norm(run_torch))
-    setattr(torch.nn.functional, "group_norm", group_norm(run_torch))
-    setattr(torch.nn.functional, "scaled_dot_product_attention", scaled_dot_product_attention(run_torch))
-    setattr(torch.nn.functional, "interpolate", interpolate(run_torch))
+    setattr(torch.nn.functional, "linear", decorate_traced_operation(linear, "torch.nn.functional.linear")(run_torch))
+    setattr(torch.nn.functional, "conv1d", decorate_traced_operation(conv1d, "torch.nn.functional.conv1d")(run_torch))
+    setattr(torch.nn.functional, "conv2d", decorate_traced_operation(conv2d, "torch.nn.functional.conv2d")(run_torch))
+    setattr(
+        torch.nn.functional,
+        "max_pool2d",
+        decorate_traced_operation(max_pool2d, "torch.nn.functional.max_pool2d")(run_torch),
+    )
+    setattr(
+        torch.nn.functional,
+        "adaptive_avg_pool2d",
+        decorate_traced_operation(adaptive_avg_pool2d, "torch.nn.functional.adaptive_avg_pool2d")(run_torch),
+    )
+    setattr(
+        torch.nn.functional,
+        "embedding",
+        decorate_traced_operation(embedding, "torch.nn.functional.embedding")(run_torch),
+    )
+    setattr(
+        torch.nn.functional, "dropout", decorate_traced_operation(identity, "torch.nn.functional.identity")(run_torch)
+    )
+    setattr(
+        torch.nn.functional, "softmax", decorate_traced_operation(softmax, "torch.nn.functional.softmax")(run_torch)
+    )
+    setattr(torch.nn.functional, "relu", decorate_traced_operation(relu, "torch.nn.functional.relu")(run_torch))
+    setattr(torch.nn.functional, "gelu", decorate_traced_operation(gelu, "torch.nn.functional.gelu")(run_torch))
+    setattr(torch.nn.functional, "silu", decorate_traced_operation(silu, "torch.nn.functional.silu")(run_torch))
+    setattr(
+        torch.nn.functional,
+        "batch_norm",
+        decorate_traced_operation(batch_norm, "torch.nn.functional.batch_norm")(run_torch),
+    )
+    setattr(
+        torch.nn.functional,
+        "layer_norm",
+        decorate_traced_operation(layer_norm, "torch.nn.functional.layer_norm")(run_torch),
+    )
+    setattr(
+        torch.nn.functional,
+        "group_norm",
+        decorate_traced_operation(group_norm, "torch.nn.functional.group_norm")(run_torch),
+    )
+    setattr(
+        torch.nn.functional,
+        "scaled_dot_product_attention",
+        decorate_traced_operation(scaled_dot_product_attention, "torch.nn.functional.scaled_dot_product_attention")(
+            run_torch
+        ),
+    )
+    setattr(
+        torch.nn.functional,
+        "interpolate",
+        decorate_traced_operation(interpolate, "torch.nn.functional.interpolate")(run_torch),
+    )
 
-    setattr(torch.Tensor, "__add__", add(run_torch))
-    setattr(torch.Tensor, "__iadd__", add(run_torch))
-    setattr(torch.Tensor, "__radd__", radd(run_torch))
-    setattr(torch.Tensor, "__sub__", sub(run_torch))
-    setattr(torch.Tensor, "__rsub__", rsub(run_torch))
-    setattr(torch.Tensor, "__mul__", mul(run_torch))
-    setattr(torch.Tensor, "__rmul__", rmul(run_torch))
-    setattr(torch.Tensor, "__truediv__", truediv(run_torch))
-    setattr(torch.Tensor, "__neg__", neg(run_torch))
-    setattr(torch.Tensor, "__matmul__", matmul(run_torch))
-    setattr(torch.Tensor, "__getitem__", getitem(run_torch))
-    setattr(torch.Tensor, "view", view(run_torch))
-    setattr(torch.Tensor, "reshape", reshape(run_torch))
-    setattr(torch.Tensor, "expand", expand(run_torch))
-    setattr(torch.Tensor, "unsqueeze", unsqueeze(run_torch))
-    setattr(torch.Tensor, "squeeze", squeeze(run_torch))
-    setattr(torch.Tensor, "permute", permute(run_torch))
-    setattr(torch.Tensor, "transpose", transpose(run_torch))
-    setattr(torch.Tensor, "contiguous", contiguous(run_torch))
-    setattr(torch.Tensor, "to", to(run_torch))
-    setattr(torch.Tensor, "float", float(run_torch))
-    setattr(torch.Tensor, "chunk", chunk(run_torch))
-    setattr(torch.Tensor, "masked_fill", masked_fill(run_torch))
-    setattr(torch.Tensor, "pow", pow(run_torch))
-    setattr(torch.Tensor, "mean", mean(run_torch))
-    setattr(torch.Tensor, "max", max(run_torch))
+    setattr(torch.Tensor, "__add__", decorate_traced_operation(add, "torch.Tensor.__add__")(run_torch))
+    setattr(torch.Tensor, "__iadd__", decorate_traced_operation(add, "torch.Tensor.__iadd__")(run_torch))
+    setattr(torch.Tensor, "__radd__", decorate_traced_operation(radd, "torch.Tensor.__radd__")(run_torch))
+    setattr(torch.Tensor, "__sub__", decorate_traced_operation(sub, "torch.Tensor.__sub__")(run_torch))
+    setattr(torch.Tensor, "__rsub__", decorate_traced_operation(rsub, "torch.Tensor.__rsub__")(run_torch))
+    setattr(torch.Tensor, "__mul__", decorate_traced_operation(mul, "torch.Tensor.__mul__")(run_torch))
+    setattr(torch.Tensor, "__rmul__", decorate_traced_operation(rmul, "torch.Tensor.__rmul__")(run_torch))
+    setattr(torch.Tensor, "__truediv__", decorate_traced_operation(truediv, "torch.Tensor.__truediv__")(run_torch))
+    setattr(torch.Tensor, "__neg__", decorate_traced_operation(neg, "torch.Tensor.__neg__")(run_torch))
+    setattr(torch.Tensor, "__matmul__", decorate_traced_operation(matmul, "torch.Tensor.__matmul__")(run_torch))
+    setattr(torch.Tensor, "__getitem__", decorate_traced_operation(getitem, "torch.Tensor.__getitem__")(run_torch))
+    setattr(torch.Tensor, "view", decorate_traced_operation(view, "torch.Tensor.view")(run_torch))
+    setattr(torch.Tensor, "reshape", decorate_traced_operation(reshape, "torch.Tensor.reshape")(run_torch))
+    setattr(torch.Tensor, "expand", decorate_traced_operation(expand, "torch.Tensor.expand")(run_torch))
+    setattr(torch.Tensor, "unsqueeze", decorate_traced_operation(unsqueeze, "torch.Tensor.unsqueeze")(run_torch))
+    setattr(torch.Tensor, "squeeze", decorate_traced_operation(squeeze, "torch.Tensor.squeeze")(run_torch))
+    setattr(torch.Tensor, "permute", decorate_traced_operation(permute, "torch.Tensor.permute")(run_torch))
+    setattr(torch.Tensor, "transpose", decorate_traced_operation(transpose, "torch.Tensor.transpose")(run_torch))
+    setattr(torch.Tensor, "contiguous", decorate_traced_operation(contiguous, "torch.Tensor.contiguous")(run_torch))
+    setattr(torch.Tensor, "to", decorate_traced_operation(to, "torch.Tensor.to")(run_torch))
+    setattr(torch.Tensor, "float", decorate_traced_operation(float, "torch.Tensor.float")(run_torch))
+    setattr(torch.Tensor, "chunk", decorate_traced_operation(chunk, "torch.Tensor.chunk")(run_torch))
+    setattr(torch.Tensor, "masked_fill", decorate_traced_operation(masked_fill, "torch.Tensor.masked_fill")(run_torch))
+    setattr(torch.Tensor, "pow", decorate_traced_operation(pow, "torch.Tensor.pow")(run_torch))
+    setattr(torch.Tensor, "mean", decorate_traced_operation(mean, "torch.Tensor.mean")(run_torch))
+    setattr(torch.Tensor, "max", decorate_traced_operation(max, "torch.Tensor.max")(run_torch))
 
     yield
 
