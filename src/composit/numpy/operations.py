@@ -77,7 +77,9 @@ class DynamicGetItem(PClass):
 
 
 def get_item(self, indices) -> "LazyTensor":
-    if not all(isinstance(index, int) for index in indices):
+    if isinstance(indices, int):
+        pass
+    elif not all(isinstance(index, int) for index in indices):
         indices = process_indices(indices)
         return create_from_numpy_compute_operation(self, operation=GetItem(indices=indices))
 
