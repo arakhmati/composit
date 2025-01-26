@@ -49,14 +49,14 @@ struct tensor_t {
   }
 
   template <typename... Indices>
-  inline auto operator[](const std::tuple<Indices...>& indices) const {
+  inline const auto operator[](const std::tuple<Indices...>& indices) const {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->operator[](flat_index);
   }
 
   template <typename compute_data_type_t>
-  inline auto load(std::int64_t index) const {
+  inline const auto load(std::int64_t index) const {
     if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
       return this->operator[](index);
     } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
@@ -71,14 +71,14 @@ struct tensor_t {
   }
 
   template <typename compute_data_type_t, typename... Indices>
-  inline auto load(const std::tuple<Indices...>& indices) const {
+  inline const auto load(const std::tuple<Indices...>& indices) const {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     return this->load<compute_data_type_t>(flat_index);
   }
 
   template <typename compute_data_type_t>
-  inline void store(std::int64_t index, auto value) {
+  inline void store(std::int64_t index, const auto& value) {
     if constexpr (std::is_arithmetic_v<compute_data_type_t>) {
       this->operator[](index) = value;
     } else if constexpr (std::is_same_v<compute_data_type_t, vector8_float32>) {
@@ -93,7 +93,7 @@ struct tensor_t {
   }
 
   template <typename compute_data_type_t, typename... Indices>
-  inline void store(const std::tuple<Indices...>& indices, auto value) {
+  inline void store(const std::tuple<Indices...>& indices, const auto& value) {
     using sonic::stride::compute_flat_index;
     auto flat_index = compute_flat_index(stride_t{}, indices);
     this->store<compute_data_type_t>(flat_index, value);
