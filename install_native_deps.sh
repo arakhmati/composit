@@ -16,7 +16,7 @@ do
 done
 
 sudo apt -y update
-sudo apt install opencl-headers ocl-icd-libopencl1
+sudo apt install llvm llvm-dev opencl-headers ocl-icd-libopencl1
 
 mkdir neo
 cd neo

@@ -5,6 +5,7 @@
 #include "sonic/thread_safe_queue.hpp"
 
 #include <atomic>
+#include <functional>
 #include <thread>
 
 TEST_CASE("test empty queue") {
