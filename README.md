@@ -209,28 +209,6 @@ those functions using `composit.numpy` and `composit.nn` operations.
 All of the layers could be wrapped as an operation but that is not done on purpose within `composit` itself to reduce the number of 
 primitives. However, the user can decide whether a particular function should be an operation or not and implement their own version.
 
-## `flashlight`
-`composit` provides a numpy-like but what if the user wants to use `torch` to define the model? This is where `flashlight` shines (pun intended)
-
-`flashlight` traces `torch` operations by using a context manager that overrides `torch` APIs.
-```python
-import torch
-
-import composit as cnp
-import flashlight
-
-model = torch.nn.Linear(128, 64)
-
-activations = torch.rand(32, 128)
-
-with flashlight.tracer.trace():
-    output = model(activations)
-
-np_output = cnp.evaluate(output)
-```
-
-`flashlight` only supports a subset of `torch`. However, it does support enough `torch` APIs to trace Transformers, ResNet and Stable Diffusion networks.
-
 ## `mosaic`
 `mosaic` is a module to write backends for `composit`.
 `mosaic` is still in an early stage of development and idea exploration.
