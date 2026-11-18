@@ -38,7 +38,7 @@ def test(tmp_path, cpp_file_name):
 
     if "opencl" in str(cpp_file_name) and not int(os.environ.get("SONIC_USE_OPENCL", 1)):
         pytest.skip("Skipping tests that use OpenCL")
-    else:
+    if "opencl" in str(cpp_file_name):
         compilation_command.append("-lOpenCL")
 
     status = subprocess.run(compilation_command)
@@ -46,3 +46,4 @@ def test(tmp_path, cpp_file_name):
 
     status = subprocess.run(executable)
     assert status.returncode == 0
+
