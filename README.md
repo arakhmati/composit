@@ -4,9 +4,58 @@ ML framework for composing neural networks and mapping them to heterogeneous bac
 ![tests](https://github.com/arakhmati/composit/actions/workflows/python-app.yml/badge.svg)
 
 # Installation Instructions
+
+Use Python 3.11 (64-bit). The core uses NumPy and pyrsistent; the experimental
+`pyimmer` extension is not required to construct or evaluate graphs.
+
+## Native Windows (CPU)
+
+In PowerShell, from a checkout:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+$env:COMPOSIT_BUILD_PYIMMER = "0"
+python -m pip install .
+python -c "import composit as cnp; print(cnp.evaluate(cnp.ones((2, 3))))"
+```
+
+Install Graphviz and put its `bin` directory on PATH to render graphs.
+For Mosaic's compiled x86 kernels, install MSYS2's UCRT64 GCC package
+(`pacman -S mingw-w64-ucrt-x86_64-gcc` in the UCRT64 shell) and add
+`C:\msys64\ucrt64\bin` to the Windows PATH. Run Python from PowerShell,
+using the standard Windows Python interpreter. `CXX` can select an alternative
+GCC executable. Generated libraries use `.dll` and statically link the MinGW runtime.
+MSVC is not supported by Mosaic's GCC-specific generated code.
+
+The CPU platforms workflow checks Windows and Linux package installation, core
+operations, graph compatibility, buffer alignment, and compilation/loading of a
+small native kernel. Full models, Sonic, OpenCL, Tracy, and the experimental
+`pyimmer` extension are not covered on Windows yet. Mosaic's existing AVX2/FMA
+requirements still apply; this is not Windows ARM support.
+
+## Ubuntu/Linux
+
+Install Python 3.11 and Poetry 1.8.5 first, then run:
+
 ```bash
 ./install.sh
 ```
+
+The installer fetches native dependencies **before** building the Python package.
+CPU setup does not install GPU drivers. Use `./install.sh -o` to install OpenCL
+headers and the ICD loader, and install a compatible GPU vendor driver separately.
+Use `./install.sh -m dev` for the existing Tracy development setup.
+
+For a core-only installation without `pyimmer` or native setup:
+
+```bash
+COMPOSIT_BUILD_PYIMMER=0 python3.11 -m pip install .
+```
+
+`pyimmer` remains enabled by default on Linux; it requires the pinned
+`vendor/immer` checkout fetched by `install_native_deps.sh`. It is disabled by
+default on Windows. Set `COMPOSIT_BUILD_PYIMMER=0` explicitly for portable builds.
 
 # Why `composit`?
 There are plenty of ML frameworks out there, so what's the point of this one?
@@ -222,6 +271,7 @@ Currently, it has support only for `x86` backend and is only tested using BERT.
 4. Evaluates the model by running one kernel at a time. (There is also initial implementation for running the whole model from C at once but it doesn't work for large graphs)
 
 There is a lot of future work planned that will be focused on adding more functionality such as kernel fusion, adding other backends, mapping a model to multiplt heterogeneous devices, etc.
+
 
 
 

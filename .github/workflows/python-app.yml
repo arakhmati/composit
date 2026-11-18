@@ -18,18 +18,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
     - name: Install native dependencies
       run: |
         bash install_native_deps.sh
     - name: Install poetry
-      run: pipx install poetry
-    - uses: actions/setup-python@v4
+      run: pipx install poetry==1.8.5
+    - uses: actions/setup-python@v5
       name: Install python dependencies
       with:
         python-version: '3.11'
         cache: 'poetry'
     - run: poetry install
+      env:
+        POETRY_REQUESTS_TIMEOUT: '120'
     - run: poetry run black --check src tests
     - run: poetry run ruff .
     - name: Test with Pytest
@@ -37,3 +42,4 @@ jobs:
         export SONIC_USE_OPENCL=0
         ulimit -s unlimited
         poetry run pytest
+
