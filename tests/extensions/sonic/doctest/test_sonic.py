@@ -46,4 +46,3 @@ def test(tmp_path, cpp_file_name):
 
     status = subprocess.run(executable)
     assert status.returncode == 0
-

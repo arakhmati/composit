@@ -23,4 +23,3 @@ def align_array(array, alignment=1024):
     aligned_array = create_aligned_array_like(array, alignment=alignment)
     aligned_array[:] = array
     return aligned_array
-
