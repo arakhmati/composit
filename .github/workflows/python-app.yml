@@ -33,6 +33,8 @@ jobs:
         python-version: '3.11'
         cache: 'poetry'
     - run: poetry install
+      env:
+        POETRY_REQUESTS_TIMEOUT: '120'
     - run: poetry run black --check src tests
     - run: poetry run ruff .
     - name: Test with Pytest
