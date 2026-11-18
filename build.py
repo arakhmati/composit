@@ -27,8 +27,7 @@ def build():
     if not os.path.isdir("vendor/immer/immer"):
         raise RuntimeError("Fetch vendor/immer first; see README, or set COMPOSIT_BUILD_PYIMMER=0")
 
-    distribution = Distribution({"name": "extended", "ext_modules": ext_modules})
-    distribution.package_dir = "extended"
+    distribution = Distribution({"name": "extended", "ext_modules": ext_modules, "packages": []})
 
     cmd = build_ext(distribution)
     cmd.ensure_finalized()
